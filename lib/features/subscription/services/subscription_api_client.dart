@@ -46,6 +46,26 @@ class SubscriptionApiClient {
 
   SubscriptionApiClient(this._baseUrl) : _client = http.Client();
 
+  /// The backend and its database both run on free-tier hosts that idle-sleep
+  /// after a few minutes and take a few seconds to wake — the first request
+  /// after a lull (very plausible right when the Subscription screen is
+  /// opened) can come back as a transient 5xx while the connection pool is
+  /// still spinning up, even though the service is healthy moments later.
+  /// One silent retry papers over exactly that case for reads.
+  Future<http.Response> _getWithRetry(String path, String token) async {
+    Future<http.Response> attempt() => _client.get(
+          Uri.parse('$_baseUrl$path'),
+          headers: {'Authorization': 'Bearer $token'},
+        ).timeout(const Duration(seconds: 60));
+
+    var response = await attempt();
+    if (response.statusCode >= 500) {
+      await Future.delayed(const Duration(seconds: 3));
+      response = await attempt();
+    }
+    return response;
+  }
+
   Future<ShopAuthResult> register({
     required String name,
     required String ownerName,
@@ -115,10 +135,7 @@ class SubscriptionApiClient {
   }
 
   Future<SubscriptionStatus> getStatus(String token) async {
-    final response = await _client.get(
-      Uri.parse('$_baseUrl/api/shop/me/status'),
-      headers: {'Authorization': 'Bearer $token'},
-    ).timeout(const Duration(seconds: 60));
+    final response = await _getWithRetry('/api/shop/me/status', token);
 
     if (response.statusCode == 401) {
       throw const UnauthorizedException('Shop token rejected by backend');
@@ -132,10 +149,7 @@ class SubscriptionApiClient {
   }
 
   Future<List<Plan>> listPlans(String token) async {
-    final response = await _client.get(
-      Uri.parse('$_baseUrl/api/shop/plans'),
-      headers: {'Authorization': 'Bearer $token'},
-    ).timeout(const Duration(seconds: 60));
+    final response = await _getWithRetry('/api/shop/plans', token);
     final data = _unwrap(response) as List;
     return data.map((e) => Plan.fromJson(e as Map<String, dynamic>)).toList();
   }

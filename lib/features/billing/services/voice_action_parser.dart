@@ -151,6 +151,43 @@ class VoiceActionParser {
   /// the provider API key never ships inside the app.
   VoiceActionParser(this._backendBaseUrl, this._shopToken) : _client = http.Client();
 
+  /// The backend and its database both run on free-tier hosts that idle-sleep
+  /// after a few minutes and take a few seconds to wake — the very first
+  /// request after a lull can come back as a transient 5xx while the shop's
+  /// connection pool is still spinning up, even though the service is
+  /// healthy moments later. One silent retry papers over exactly that case
+  /// without changing what the user sees for a real (non-transient) failure.
+  Future<http.Response> _postWithRetry(String endpoint, String prompt) async {
+    Future<http.Response> attempt() => _client
+        .post(
+          Uri.parse(endpoint),
+          headers: {
+            'Authorization': 'Bearer $_shopToken',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({'prompt': prompt}),
+        )
+        .timeout(const Duration(seconds: 25));
+
+    debugPrint('$_tag POST $endpoint  timeout=25s');
+    var sw = Stopwatch()..start();
+    var response = await attempt();
+    debugPrint('$_tag HTTP ${response.statusCode} in ${sw.elapsedMilliseconds}ms');
+
+    if (response.statusCode >= 500) {
+      debugPrint('$_tag transient ${response.statusCode}, retrying once after backend wake-up delay');
+      await Future.delayed(const Duration(seconds: 3));
+      sw = Stopwatch()..start();
+      response = await attempt();
+      debugPrint('$_tag retry HTTP ${response.statusCode} in ${sw.elapsedMilliseconds}ms');
+    }
+
+    debugPrint('$_tag ─── RAW RESPONSE BODY ───────────────────────────');
+    _logChunked(response.body);
+    debugPrint('$_tag ─── END RESPONSE ────────────────────────────────');
+    return response;
+  }
+
   Future<VoiceParseResult> parse(
     String transcript,
     BillingContext context,
@@ -181,23 +218,7 @@ class VoiceActionParser {
     final endpoint = '$_backendBaseUrl/api/shop/voice/parse';
     String rawText;
     try {
-      debugPrint('$_tag POST $endpoint  timeout=25s');
-      final sw = Stopwatch()..start();
-
-      final response = await _client.post(
-        Uri.parse(endpoint),
-        headers: {
-          'Authorization': 'Bearer $_shopToken',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'prompt': prompt}),
-      ).timeout(const Duration(seconds: 25));
-
-      sw.stop();
-      debugPrint('$_tag HTTP ${response.statusCode} in ${sw.elapsedMilliseconds}ms');
-      debugPrint('$_tag ─── RAW RESPONSE BODY ───────────────────────────');
-      _logChunked(response.body);
-      debugPrint('$_tag ─── END RESPONSE ────────────────────────────────');
+      final response = await _postWithRetry(endpoint, prompt);
 
       if (response.statusCode != 200) {
         String hint = '';
