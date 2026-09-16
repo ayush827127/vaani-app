@@ -139,6 +139,12 @@ class DatabaseHelper {
           'ALTER TABLE invoice_items ADD COLUMN returned_quantity INTEGER NOT NULL DEFAULT 0');
       await db.execute('ALTER TABLE invoice_items ADD COLUMN cost_price REAL NOT NULL DEFAULT 0');
     }
+    if (oldVersion < 11) {
+      // Customer profile photo — local file path only (no image_url/cloud
+      // sync counterpart, unlike products' image_path/image_url pair; this
+      // is a device-local convenience, not synced to the backend).
+      await db.execute('ALTER TABLE customers ADD COLUMN image_path TEXT');
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -206,6 +212,7 @@ class DatabaseHelper {
         total_outstanding REAL NOT NULL DEFAULT 0,
         advance_balance REAL NOT NULL DEFAULT 0,
         last_visit TEXT,
+        image_path TEXT,
         deleted_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,

@@ -193,13 +193,6 @@ class _CommonDrawerState extends State<CommonDrawer> {
                   onTap: () { Navigator.pop(context); context.go('/profile'); },
                 ),
                 _NavTile(
-                  icon: Icons.settings_rounded,
-                  label: l10n.settings,
-                  route: '/settings',
-                  current: currentPath,
-                  onTap: () { Navigator.pop(context); context.push('/settings'); },
-                ),
-                _NavTile(
                   icon: Icons.help_outline_rounded,
                   label: l10n.help,
                   route: '/help',

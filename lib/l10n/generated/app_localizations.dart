@@ -1226,6 +1226,30 @@ abstract class AppLocalizations {
   /// **'Add Customer'**
   String get addCustomer;
 
+  /// No description provided for @editCustomer.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Customer'**
+  String get editCustomer;
+
+  /// No description provided for @email.
+  ///
+  /// In en, this message translates to:
+  /// **'Email'**
+  String get email;
+
+  /// No description provided for @addCustomerImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Add customer photo'**
+  String get addCustomerImage;
+
+  /// No description provided for @customerUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer updated'**
+  String get customerUpdated;
+
   /// No description provided for @previousDue.
   ///
   /// In en, this message translates to:
@@ -1471,6 +1495,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No bills yet'**
   String get noBillsYet;
+
+  /// No description provided for @billsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{{count} bill} other{{count} bills}}'**
+  String billsCount(int count);
 
   /// No description provided for @billDetail.
   ///

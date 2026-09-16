@@ -7,6 +7,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/customer.dart';
+import '../../../shared/widgets/customer_avatar.dart';
 import '../repositories/customer_repository.dart';
 import '../../../l10n/l10n_extensions.dart';
 
@@ -205,14 +206,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                                 ),
                                 child: Row(
                                   children: [
-                                    CircleAvatar(
-                                      radius: 22,
-                                      backgroundColor: AppColors.primary.withOpacity(0.3),
-                                      child: Text(
-                                        cust.name[0].toUpperCase(),
-                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
+                                    CustomerAvatar(customer: cust, size: 44, color: AppColors.primary),
                                     const SizedBox(width: 14),
                                     Expanded(
                                       child: Column(

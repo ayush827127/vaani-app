@@ -609,6 +609,18 @@ class AppLocalizationsHi extends AppLocalizations {
   String get addCustomer => 'ग्राहक जोड़ें';
 
   @override
+  String get editCustomer => 'ग्राहक संपादित करें';
+
+  @override
+  String get email => 'ईमेल';
+
+  @override
+  String get addCustomerImage => 'ग्राहक की फोटो जोड़ें';
+
+  @override
+  String get customerUpdated => 'ग्राहक अपडेट हो गया';
+
+  @override
   String get previousDue => 'पिछला बकाया';
 
   @override
@@ -743,6 +755,16 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get noBillsYet => 'अभी तक कोई बिल नहीं';
+
+  @override
+  String billsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count बिल',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get billDetail => 'बिल विवरण';

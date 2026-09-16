@@ -10,6 +10,7 @@ class Customer {
   final double totalOutstanding;
   final double advanceBalance;
   final DateTime? lastVisit;
+  final String? imagePath;
   final DateTime? deletedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -26,6 +27,7 @@ class Customer {
     this.totalOutstanding = 0,
     this.advanceBalance = 0,
     this.lastVisit,
+    this.imagePath,
     this.deletedAt,
     required this.createdAt,
     required this.updatedAt,
@@ -45,6 +47,7 @@ class Customer {
         'total_outstanding': totalOutstanding,
         'advance_balance': advanceBalance,
         'last_visit': lastVisit?.toIso8601String(),
+        'image_path': imagePath,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };
@@ -61,6 +64,7 @@ class Customer {
         totalOutstanding: (map['total_outstanding'] as num?)?.toDouble() ?? 0,
         advanceBalance: (map['advance_balance'] as num?)?.toDouble() ?? 0,
         lastVisit: map['last_visit'] != null ? DateTime.parse(map['last_visit'] as String) : null,
+        imagePath: map['image_path'] as String?,
         deletedAt: map['deleted_at'] != null ? DateTime.parse(map['deleted_at'] as String) : null,
         createdAt: DateTime.parse(map['created_at'] as String),
         updatedAt: DateTime.parse(map['updated_at'] as String),
@@ -76,6 +80,7 @@ class Customer {
     double? totalOutstanding,
     double? advanceBalance,
     DateTime? lastVisit,
+    String? imagePath,
   }) =>
       Customer(
         id: id,
@@ -89,6 +94,7 @@ class Customer {
         totalOutstanding: totalOutstanding ?? this.totalOutstanding,
         advanceBalance: advanceBalance ?? this.advanceBalance,
         lastVisit: lastVisit ?? this.lastVisit,
+        imagePath: imagePath ?? this.imagePath,
         createdAt: createdAt,
         updatedAt: DateTime.now(),
       );

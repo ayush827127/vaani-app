@@ -611,6 +611,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addCustomer => 'Add Customer';
 
   @override
+  String get editCustomer => 'Edit Customer';
+
+  @override
+  String get email => 'Email';
+
+  @override
+  String get addCustomerImage => 'Add customer photo';
+
+  @override
+  String get customerUpdated => 'Customer updated';
+
+  @override
   String get previousDue => 'Previous Due';
 
   @override
@@ -745,6 +757,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noBillsYet => 'No bills yet';
+
+  @override
+  String billsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bills',
+      one: '$count bill',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get billDetail => 'Bill Detail';

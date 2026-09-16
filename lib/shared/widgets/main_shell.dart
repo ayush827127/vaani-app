@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import '../../core/services/voice_recognition_service.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/utils/permission_service.dart';
 import '../../features/billing/providers/billing_providers.dart';
 import '../../features/printer/providers/printer_provider.dart';
 import '../../features/subscription/providers/subscription_provider.dart';
@@ -174,8 +174,7 @@ class _VoiceFAB extends ConsumerStatefulWidget {
 
 class _VoiceFABState extends ConsumerState<_VoiceFAB>
     with TickerProviderStateMixin {
-  final _speech = SpeechToText();
-  bool _speechReady = false;
+  final _voice = VoiceRecognitionService.instance;
   bool _isPressed = false;
   String _partial = '';
   bool _gotFinalResult = false;
@@ -227,7 +226,7 @@ class _VoiceFABState extends ConsumerState<_VoiceFAB>
     _ripple.dispose();
     _scale.dispose();
     _fade.dispose();
-    _speech.stop();
+    _voice.speech.stop();
     super.dispose();
   }
 
@@ -275,7 +274,7 @@ class _VoiceFABState extends ConsumerState<_VoiceFAB>
   void _onLongPressCancel() {
     if (!_isPressed) return;
     _isPressed = false;
-    _speech.stop();
+    _voice.speech.stop();
     _scale.reverse();
     _fade.reverse().whenComplete(() {
       if (mounted) _ripple.stop();
@@ -290,30 +289,25 @@ class _VoiceFABState extends ConsumerState<_VoiceFAB>
 
   Future<void> _beginListening() async {
     if (!_isPressed || !mounted) return;
-    debugPrint('[PTT] Requesting microphone permission...');
-    final granted = await PermissionService.requestMicrophone(context);
-    if (!granted || !mounted || !_isPressed) {
-      debugPrint('[PTT] Mic permission denied or aborted');
-      return;
-    }
-
-    if (!_speechReady) {
-      debugPrint('[PTT] Initializing STT...');
-      _speechReady = await _speech.initialize(
-        onError: (e) {
-          debugPrint('[PTT] STT error: ${e.errorMsg}');
-          if (_isPressed) _finishAndProcess();
-        },
-        onStatus: (status) {
-          debugPrint('[PTT] STT status: $status (pressed=$_isPressed)');
-          // Do NOT call _finishAndProcess() here — Android fires 'notListening'
-          // immediately after listen() on some devices, which would set _isPressed=false
-          // before the user has spoken, making the physical button release a no-op.
-        },
-      );
-      debugPrint('[PTT] STT initialized: $_speechReady');
-    }
-    if (!_speechReady || !mounted || !_isPressed) return;
+    // ensureReady() only actually checks permission/initializes the first
+    // time it's ever called anywhere in the app — every voice entry point
+    // shares one VoiceRecognitionService instance, so pressing this button
+    // again (or opening the voice sheet / Voice Billing screen) never
+    // re-asks for microphone permission once it's been granted once.
+    final ready = await _voice.ensureReady(
+      context,
+      onError: (e) {
+        debugPrint('[PTT] STT error: ${e.errorMsg}');
+        if (_isPressed) _finishAndProcess();
+      },
+      onStatus: (status) {
+        debugPrint('[PTT] STT status: $status (pressed=$_isPressed)');
+        // Do NOT call _finishAndProcess() here — Android fires 'notListening'
+        // immediately after listen() on some devices, which would set _isPressed=false
+        // before the user has spoken, making the physical button release a no-op.
+      },
+    );
+    if (!ready || !mounted || !_isPressed) return;
 
     _partial = '';
     _gotFinalResult = false;
@@ -330,7 +324,7 @@ class _VoiceFABState extends ConsumerState<_VoiceFAB>
     SystemSound.play(SystemSoundType.click).ignore();
     debugPrint('[PTT] Speech listening started (hi_IN, pauseFor=15s)');
 
-    await _speech.listen(
+    await _voice.speech.listen(
       onResult: (r) {
         // Only update if the new result is non-empty — prevents a new session
         // from blanking a partial already captured.
@@ -367,7 +361,7 @@ class _VoiceFABState extends ConsumerState<_VoiceFAB>
     });
 
     debugPrint('[PTT] Stopping speech... (gotFinal=$_gotFinalResult, partial="$_partial")');
-    await _speech.stop();
+    await _voice.speech.stop();
 
     // Poll up to 800 ms for the STT engine to deliver its finalResult callback.
     // A fixed delay isn't reliable — on slow devices the callback can lag by 500 ms+.

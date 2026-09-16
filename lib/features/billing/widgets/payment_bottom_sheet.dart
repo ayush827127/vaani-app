@@ -18,6 +18,7 @@ import '../../../shared/models/cart_item.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/models/invoice.dart';
 import '../../../shared/models/shop.dart';
+import '../../../shared/widgets/customer_avatar.dart';
 import '../../auth/repositories/shop_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
 import '../repositories/invoice_repository.dart';
@@ -1623,11 +1624,7 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
                     itemBuilder: (_, i) {
                       final cust = _filtered[i];
                       return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: AppColors.primaryLight.withValues(alpha: 0.2),
-                          child: Text(cust.name[0].toUpperCase(),
-                              style: const TextStyle(color: AppColors.primaryLight, fontWeight: FontWeight.bold)),
-                        ),
+                        leading: CustomerAvatar(customer: cust, size: 40, color: AppColors.primaryLight),
                         title: Text(cust.name, style: TextStyle(color: c.textPrimary)),
                         subtitle: cust.phone != null
                             ? Text('+91 ${cust.phone}',

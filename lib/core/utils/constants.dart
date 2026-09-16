@@ -1,7 +1,7 @@
 class AppConstants {
   static const String appName = 'Vaani';
   static const String dbName = 'vaani.db';
-  static const int dbVersion = 10;
+  static const int dbVersion = 11;
 
   // SharedPreferences keys
   static const String keyIsLoggedIn = 'isLoggedIn';

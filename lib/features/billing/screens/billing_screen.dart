@@ -23,6 +23,7 @@ import '../../../shared/widgets/product_avatar.dart';
 import '../../../shared/widgets/barcode_scanner_screen.dart';
 import '../../../shared/widgets/shell_scaffold_key.dart';
 import '../../../core/utils/permission_service.dart';
+import '../../../core/services/voice_recognition_service.dart';
 import '../widgets/payment_bottom_sheet.dart';
 import '../../../l10n/l10n_extensions.dart';
 
@@ -2287,7 +2288,7 @@ class _VoiceSheet extends ConsumerStatefulWidget {
 
 class _VoiceSheetState extends ConsumerState<_VoiceSheet>
     with SingleTickerProviderStateMixin {
-  final _speech = SpeechToText();
+  final _voice = VoiceRecognitionService.instance;
   bool _isListening = false;
   bool _speechAvailable = false;
   String _recognized = '';
@@ -2309,12 +2310,10 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
   }
 
   Future<void> _initAndListen() async {
-    final granted = await PermissionService.requestMicrophone(context);
-    if (!granted || !mounted) {
-      setState(() => _speechAvailable = false);
-      return;
-    }
-    final available = await _speech.initialize(
+    // Permission + STT init happen at most once per app session — see
+    // VoiceRecognitionService's doc comment.
+    final available = await _voice.ensureReady(
+      context,
       onError: (e) {
         if (mounted) setState(() => _isListening = false);
       },
@@ -2339,7 +2338,7 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
       _parsedActions = [];
       _isParsingAI = false;
     });
-    await _speech.listen(
+    await _voice.speech.listen(
       onResult: (r) {
         if (mounted && r.recognizedWords.isNotEmpty) {
           setState(() => _recognized = r.recognizedWords);
@@ -2356,7 +2355,7 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
 
   Future<void> _stopAndParse() async {
     setState(() => _isListening = false);
-    await _speech.stop();
+    await _voice.speech.stop();
     if (_recognized.isNotEmpty) await _parseResults(_recognized);
   }
 
@@ -2474,7 +2473,7 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
 
   @override
   void dispose() {
-    _speech.stop();
+    _voice.speech.stop();
     _pulse.dispose();
     super.dispose();
   }

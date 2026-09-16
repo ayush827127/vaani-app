@@ -133,7 +133,16 @@ class CustomerRepository {
   /// ProductRepository.upsertFromCloud().
   Future<void> upsertFromCloud(Customer customer) async {
     final db = await _db.database;
+    // image_path is a local file path with no cloud counterpart (unlike
+    // products' image_path/image_url pair) — a cloud-pulled Customer always
+    // has it null, so writing it through as-is would wipe out a locally-set
+    // photo on every pull merge. Preserve whatever's already on this row.
+    final existing = await db.query('customers',
+        columns: ['image_path'], where: 'id = ?', whereArgs: [customer.id]);
+    final localImagePath = existing.isNotEmpty ? existing.first['image_path'] as String? : null;
+
     final map = customer.toMap();
+    map['image_path'] = localImagePath;
     map['deleted_at'] = customer.deletedAt?.toIso8601String();
     await db.insert('customers', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }

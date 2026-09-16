@@ -20,10 +20,11 @@ import '../../features/inventory/screens/product_details_screen.dart';
 import '../../features/inventory/screens/barcode_preview_screen.dart';
 import '../../features/customers/screens/customer_list_screen.dart';
 import '../../features/customers/screens/customer_details_screen.dart';
+import '../../features/customers/screens/edit_customer_screen.dart';
+import '../../shared/models/customer.dart';
 import '../../features/reports/screens/reports_screen.dart';
 import '../../features/ai_manager/screens/ai_manager_screen.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
-import '../../features/settings/screens/settings_screen.dart';
 import '../../features/settings/screens/backup_restore_screen.dart';
 import '../../features/printer/screens/printer_settings_screen.dart';
 import '../../features/subscription/screens/subscription_screen.dart';
@@ -80,6 +81,16 @@ GoRouter createRouter() => GoRouter(
                   path: 'printer',
                   parentNavigatorKey: _rootKey,
                   builder: (_, __) => const PrinterSettingsScreen(),
+                ),
+                GoRoute(
+                  path: 'backup',
+                  parentNavigatorKey: _rootKey,
+                  builder: (_, __) => const BackupRestoreScreen(),
+                ),
+                GoRoute(
+                  path: 'subscription',
+                  parentNavigatorKey: _rootKey,
+                  builder: (_, __) => const SubscriptionScreen(),
                 ),
               ],
             ),
@@ -146,6 +157,16 @@ GoRouter createRouter() => GoRouter(
                     final id = int.parse(state.pathParameters['id']!);
                     return CustomerDetailsScreen(customerId: id);
                   },
+                  routes: [
+                    GoRoute(
+                      path: 'edit',
+                      parentNavigatorKey: _rootKey,
+                      builder: (context, state) {
+                        final customer = state.extra as Customer;
+                        return EditCustomerScreen(customer: customer);
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -177,23 +198,6 @@ GoRouter createRouter() => GoRouter(
           path: '/notifications',
           parentNavigatorKey: _rootKey,
           builder: (_, __) => const NotificationsScreen(),
-        ),
-        GoRoute(
-          path: '/settings',
-          parentNavigatorKey: _rootKey,
-          builder: (_, __) => const SettingsScreen(),
-          routes: [
-            GoRoute(
-              path: 'backup',
-              parentNavigatorKey: _rootKey,
-              builder: (_, __) => const BackupRestoreScreen(),
-            ),
-            GoRoute(
-              path: 'subscription',
-              parentNavigatorKey: _rootKey,
-              builder: (_, __) => const SubscriptionScreen(),
-            ),
-          ],
         ),
       ],
     );

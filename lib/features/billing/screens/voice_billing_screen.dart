@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/constants.dart';
-import '../../../core/utils/permission_service.dart';
+import '../../../core/services/voice_recognition_service.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/product.dart';
 import '../../inventory/repositories/product_repository.dart';
@@ -24,7 +24,7 @@ class VoiceBillingScreen extends ConsumerStatefulWidget {
 
 class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
     with SingleTickerProviderStateMixin {
-  final SpeechToText _speech = SpeechToText();
+  final _voice = VoiceRecognitionService.instance;
   bool _isListening = false;
   bool _speechAvailable = false;
   String _recognizedText = '';
@@ -61,26 +61,27 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
     final products = await getIt<ProductRepository>().getAllProducts(_shopId);
     if (mounted) setState(() => _allProducts = products);
 
-    final granted = await PermissionService.requestMicrophone(context);
-    if (!granted || !mounted) {
-      setState(() => _speechAvailable = false);
-      return;
-    }
-    final available = await _speech.initialize(
-      onError: (e) => setState(() => _isListening = false),
+    if (!mounted) return;
+    // Permission + STT init happen at most once per app session — see
+    // VoiceRecognitionService's doc comment.
+    final available = await _voice.ensureReady(
+      context,
+      onError: (e) {
+        if (mounted) setState(() => _isListening = false);
+      },
       onStatus: (status) {
         if (status == 'done' || status == 'notListening') {
-          setState(() => _isListening = false);
+          if (mounted) setState(() => _isListening = false);
           if (_recognizedText.isNotEmpty) _parseVoiceInput(_recognizedText);
         }
       },
     );
-    setState(() => _speechAvailable = available);
+    if (mounted) setState(() => _speechAvailable = available);
   }
 
   void _toggleListening() async {
     if (_isListening) {
-      await _speech.stop();
+      await _voice.speech.stop();
       setState(() => _isListening = false);
     } else {
       setState(() {
@@ -88,7 +89,7 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
         _recognizedText = '';
         _parsedActions = [];
       });
-      await _speech.listen(
+      await _voice.speech.listen(
         onResult: (r) => setState(() => _recognizedText = r.recognizedWords),
         listenOptions: SpeechListenOptions(partialResults: true, localeId: 'hi_IN'),
       );
@@ -173,7 +174,7 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
 
   @override
   void dispose() {
-    _speech.stop();
+    _voice.speech.stop();
     _pulseCtrl.dispose();
     super.dispose();
   }

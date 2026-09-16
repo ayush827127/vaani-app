@@ -6,6 +6,9 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/invoice.dart';
+import '../../../shared/models/customer.dart';
+import '../../../shared/widgets/customer_avatar.dart';
+import '../../customers/repositories/customer_repository.dart';
 import '../repositories/invoice_repository.dart';
 import '../services/invoice_pdf_helper.dart';
 import '../../../l10n/l10n_extensions.dart';
@@ -21,6 +24,7 @@ class _BillsScreenState extends State<BillsScreen> {
 
   List<Invoice> _all = [];
   List<Invoice> _filtered = [];
+  Map<int, Customer> _customersById = {};
   bool _loading = true;
   String _filter = 'All';
   int _shopId = 1;
@@ -42,11 +46,16 @@ class _BillsScreenState extends State<BillsScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final invoices =
-        await getIt<InvoiceRepository>().getInvoicesByShop(_shopId, limit: 200);
+    final results = await Future.wait([
+      getIt<InvoiceRepository>().getInvoicesByShop(_shopId, limit: 200),
+      getIt<CustomerRepository>().getAllCustomers(_shopId),
+    ]);
     if (!mounted) return;
+    final invoices = results[0] as List<Invoice>;
+    final customers = results[1] as List<Customer>;
     setState(() {
       _all = invoices;
+      _customersById = {for (final c in customers) if (c.id != null) c.id!: c};
       _loading = false;
     });
     _applyFilter();
@@ -70,6 +79,12 @@ class _BillsScreenState extends State<BillsScreen> {
     setState(() => _filter = f);
     _applyFilter();
   }
+
+  int _countFor(String mode) => mode == 'All'
+      ? _all.length
+      : _all.where((inv) => inv.paymentMode.toLowerCase() == mode.toLowerCase()).length;
+
+  double get _filteredTotal => _filtered.fold(0.0, (sum, inv) => sum + inv.grandTotal);
 
   String _modeFilterLabel(String mode, AppLocalizations l10n) {
     switch (mode) {
@@ -147,6 +162,7 @@ class _BillsScreenState extends State<BillsScreen> {
               itemBuilder: (_, i) {
                 final m = _modes[i];
                 final active = _filter == m;
+                final count = _countFor(m);
                 return GestureDetector(
                   onTap: () => _setFilter(m),
                   child: AnimatedContainer(
@@ -164,18 +180,60 @@ class _BillsScreenState extends State<BillsScreen> {
                             : c.inputBorder,
                       ),
                     ),
-                    child: Text(
-                      _modeFilterLabel(m, l10n),
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: active ? Colors.white : c.textSecondary),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _modeFilterLabel(m, l10n),
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: active ? Colors.white : c.textSecondary),
+                        ),
+                        if (count > 0) ...[
+                          const SizedBox(width: 5),
+                          Text(
+                            '$count',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: active
+                                    ? Colors.white.withValues(alpha: 0.8)
+                                    : c.textHint),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 );
               },
             ),
           ),
+          // Summary bar — how many bills and how much they add up to for
+          // whatever's currently filtered/searched, so the list isn't just a
+          // flat scroll with no sense of the total until you count by hand.
+          if (!_loading && _filtered.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Text(
+                    l10n.billsCount(_filtered.length),
+                    style: TextStyle(color: c.textSecondary, fontSize: 12),
+                  ),
+                  const Spacer(),
+                  Text(
+                    AppFormatters.formatCurrency(_filteredTotal),
+                    style: const TextStyle(
+                        color: AppColors.primaryLight,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           // List
           Expanded(
@@ -191,8 +249,12 @@ class _BillsScreenState extends State<BillsScreen> {
                         child: ListView.builder(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
                           itemCount: _filtered.length,
-                          itemBuilder: (_, i) =>
-                              _InvoiceTile(invoice: _filtered[i]),
+                          itemBuilder: (_, i) => _InvoiceTile(
+                            invoice: _filtered[i],
+                            customer: _filtered[i].customerId != null
+                                ? _customersById[_filtered[i].customerId]
+                                : null,
+                          ),
                         ),
                       ),
           ),
@@ -225,7 +287,10 @@ class _BillsScreenState extends State<BillsScreen> {
 
 class _InvoiceTile extends StatelessWidget {
   final Invoice invoice;
-  const _InvoiceTile({required this.invoice});
+  // Resolved from the invoice's customerId against the shop's customer list
+  // — null for a walk-in sale, or if the linked customer was since deleted.
+  final Customer? customer;
+  const _InvoiceTile({required this.invoice, this.customer});
 
   static const _modeIcons = {
     'cash': Icons.payments_rounded,
@@ -272,15 +337,46 @@ class _InvoiceTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Mode icon circle
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: modeColor.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+            // Customer avatar — the customer's own photo when they have one
+            // synced, their initial otherwise, or a generic person icon for
+            // a walk-in sale with no linked customer at all. Tapping it
+            // jumps straight to that customer's profile without having to
+            // open the bill first. A small dot in the corner keeps the
+            // payment-mode cue that used to be the icon here.
+            GestureDetector(
+              onTap: customer != null
+                  ? () => context.push('/customers/${customer!.id}')
+                  : null,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  customer != null
+                      ? CustomerAvatar(customer: customer!, size: 42, color: AppColors.primary)
+                      : Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: c.textHint.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.person_rounded, color: c.textHint, size: 22),
+                        ),
+                  Positioned(
+                    bottom: -1,
+                    right: -1,
+                    child: Container(
+                      width: 15,
+                      height: 15,
+                      decoration: BoxDecoration(
+                        color: modeColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: c.surface, width: 2),
+                      ),
+                      child: Icon(modeIcon, color: Colors.white, size: 9),
+                    ),
+                  ),
+                ],
               ),
-              child: Icon(modeIcon, color: modeColor, size: 20),
             ),
             const SizedBox(width: 12),
             // Invoice info

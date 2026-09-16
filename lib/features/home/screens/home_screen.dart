@@ -412,7 +412,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             gated(moduleKey: 'inventory',  icon: Icons.add_box_rounded,      label: l10n.addProduct, onTap: () => context.push('/inventory/add')),
             gated(moduleKey: 'reports',    icon: Icons.bar_chart_rounded,    label: l10n.reports,    onTap: () => context.go('/reports')),
             gated(moduleKey: 'ai_manager', icon: Icons.smart_toy_rounded,    label: l10n.aiManager,  color: AppColors.primaryLight, onTap: () => context.go('/ai-manager')),
-            _QuickAction(icon: Icons.settings_rounded, label: l10n.settings, onTap: () => context.push('/settings')),
           ],
         ),
       ],

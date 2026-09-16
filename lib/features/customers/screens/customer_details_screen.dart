@@ -6,6 +6,7 @@ import '../../../core/di/injector.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/models/invoice.dart';
 import '../../../shared/models/payment_transaction.dart';
+import '../../../shared/widgets/customer_avatar.dart';
 import '../repositories/customer_repository.dart';
 import '../../billing/repositories/invoice_repository.dart';
 import '../../billing/repositories/payment_transaction_repository.dart';
@@ -104,6 +105,16 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
           icon: const Icon(Icons.arrow_back_ios_rounded),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_rounded),
+            tooltip: l10n.editCustomer,
+            onPressed: () async {
+              final updated = await context.push('/customers/${cust.id}/edit', extra: cust);
+              if (updated == true) _load();
+            },
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: AppColors.primaryLight,
@@ -176,15 +187,7 @@ class _OverviewTab extends StatelessWidget {
             ),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 32,
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.3),
-                  child: Text(
-                    customer.name[0].toUpperCase(),
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                ),
+                CustomerAvatar(customer: customer, size: 64, color: AppColors.primary),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
