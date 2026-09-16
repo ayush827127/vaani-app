@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/product.dart';
+import '../providers/billing_providers.dart';
 import '../screens/billing_screen.dart';
 import 'voice_action_parser.dart';
 
@@ -55,6 +56,22 @@ class ActionExecutor {
     bool customerChanged = false;
     int? newCustomerId;
     String? newCustomerName;
+
+    // Marks the cart as voice-touched if this batch does anything to its
+    // contents — checked once up front rather than per-case so it covers
+    // every cart-mutating action the same way, and only those (a discount
+    // or payment-mode-only voice command doesn't touch line items, so it
+    // doesn't mark the eventual invoice as voice-created on its own).
+    final touchesCart = actions.any((a) =>
+        a is SetQuantityAction ||
+        a is IncreaseQuantityAction ||
+        a is DecreaseQuantityAction ||
+        a is RemoveItemAction ||
+        a is ClearCartAction ||
+        a is UpdatePriceAction);
+    if (touchesCart) {
+      ref.read(cartVoiceOriginProvider.notifier).state = true;
+    }
 
     final cartNotifier = ref.read(cartProvider.notifier);
 

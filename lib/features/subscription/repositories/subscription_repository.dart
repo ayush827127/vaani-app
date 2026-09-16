@@ -3,7 +3,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/constants.dart';
 import '../../auth/repositories/shop_repository.dart';
 import '../models/subscription_status.dart';
+import '../models/plan.dart';
+import '../models/payment_claim.dart';
+import '../models/voice_usage.dart';
 import '../services/subscription_api_client.dart';
+
+/// Thrown by the plan/payment-claim methods below when the shop has no
+/// cached backend token yet (shouldn't happen once logged in — this is a
+/// defensive guard, not a normal-flow error).
+class NotLinkedToBackendException implements Exception {
+  const NotLinkedToBackendException();
+  @override
+  String toString() => "This shop isn't linked to the server yet — try again after the next sync.";
+}
 
 class SubscriptionRepository {
   final SubscriptionApiClient _api;
@@ -59,6 +71,42 @@ class SubscriptionRepository {
       // Offline or backend unreachable — keep last-known cache.
     }
   }
+
+  /// Unlike [refreshStatus] (best-effort, silent on failure — it's called
+  /// in the background all over the app), the methods below are all
+  /// user-initiated actions on the Subscription screen: they let their
+  /// exceptions propagate so the screen can show a real failure state
+  /// instead of quietly doing nothing.
+  Future<String> _requireToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(AppConstants.keyShopBackendToken);
+    if (token == null) throw const NotLinkedToBackendException();
+    return token;
+  }
+
+  Future<List<Plan>> listPlans() async => _api.listPlans(await _requireToken());
+
+  Future<void> switchToFreePlan(String planId) async {
+    await _api.switchToFreePlan(await _requireToken(), planId);
+    await refreshStatus(); // re-check-in so enabledModules reflects the new plan immediately
+  }
+
+  Future<PaymentClaim> submitPaymentClaim({
+    required String planId,
+    required String reference,
+    required double amount,
+  }) async =>
+      _api.createPaymentClaim(
+        await _requireToken(),
+        planId: planId,
+        reference: reference,
+        amount: amount,
+      );
+
+  Future<List<PaymentClaim>> listMyPaymentClaims() async =>
+      _api.listMyPaymentClaims(await _requireToken());
+
+  Future<VoiceUsage> getVoiceUsage() async => _api.getVoiceUsage(await _requireToken());
 
   Future<void> _syncOnce(SharedPreferences prefs,
       {String? otpToken, bool retryOnAuthFailure = true}) async {

@@ -1250,6 +1250,36 @@ abstract class AppLocalizations {
   /// **'Customer updated'**
   String get customerUpdated;
 
+  /// No description provided for @customerFilterAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get customerFilterAll;
+
+  /// No description provided for @customerFilterRegular.
+  ///
+  /// In en, this message translates to:
+  /// **'Regular'**
+  String get customerFilterRegular;
+
+  /// No description provided for @customerFilterNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get customerFilterNew;
+
+  /// No description provided for @customerFilterInactive.
+  ///
+  /// In en, this message translates to:
+  /// **'Inactive'**
+  String get customerFilterInactive;
+
+  /// No description provided for @noPurchasesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No purchases yet'**
+  String get noPurchasesYet;
+
   /// No description provided for @previousDue.
   ///
   /// In en, this message translates to:

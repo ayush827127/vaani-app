@@ -77,10 +77,22 @@ class Invoice {
   final String paymentMode;
   final String status;
   final String? notes;
+  // Whether this invoice was created via voice billing — see
+  // InvoiceRepository.countVoiceInvoices() and the Basic plan's
+  // 50-voice-invoice cap. Never set by any path other than checkout
+  // actually originating from a voice-populated cart, so a manually built
+  // invoice never accidentally counts against it.
+  final bool isVoiceCreated;
   final DateTime? deletedAt;
   final DateTime createdAt;
   final DateTime? updatedAt;
   final List<InvoiceItem> items;
+  // Display-only, not a stored column — populated by
+  // InvoiceRepository.getInvoicesByShopWithItemCounts() via a COUNT
+  // subquery so list screens can show "N items" without loading full line
+  // items (or an N+1 query) for every row. Null anywhere else, including
+  // after toMap()/fromMap() round-trips through the normal invoices table.
+  final int? itemCount;
 
   const Invoice({
     this.id,
@@ -99,10 +111,12 @@ class Invoice {
     this.paymentMode = 'cash',
     this.status = 'paid',
     this.notes,
+    this.isVoiceCreated = false,
     this.deletedAt,
     required this.createdAt,
     this.updatedAt,
     this.items = const [],
+    this.itemCount,
   });
 
   // deleted_at is deliberately excluded — see the matching note on
@@ -124,6 +138,7 @@ class Invoice {
         'payment_mode': paymentMode,
         'status': status,
         'notes': notes,
+        'is_voice_created': isVoiceCreated ? 1 : 0,
         'created_at': createdAt.toIso8601String(),
         'updated_at': (updatedAt ?? createdAt).toIso8601String(),
       };
@@ -145,6 +160,8 @@ class Invoice {
         paymentMode: map['payment_mode'] as String? ?? 'cash',
         status: map['status'] as String? ?? 'paid',
         notes: map['notes'] as String?,
+        isVoiceCreated: (map['is_voice_created'] as int? ?? 0) == 1,
+        itemCount: map['item_count'] as int?,
         deletedAt: map['deleted_at'] != null ? DateTime.parse(map['deleted_at'] as String) : null,
         createdAt: DateTime.parse(map['created_at'] as String),
         updatedAt: map['updated_at'] != null

@@ -621,6 +621,21 @@ class AppLocalizationsHi extends AppLocalizations {
   String get customerUpdated => 'ग्राहक अपडेट हो गया';
 
   @override
+  String get customerFilterAll => 'सभी';
+
+  @override
+  String get customerFilterRegular => 'नियमित';
+
+  @override
+  String get customerFilterNew => 'नए';
+
+  @override
+  String get customerFilterInactive => 'निष्क्रिय';
+
+  @override
+  String get noPurchasesYet => 'अभी तक कोई खरीदारी नहीं';
+
+  @override
   String get previousDue => 'पिछला बकाया';
 
   @override

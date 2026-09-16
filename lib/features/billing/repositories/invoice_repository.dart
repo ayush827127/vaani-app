@@ -289,6 +289,24 @@ class InvoiceRepository {
     return rows.map((r) => Invoice.fromMap(r)).toList();
   }
 
+  /// Same as [getInvoicesByShop], but each Invoice's [Invoice.itemCount] is
+  /// populated via a COUNT subquery — for list screens (Home, Bills) that
+  /// want to show "N items" per row without an N+1 query per invoice or
+  /// loading every line item.
+  Future<List<Invoice>> getInvoicesByShopWithItemCounts(int shopId,
+      {int limit = 20, int offset = 0}) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery('''
+      SELECT invoices.*,
+        (SELECT COUNT(*) FROM invoice_items WHERE invoice_items.invoice_id = invoices.id) AS item_count
+      FROM invoices
+      WHERE shop_id = ? AND deleted_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    ''', [shopId, limit, offset]);
+    return rows.map((r) => Invoice.fromMap(r)).toList();
+  }
+
   Future<List<Invoice>> getInvoicesByCustomer(int customerId) async {
     final db = await _db.database;
     final rows = await db.query(
@@ -298,6 +316,20 @@ class InvoiceRepository {
       orderBy: 'created_at DESC',
     );
     return rows.map((r) => Invoice.fromMap(r)).toList();
+  }
+
+  /// How many voice-created invoices this shop has, for the Basic plan's
+  /// 50-invoice cap — see the isVoiceCreated field doc comment on Invoice.
+  /// This is the *local* count (instant, works offline); the backend
+  /// independently re-derives the same number from synced data as the
+  /// authoritative backstop — see shop-voice.service.js.
+  Future<int> countVoiceInvoices(int shopId) async {
+    final db = await _db.database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as c FROM invoices WHERE shop_id = ? AND is_voice_created = 1 AND deleted_at IS NULL',
+      [shopId],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
   }
 
   Future<void> updateInvoicePayment(

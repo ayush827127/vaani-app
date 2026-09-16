@@ -61,5 +61,13 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Android 11+ hides installed apps from package visibility by
+             default — without this, canLaunchUrl()/launchUrl() can't find
+             any UPI app (Google Pay, PhonePe, Paytm, etc.) to hand the
+             upi://pay intent to, even when several are installed. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="upi"/>
+        </intent>
     </queries>
 </manifest>

@@ -393,19 +393,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       return;
     }
 
-    // Unlike the voice sheet and voice billing screen, push-to-talk used to
-    // apply parsed actions straight to the live cart with no review step — a
-    // misheard product/quantity/price silently changed the bill. This brings
-    // PTT in line with the other two voice entry points, which both already
-    // require an explicit confirm before touching the cart.
-    if (!await _confirmVoiceActions(result.actions)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice command cancelled')));
-      }
-      return;
-    }
-    if (!mounted) return;
-
     final productsById = {for (final p in _allProducts) if (p.id != null) p.id!: p};
     final executor = ActionExecutor(ref: ref, productsById: productsById);
     final execResult = executor.execute(result.actions);
@@ -472,63 +459,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     }
   }
 
-  String _describeVoiceAction(VoiceAction a) => switch (a) {
-        SetQuantityAction(:final productName, :final quantity) =>
-          'Set $productName to $quantity',
-        IncreaseQuantityAction(:final productName, :final delta) =>
-          'Add $delta × $productName',
-        DecreaseQuantityAction(:final productName, :final delta) =>
-          'Remove $delta × $productName',
-        RemoveItemAction(:final productName) => 'Remove $productName from cart',
-        ClearCartAction() => 'Clear the entire cart',
-        UpdatePriceAction(:final productName, :final price) =>
-          'Set $productName price to ${AppFormatters.formatCurrency(price)}',
-        DiscountAction(:final discountType, :final value) => discountType == 'percent'
-            ? 'Apply $value% discount'
-            : 'Apply ${AppFormatters.formatCurrency(value)} discount',
-        PaymentModeAction(:final mode) => 'Set payment mode to $mode',
-        SelectCustomerAction(:final customerName) => 'Bill to $customerName',
-        CustomerNotFoundAction(:final name) => 'New customer: $name',
-        UnknownProductAction(:final rawName) => 'Could not match product "$rawName"',
-        UnknownAction(:final message) => message,
-      };
-
-  Future<bool> _confirmVoiceActions(List<VoiceAction> actions) async {
-    final c = context.colors;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: c.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Confirm voice command', style: TextStyle(color: c.textPrimary)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final a in actions)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text('• ${_describeVoiceAction(a)}',
-                      style: TextStyle(color: c.textPrimary)),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
-    return confirmed ?? false;
-  }
 
   String _pttUserMessage(String reason) {
     if (reason.contains('[empty-transcript]')) return "Didn't catch that. Please speak again.";
@@ -852,6 +782,13 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         ref.read(pttTranscriptProvider.notifier).state = null;
         _handleVoiceCommand(transcript);
       }
+    });
+    // Resets cartVoiceOriginProvider the moment the cart empties — covers
+    // every way that happens (voice "clear cart", the manual clear button,
+    // or after a completed checkout) in one place instead of needing a
+    // reset call at each of those sites.
+    ref.listen<List<CartItem>>(cartProvider, (_, next) {
+      if (next.isEmpty) ref.read(cartVoiceOriginProvider.notifier).state = false;
     });
 
     final cart = ref.watch(cartProvider);

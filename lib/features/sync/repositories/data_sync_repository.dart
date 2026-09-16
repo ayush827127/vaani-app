@@ -532,6 +532,7 @@ class DataSyncRepository {
       paymentMode: json['paymentMode'] as String? ?? 'cash',
       status: json['status'] as String? ?? 'paid',
       notes: json['notes'] as String?,
+      isVoiceCreated: json['isVoiceCreated'] as bool? ?? false,
       deletedAt: json['deletedAt'] != null ? DateTime.parse(json['deletedAt'] as String) : null,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
@@ -607,6 +608,7 @@ class DataSyncRepository {
         'paymentMode': inv.paymentMode,
         'status': inv.status,
         'notes': inv.notes,
+        'isVoiceCreated': inv.isVoiceCreated,
         'createdAt': inv.createdAt.toIso8601String(),
         'updatedAt': (inv.updatedAt ?? inv.createdAt).toIso8601String(),
         'items': inv.items

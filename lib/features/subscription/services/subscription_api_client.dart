@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/subscription_status.dart';
+import '../models/plan.dart';
+import '../models/payment_claim.dart';
+import '../models/voice_usage.dart';
 
 class ShopAuthResult {
   final String token;
@@ -23,6 +26,18 @@ class PhoneAlreadyRegisteredException implements Exception {
   const PhoneAlreadyRegisteredException();
   @override
   String toString() => 'This phone number is already registered to another shop';
+}
+
+/// Thrown by any subscription/plan/payment-claim call that gets back a
+/// non-2xx response — carries the backend's own error message (e.g. "This
+/// plan requires payment", "This claim was already confirmed") straight
+/// through, since those are already written to be shown to a shop owner.
+class SubscriptionApiException implements Exception {
+  final String message;
+  final int statusCode;
+  const SubscriptionApiException(this.message, this.statusCode);
+  @override
+  String toString() => message;
 }
 
 class SubscriptionApiClient {
@@ -114,6 +129,97 @@ class SubscriptionApiClient {
 
     final envelope = jsonDecode(response.body) as Map<String, dynamic>;
     return SubscriptionStatus.fromJson(envelope['data'] as Map<String, dynamic>);
+  }
+
+  Future<List<Plan>> listPlans(String token) async {
+    final response = await _client.get(
+      Uri.parse('$_baseUrl/api/shop/plans'),
+      headers: {'Authorization': 'Bearer $token'},
+    ).timeout(const Duration(seconds: 60));
+    final data = _unwrap(response) as List;
+    return data.map((e) => Plan.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// Switches the shop straight to a free (₹0) plan — no payment claim
+  /// needed. The backend independently re-checks the plan is actually free
+  /// before applying this, so passing a paid plan's id here just throws
+  /// rather than granting it.
+  Future<void> switchToFreePlan(String token, String planId) async {
+    final response = await _client
+        .post(
+          Uri.parse('$_baseUrl/api/shop/subscription/switch-free'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({'planId': planId}),
+        )
+        .timeout(const Duration(seconds: 60));
+    _unwrap(response);
+  }
+
+  /// Submits a payment claim — see PaymentClaim's doc comment on the
+  /// backend for why this never activates anything by itself. [reference]
+  /// must be the same value used for every retry of the *same* intended
+  /// payment (the backend treats it as an idempotency key), and should be
+  /// the exact transaction note embedded in the UPI intent so an admin can
+  /// match the two up.
+  Future<PaymentClaim> createPaymentClaim(
+    String token, {
+    required String planId,
+    required String reference,
+    required double amount,
+  }) async {
+    final response = await _client
+        .post(
+          Uri.parse('$_baseUrl/api/shop/payment-claims'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({'planId': planId, 'reference': reference, 'amount': amount}),
+        )
+        .timeout(const Duration(seconds: 60));
+    return PaymentClaim.fromJson(_unwrap(response) as Map<String, dynamic>);
+  }
+
+  Future<List<PaymentClaim>> listMyPaymentClaims(String token) async {
+    final response = await _client.get(
+      Uri.parse('$_baseUrl/api/shop/payment-claims'),
+      headers: {'Authorization': 'Bearer $token'},
+    ).timeout(const Duration(seconds: 60));
+    final data = _unwrap(response) as List;
+    return data.map((e) => PaymentClaim.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// Server-computed voice-invoice usage for the current plan — see
+  /// getVoiceUsage on the backend for why this is trusted over any local
+  /// count for *display*, even though checkout itself still gates on the
+  /// local count for instant, offline-friendly feedback.
+  Future<VoiceUsage> getVoiceUsage(String token) async {
+    final response = await _client.get(
+      Uri.parse('$_baseUrl/api/shop/subscription/voice-usage'),
+      headers: {'Authorization': 'Bearer $token'},
+    ).timeout(const Duration(seconds: 60));
+    return VoiceUsage.fromJson(_unwrap(response) as Map<String, dynamic>);
+  }
+
+  /// Unwraps `{success, data}`/`{success, error}` envelopes, throwing
+  /// [UnauthorizedException] for a 401 and [SubscriptionApiException] (with
+  /// the backend's own message) for any other non-2xx response.
+  dynamic _unwrap(http.Response response) {
+    final envelope = jsonDecode(response.body) as Map<String, dynamic>?;
+    if (response.statusCode == 401) {
+      throw const UnauthorizedException('Shop token rejected by backend');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final message = (envelope?['error'] as Map<String, dynamic>?)?['message'] as String?;
+      throw SubscriptionApiException(
+        message ?? 'Request failed: HTTP ${response.statusCode}',
+        response.statusCode,
+      );
+    }
+    return envelope?['data'];
   }
 
   ShopAuthResult _parseAuthResponse(http.Response response) {

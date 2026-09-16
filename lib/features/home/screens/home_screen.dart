@@ -10,6 +10,8 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/invoice.dart';
+import '../../../shared/models/customer.dart';
+import '../../../shared/widgets/customer_avatar.dart';
 import '../../reports/repositories/report_repository.dart';
 import '../../inventory/repositories/product_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
@@ -41,6 +43,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<DailyData> _chartData = [];
   int _lowStockCount = 0;
   List<Invoice> _recentBills = [];
+  Map<int, Customer> _customersById = {};
 
   @override
   void initState() {
@@ -70,7 +73,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final bills = await invoiceRepo.getTodayBillCount(_shopId);
     final newCustomers = await customerRepo.getNewCustomersThisMonth(_shopId);
     final lowStock = await productRepo.getLowStockProducts(_shopId);
-    final recentBills = await invoiceRepo.getInvoicesByShop(_shopId, limit: 3);
+    final recentBills = await invoiceRepo.getInvoicesByShopWithItemCounts(_shopId, limit: 3);
+    final customers = await customerRepo.getAllCustomers(_shopId);
 
     if (!mounted) return;
     setState(() {
@@ -84,6 +88,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _newCustomers = newCustomers;
       _lowStockCount = lowStock.length;
       _recentBills = recentBills;
+      _customersById = {for (final c in customers) if (c.id != null) c.id!: c};
       _isLoading = false;
     });
   }
@@ -353,9 +358,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 8),
           ] else
-            ...(_recentBills.map((bill) => _BillTile(
-                  bill: bill,
-                  onTap: () => context.push('/bills/${bill.id}'),
+            ...(_recentBills.asMap().entries.map((entry) => _BillTile(
+                  bill: entry.value,
+                  customer: entry.value.customerId != null
+                      ? _customersById[entry.value.customerId]
+                      : null,
+                  showDivider: entry.key > 0,
+                  onTap: () => context.push('/bills/${entry.value.id}'),
                 ))),
         ],
       ),
@@ -400,10 +409,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            mainAxisExtent: 90,
+            crossAxisCount: 3,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            mainAxisExtent: 92,
           ),
           children: [
             gated(moduleKey: 'billing',    icon: Icons.receipt_long_rounded, label: l10n.newBill,   onTap: () => context.go('/billing')),
@@ -498,24 +507,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 }
 
 // ── Recent Bill Tile ──────────────────────────────────────────────────────────
+//
+// Customer-first layout matching bills_screen.dart's list rows — an avatar
+// (photo if the customer has one, initial otherwise, a generic person icon
+// for a walk-in sale with no linked customer) leads with the customer's
+// name, item count, and time; the payment *status* (paid/partial/pending),
+// not payment method, trails with the amount — this is the "what's the
+// state of this bill" summary a shopkeeper scans Home for, while the
+// Bills screen's own rows show payment *method* since that list is for
+// looking a specific bill up, not a status check.
 
 class _BillTile extends StatelessWidget {
   final Invoice bill;
+  final Customer? customer;
+  final bool showDivider;
   final VoidCallback? onTap;
-  const _BillTile({required this.bill, this.onTap});
+  const _BillTile({required this.bill, this.customer, this.showDivider = false, this.onTap});
 
-  Color? _paymentColor(String mode, AppSemanticColors c) {
-    switch (mode) {
-      case 'cash':
-        return c.success;
-      case 'upi':
-        return c.info;
-      case 'card':
-        return c.warning;
-      case 'credit':
-        return const Color(0xFFEC4899);
+  (Color, String) _statusMeta(AppSemanticColors c, AppLocalizations l10n) {
+    switch (bill.status) {
+      case 'paid':
+        return (c.success, l10n.paid);
+      case 'partial_paid':
+        return (c.warning, l10n.partialPaid);
+      case 'cancelled':
+        return (c.textHint, 'Voided');
       default:
-        return null;
+        return (c.danger, l10n.unpaid);
     }
   }
 
@@ -525,7 +543,7 @@ class _BillTile extends StatelessWidget {
     final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
     final m = dt.minute.toString().padLeft(2, '0');
     final ampm = dt.hour < 12 ? 'AM' : 'PM';
-    if (isToday) return '$todayLabel $h:$m $ampm';
+    if (isToday) return '$todayLabel, $h:$m $ampm';
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return '${months[dt.month - 1]} ${dt.day}, $h:$m $ampm';
   }
@@ -534,53 +552,58 @@ class _BillTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
-    final modeColor = _paymentColor(bill.paymentMode, c) ?? c.textSecondary;
-    return GestureDetector(
+    final (statusColor, statusLabel) = _statusMeta(c, l10n);
+    final items = bill.itemCount ?? bill.items.length;
+    final itemLabel = items == 1 ? '1 item' : '$items items';
+
+    return InkWell(
       onTap: onTap,
-      child: Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Row(children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: showDivider
+            ? BoxDecoration(border: Border(top: BorderSide(color: c.divider, width: 1)))
+            : null,
+        child: Row(children: [
+          customer != null
+              ? CustomerAvatar(customer: customer!, size: 40, color: AppColors.primary)
+              : Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.person_rounded, size: 20, color: AppColors.primaryLight),
+                ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(bill.customerName,
+                  style: TextStyle(color: c.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 2),
+              Text(
+                '$itemLabel · ${_formatTime(bill.createdAt, l10n.today)}',
+                style: TextStyle(color: c.textSecondary, fontSize: 11.5),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ]),
           ),
-          child: const Icon(Icons.receipt_rounded, size: 18, color: AppColors.primaryLight),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(bill.invoiceNumber,
-                style: TextStyle(color: c.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
+          const SizedBox(width: 8),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(
-              '${bill.customerName} · ${_formatTime(bill.createdAt, l10n.today)}',
-              style: TextStyle(color: c.textSecondary, fontSize: 11),
-              overflow: TextOverflow.ellipsis,
+              AppFormatters.formatCurrency(bill.grandTotal),
+              style: TextStyle(color: c.textPrimary, fontSize: 13.5, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              statusLabel,
+              style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600),
             ),
           ]),
-        ),
-        const SizedBox(width: 8),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(
-            AppFormatters.formatCurrency(bill.grandTotal),
-            style: TextStyle(color: c.textPrimary, fontSize: 13, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 3),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-            decoration: BoxDecoration(
-              color: modeColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              localizedPaymentMode(l10n, bill.paymentMode).toUpperCase(),
-              style: TextStyle(color: modeColor, fontSize: 10, fontWeight: FontWeight.w600),
-            ),
-          ),
         ]),
-      ]),
       ),
     );
   }
@@ -599,19 +622,28 @@ class _MetricTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: c.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: c.surfaceBorder),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, size: 20, color: color),
-        const SizedBox(height: 8),
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, size: 17, color: color),
+        ),
+        const SizedBox(height: 10),
         Text(value,
             style: TextStyle(
                 fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.bold, color: c.textPrimary)),
-        Text(title, style: TextStyle(fontSize: 10, color: c.textSecondary)),
+        const SizedBox(height: 1),
+        Text(title, style: TextStyle(fontSize: 11, color: c.textSecondary)),
       ]),
     );
   }
@@ -645,7 +677,7 @@ class _QuickAction extends StatelessWidget {
             Container(
               width: double.infinity,
               height: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
               decoration: BoxDecoration(
                 color: c.surface,
                 borderRadius: BorderRadius.circular(14),
@@ -654,10 +686,19 @@ class _QuickAction extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, size: 24, color: color ?? AppColors.primaryLight),
-                  const SizedBox(height: 6),
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: (color ?? AppColors.primaryLight).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, size: 19, color: color ?? AppColors.primaryLight),
+                  ),
+                  const SizedBox(height: 8),
                   Text(label,
-                      style: TextStyle(fontSize: 10, color: c.textSecondary),
+                      style: TextStyle(
+                          fontSize: 11, color: c.textPrimary, fontWeight: FontWeight.w500),
                       textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis),

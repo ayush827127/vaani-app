@@ -1,7 +1,15 @@
 class AppConstants {
   static const String appName = 'Vaani';
   static const String dbName = 'vaani.db';
-  static const int dbVersion = 11;
+  static const int dbVersion = 12;
+
+  // Must match BASIC_VOICE_INVOICE_LIMIT in the backend's
+  // src/utils/voiceQuota.js — this is only the *local, offline* gate for
+  // instant checkout feedback; the backend independently enforces the same
+  // number from synced data (see shop-voice.service.js), so a mismatch here
+  // would only affect UX smoothness, never actually let a Basic shop past
+  // the real cap.
+  static const int basicPlanVoiceInvoiceLimit = 50;
 
   // SharedPreferences keys
   static const String keyIsLoggedIn = 'isLoggedIn';

@@ -13,6 +13,28 @@ import '../repositories/invoice_repository.dart';
 import '../services/invoice_pdf_helper.dart';
 import '../../../l10n/l10n_extensions.dart';
 
+const _monthNames = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/// One calendar month's worth of bills — see _buildGroups() below.
+class _MonthGroup {
+  final int year;
+  final int month; // 1-12
+  final List<Invoice> invoices;
+  final double total;
+  const _MonthGroup({
+    required this.year,
+    required this.month,
+    required this.invoices,
+    required this.total,
+  });
+
+  String get key => '$year-$month';
+  String get label => '${_monthNames[month - 1]} $year';
+}
+
 class BillsScreen extends StatefulWidget {
   const BillsScreen({super.key});
   @override
@@ -28,6 +50,14 @@ class _BillsScreenState extends State<BillsScreen> {
   bool _loading = true;
   String _filter = 'All';
   int _shopId = 1;
+
+  // Which month groups are expanded — toggled freely by the user and
+  // preserved across searches/filter changes (only seeded once, on first
+  // load, with the latest month open) rather than recomputed from
+  // _filtered every time, so collapsing an older month doesn't spring back
+  // open just because the user typed in the search box.
+  final Set<String> _expandedMonths = {};
+  bool _expandedMonthsSeeded = false;
 
   static const _modes = ['All', 'Cash', 'UPI', 'Card', 'Credit'];
 
@@ -47,7 +77,7 @@ class _BillsScreenState extends State<BillsScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final results = await Future.wait([
-      getIt<InvoiceRepository>().getInvoicesByShop(_shopId, limit: 200),
+      getIt<InvoiceRepository>().getInvoicesByShopWithItemCounts(_shopId, limit: 500),
       getIt<CustomerRepository>().getAllCustomers(_shopId),
     ]);
     if (!mounted) return;
@@ -72,6 +102,42 @@ class _BillsScreenState extends State<BillsScreen> {
             inv.customerName.toLowerCase().contains(q);
         return matchesMode && matchesQuery;
       }).toList();
+
+      final groups = _buildGroups(_filtered);
+      if (!_expandedMonthsSeeded && groups.isNotEmpty) {
+        _expandedMonths.add(groups.first.key);
+        _expandedMonthsSeeded = true;
+      }
+    });
+  }
+
+  List<_MonthGroup> _buildGroups(List<Invoice> invoices) {
+    final byMonth = <String, List<Invoice>>{};
+    for (final inv in invoices) {
+      final key = '${inv.createdAt.year}-${inv.createdAt.month}';
+      byMonth.putIfAbsent(key, () => []).add(inv);
+    }
+    final groups = byMonth.entries.map((e) {
+      final first = e.value.first.createdAt;
+      final total = e.value.fold(0.0, (sum, inv) => sum + inv.grandTotal);
+      return _MonthGroup(year: first.year, month: first.month, invoices: e.value, total: total);
+    }).toList();
+    // Invoices already come newest-first from the DB query, but sort groups
+    // explicitly too since Map iteration order isn't guaranteed to follow it.
+    groups.sort((a, b) {
+      final byYear = b.year.compareTo(a.year);
+      return byYear != 0 ? byYear : b.month.compareTo(a.month);
+    });
+    return groups;
+  }
+
+  void _toggleMonth(String key) {
+    setState(() {
+      if (_expandedMonths.contains(key)) {
+        _expandedMonths.remove(key);
+      } else {
+        _expandedMonths.add(key);
+      }
     });
   }
 
@@ -83,8 +149,6 @@ class _BillsScreenState extends State<BillsScreen> {
   int _countFor(String mode) => mode == 'All'
       ? _all.length
       : _all.where((inv) => inv.paymentMode.toLowerCase() == mode.toLowerCase()).length;
-
-  double get _filteredTotal => _filtered.fold(0.0, (sum, inv) => sum + inv.grandTotal);
 
   String _modeFilterLabel(String mode, AppLocalizations l10n) {
     switch (mode) {
@@ -113,6 +177,8 @@ class _BillsScreenState extends State<BillsScreen> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
+    final groups = _buildGroups(_filtered);
+
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.go('/billing'),
@@ -209,51 +275,26 @@ class _BillsScreenState extends State<BillsScreen> {
               },
             ),
           ),
-          // Summary bar — how many bills and how much they add up to for
-          // whatever's currently filtered/searched, so the list isn't just a
-          // flat scroll with no sense of the total until you count by hand.
-          if (!_loading && _filtered.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Text(
-                    l10n.billsCount(_filtered.length),
-                    style: TextStyle(color: c.textSecondary, fontSize: 12),
-                  ),
-                  const Spacer(),
-                  Text(
-                    AppFormatters.formatCurrency(_filteredTotal),
-                    style: const TextStyle(
-                        color: AppColors.primaryLight,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 10),
-          // List
+          const SizedBox(height: 8),
+          // Month-grouped list
           Expanded(
             child: _loading
                 ? const Center(
                     child: CircularProgressIndicator(
                         color: AppColors.primaryLight))
-                : _filtered.isEmpty
+                : groups.isEmpty
                     ? _emptyState()
                     : RefreshIndicator(
                         onRefresh: _load,
                         color: AppColors.primaryLight,
                         child: ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
-                          itemCount: _filtered.length,
-                          itemBuilder: (_, i) => _InvoiceTile(
-                            invoice: _filtered[i],
-                            customer: _filtered[i].customerId != null
-                                ? _customersById[_filtered[i].customerId]
-                                : null,
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
+                          itemCount: groups.length,
+                          itemBuilder: (_, i) => _MonthSection(
+                            group: groups[i],
+                            expanded: _expandedMonths.contains(groups[i].key),
+                            customersById: _customersById,
+                            onToggle: () => _toggleMonth(groups[i].key),
                           ),
                         ),
                       ),
@@ -285,34 +326,114 @@ class _BillsScreenState extends State<BillsScreen> {
   }
 }
 
+// ── Month Section ─────────────────────────────────────────────────────────────
+//
+// A tappable header ("September 2026 — ₹100 · 2 bills") that expands or
+// collapses its bills — the PhonePe/Google-Pay-style grouping this screen
+// replaced a flat "21 bills / total sales" summary block with. The current
+// month starts expanded; older ones start collapsed (see
+// _BillsScreenState._applyFilter's seeding of _expandedMonths).
+
+class _MonthSection extends StatelessWidget {
+  final _MonthGroup group;
+  final bool expanded;
+  final Map<int, Customer> customersById;
+  final VoidCallback onToggle;
+
+  const _MonthSection({
+    required this.group,
+    required this.expanded,
+    required this.customersById,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.surfaceBorder),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: onToggle,
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      group.label,
+                      style: TextStyle(
+                          color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Text(
+                    AppFormatters.formatCurrency(group.total),
+                    style: TextStyle(
+                        color: c.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '· ${group.invoices.length} ${group.invoices.length == 1 ? 'bill' : 'bills'}',
+                    style: TextStyle(color: c.textSecondary, fontSize: 12),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    color: c.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+              child: Column(
+                children: [
+                  for (var i = 0; i < group.invoices.length; i++)
+                    _InvoiceTile(
+                      invoice: group.invoices[i],
+                      customer: group.invoices[i].customerId != null
+                          ? customersById[group.invoices[i].customerId]
+                          : null,
+                      showDivider: i > 0,
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Invoice Row ────────────────────────────────────────────────────────────────
+//
+// Flat list row (no per-row border/shadow) with a divider above every row
+// but the first in its month — the "clean white list with subtle
+// separators" look, rather than a stack of individually-boxed cards.
+
 class _InvoiceTile extends StatelessWidget {
   final Invoice invoice;
   // Resolved from the invoice's customerId against the shop's customer list
   // — null for a walk-in sale, or if the linked customer was since deleted.
   final Customer? customer;
-  const _InvoiceTile({required this.invoice, this.customer});
-
-  static const _modeIcons = {
-    'cash': Icons.payments_rounded,
-    'upi': Icons.phone_android_rounded,
-    'card': Icons.credit_card_rounded,
-    'credit': Icons.account_balance_wallet_rounded,
-  };
-
-  static const _modeColors = {
-    'cash': Color(0xFF16A34A),
-    'upi': Color(0xFF7C3AED),
-    'card': Color(0xFF2563EB),
-    'credit': Color(0xFFEA580C),
-  };
+  final bool showDivider;
+  const _InvoiceTile({required this.invoice, this.customer, this.showDivider = false});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
-    final mode = invoice.paymentMode.toLowerCase();
-    final modeColor = _modeColors[mode] ?? AppColors.primary;
-    final modeIcon = _modeIcons[mode] ?? Icons.payment_rounded;
+    final items = invoice.itemCount ?? invoice.items.length;
+    final itemLabel = items == 1 ? '1 item' : '$items items';
 
     final now = DateTime.now();
     final diff = now.difference(invoice.createdAt);
@@ -325,61 +446,33 @@ class _InvoiceTile extends StatelessWidget {
       dateLabel = AppFormatters.formatDate(invoice.createdAt);
     }
 
-    return GestureDetector(
+    return InkWell(
       onTap: () => context.push('/bills/${invoice.id}'),
+      borderRadius: BorderRadius.circular(10),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: c.surfaceBorder),
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: showDivider
+            ? BoxDecoration(border: Border(top: BorderSide(color: c.divider, width: 1)))
+            : null,
         child: Row(
           children: [
-            // Customer avatar — the customer's own photo when they have one
-            // synced, their initial otherwise, or a generic person icon for
-            // a walk-in sale with no linked customer at all. Tapping it
-            // jumps straight to that customer's profile without having to
-            // open the bill first. A small dot in the corner keeps the
-            // payment-mode cue that used to be the icon here.
             GestureDetector(
               onTap: customer != null
                   ? () => context.push('/customers/${customer!.id}')
                   : null,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  customer != null
-                      ? CustomerAvatar(customer: customer!, size: 42, color: AppColors.primary)
-                      : Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: c.textHint.withValues(alpha: 0.12),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(Icons.person_rounded, color: c.textHint, size: 22),
-                        ),
-                  Positioned(
-                    bottom: -1,
-                    right: -1,
-                    child: Container(
-                      width: 15,
-                      height: 15,
+              child: customer != null
+                  ? CustomerAvatar(customer: customer!, size: 38, color: AppColors.primary)
+                  : Container(
+                      width: 38,
+                      height: 38,
                       decoration: BoxDecoration(
-                        color: modeColor,
+                        color: c.textHint.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
-                        border: Border.all(color: c.surface, width: 2),
                       ),
-                      child: Icon(modeIcon, color: Colors.white, size: 9),
+                      child: Icon(Icons.person_rounded, color: c.textHint, size: 20),
                     ),
-                  ),
-                ],
-              ),
             ),
             const SizedBox(width: 12),
-            // Invoice info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -391,7 +484,7 @@ class _InvoiceTile extends StatelessWidget {
                           invoice.customerName,
                           style: TextStyle(
                               color: c.textPrimary,
-                              fontSize: 14,
+                              fontSize: 13.5,
                               fontWeight: FontWeight.w600),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -402,7 +495,7 @@ class _InvoiceTile extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                           decoration: BoxDecoration(
-                            color: c.danger.withValues(alpha: 0.12),
+                            color: c.danger.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text('VOIDED',
@@ -414,60 +507,38 @@ class _InvoiceTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    invoice.invoiceNumber,
-                    style: TextStyle(
-                        color: c.textDisabled,
-                        fontSize: 11,
-                        fontFamily: 'monospace'),
+                    '$itemLabel · $dateLabel',
+                    style: TextStyle(color: c.textSecondary, fontSize: 11.5),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
-                  Text(dateLabel,
-                      style: TextStyle(
-                          color: c.textSecondary, fontSize: 11)),
                 ],
               ),
             ),
-            // Amount
+            const SizedBox(width: 8),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
                   AppFormatters.formatCurrency(invoice.grandTotal),
-                  style: const TextStyle(
-                      color: AppColors.primaryLight,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 4),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: modeColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    localizedPaymentMode(l10n, invoice.paymentMode).toUpperCase(),
-                    style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: modeColor),
-                  ),
+                const SizedBox(height: 2),
+                Text(
+                  localizedPaymentMode(l10n, invoice.paymentMode),
+                  style: TextStyle(color: c.textSecondary, fontSize: 11),
                 ),
               ],
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             GestureDetector(
               onTap: () =>
                   InvoicePdfHelper.shareById(context, invoice.id!, invoice.shopId),
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                child: Icon(Icons.share_rounded,
-                    color: AppColors.primaryLight, size: 18),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                child: Icon(Icons.share_outlined, color: c.textSecondary, size: 18),
               ),
             ),
-            Icon(Icons.chevron_right_rounded,
-                color: c.textDisabled, size: 18),
           ],
         ),
       ),

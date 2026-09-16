@@ -145,6 +145,13 @@ class DatabaseHelper {
       // is a device-local convenience, not synced to the backend).
       await db.execute('ALTER TABLE customers ADD COLUMN image_path TEXT');
     }
+    if (oldVersion < 12) {
+      // Marks an invoice as created via voice billing — the Basic plan's
+      // 50-voice-invoice cap counts these specifically, so a manually
+      // created invoice never counts against it (and vice versa).
+      await db.execute(
+          'ALTER TABLE invoices ADD COLUMN is_voice_created INTEGER NOT NULL DEFAULT 0');
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -238,6 +245,7 @@ class DatabaseHelper {
         payment_mode TEXT NOT NULL DEFAULT 'cash',
         status TEXT NOT NULL DEFAULT 'paid',
         notes TEXT,
+        is_voice_created INTEGER NOT NULL DEFAULT 0,
         deleted_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT,

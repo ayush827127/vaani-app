@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -21,6 +23,8 @@ import '../../../shared/models/shop.dart';
 import '../../../shared/widgets/customer_avatar.dart';
 import '../../auth/repositories/shop_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
+import '../../subscription/providers/subscription_provider.dart';
+import '../providers/billing_providers.dart';
 import '../repositories/invoice_repository.dart';
 import '../../../l10n/l10n_extensions.dart';
 
@@ -304,11 +308,29 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
       return;
     }
 
+    final container = ProviderScope.containerOf(context, listen: false);
+    final isVoiceOrigin = container.read(cartVoiceOriginProvider);
+    final isOnBasic = container.read(subscriptionProvider)?.isOnBasicPlan ?? false;
+
     setState(() => _isProcessing = true);
 
     String invoiceNum;
     try {
       final invoiceRepo = getIt<InvoiceRepository>();
+
+      // Local, offline-first gate — see basicPlanVoiceInvoiceLimit's doc
+      // comment for why the backend independently enforces the same limit
+      // from its own synced data rather than trusting this check alone.
+      if (isVoiceOrigin && isOnBasic) {
+        final used = await invoiceRepo.countVoiceInvoices(widget.shopId);
+        if (used >= AppConstants.basicPlanVoiceInvoiceLimit) {
+          if (mounted) {
+            setState(() => _isProcessing = false);
+            _showVoiceLimitReachedDialog();
+          }
+          return;
+        }
+      }
 
       invoiceNum = await invoiceRepo.getNextInvoiceNumber(widget.shopId);
 
@@ -332,6 +354,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
         pendingAmount: _pendingAmount,
         paymentMode: _method,
         status: _status,
+        isVoiceCreated: isVoiceOrigin,
         createdAt: DateTime.now(),
       );
 
@@ -397,6 +420,38 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
       // update in this widget. The bill is safely saved and can be reprinted
       // from Bills > invoice detail at any time.
     }
+  }
+
+  void _showVoiceLimitReachedDialog() {
+    final c = context.colors;
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Voice invoice limit reached', style: TextStyle(color: c.textPrimary)),
+        content: Text(
+          "You've used all ${AppConstants.basicPlanVoiceInvoiceLimit} voice-created invoices on "
+          'the Basic plan. Upgrade to Pro for unlimited voice billing — or finish this sale '
+          'manually instead (manual billing has no limit).',
+          style: TextStyle(color: c.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text('Not now', style: TextStyle(color: c.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              Navigator.pop(context); // close the payment sheet too
+              context.push('/profile/subscription');
+            },
+            child: const Text('Upgrade'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── PDF Builder ────────────────────────────────────────────────────────────

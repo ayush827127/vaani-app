@@ -623,6 +623,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get customerUpdated => 'Customer updated';
 
   @override
+  String get customerFilterAll => 'All';
+
+  @override
+  String get customerFilterRegular => 'Regular';
+
+  @override
+  String get customerFilterNew => 'New';
+
+  @override
+  String get customerFilterInactive => 'Inactive';
+
+  @override
+  String get noPurchasesYet => 'No purchases yet';
+
+  @override
   String get previousDue => 'Previous Due';
 
   @override
