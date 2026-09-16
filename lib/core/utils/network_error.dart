@@ -15,6 +15,16 @@ String friendlyNetworkError(Object error) {
     return "Couldn't reach the server — check your internet connection and try again.";
   }
   if (error is FormatException || error is HttpException) {
+    // A response body mentioning "HTTPS port" is the signature of a TLS
+    // termination error — something between the phone and the server
+    // downgraded the HTTPS request to plain HTTP (seen with carrier data-saver
+    // proxies and some device-level "smart network" features), not the app
+    // server itself. That's a different fix (network settings) from a cold
+    // start, so it gets its own message instead of the generic one below.
+    if (error.toString().contains('HTTPS port')) {
+      return "Your network seems to be altering secure connections — try switching to Wi-Fi, "
+          "or turn off Data Saver / VPN / proxy on your phone, then try again.";
+    }
     return "The server is still starting up — please try again in a few seconds.";
   }
   final message = error.toString();

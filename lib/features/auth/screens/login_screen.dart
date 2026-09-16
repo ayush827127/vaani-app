@@ -262,9 +262,23 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _isLoading = false);
         if (!syncResult.success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                "Signed in — couldn't reach the server to pull your shop data yet, will retry automatically.",
+            SnackBar(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Signed in — couldn't reach the server to pull your shop data yet, will retry automatically.",
+                  ),
+                  if (syncResult.error != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '${syncResult.error.runtimeType}: ${syncResult.error}'
+                      '${syncResult.errorDetail != null ? '\n${syncResult.errorDetail}' : ''}',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ],
+                ],
               ),
               backgroundColor: AppColors.error,
             ),

@@ -19,11 +19,12 @@ class OtpService {
   /// almost always finds the backend awake for the real request, and the
   /// caller never has to know a retry happened.
   Future<Map<String, dynamic>?> _postJson(String path, Map<String, dynamic> body) async {
+    final uri = Uri.parse('$_baseUrl$path');
     const maxAttempts = 3;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       final response = await _client
           .post(
-            Uri.parse('$_baseUrl$path'),
+            uri,
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(body),
           )
@@ -34,7 +35,21 @@ class OtpService {
       try {
         return jsonDecode(response.body) as Map<String, dynamic>?;
       } on FormatException {
-        if (attempt == maxAttempts) rethrow;
+        // Re-thrown with the actual status + a body snippet — a plain
+        // FormatException here could mean the free-tier host was still
+        // booting, but it can just as easily be a Cloudflare/Render error
+        // page or a mobile-carrier proxy interfering with the connection,
+        // which look identical from here (non-JSON body) but need different
+        // fixes. The snippet is what tells those apart, and network_error.dart
+        // pattern-matches it to pick the right user-facing message.
+        final snippet = response.body.length > 200 ? response.body.substring(0, 200) : response.body;
+        final richError = FormatException(
+          'Non-JSON response from $uri — HTTP ${response.statusCode}, body: $snippet',
+        );
+        // A TLS-downgrade proxy (see network_error.dart) will fail the same
+        // way every time — retrying just delays showing the user the message
+        // that actually tells them what to do.
+        if (attempt == maxAttempts || snippet.contains('HTTPS port')) throw richError;
         debugPrint('[OTP] non-JSON response from $path (cold start?), retrying — attempt $attempt/$maxAttempts');
         await Future.delayed(const Duration(seconds: 5));
       }

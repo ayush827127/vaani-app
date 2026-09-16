@@ -57,12 +57,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _syncingData = false);
     await _loadSyncStatus();
     if (!mounted) return;
+    final message = result.success
+        ? 'Synced ${result.totalRecords} record(s) to the cloud'
+        : result.sessionExpired
+            ? 'Your session expired — log out and log back in to resume cloud sync'
+            : "Couldn't reach the server — will retry automatically";
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(result.success
-          ? 'Synced ${result.totalRecords} record(s) to the cloud'
-          : result.sessionExpired
-              ? 'Your session expired — log out and log back in to resume cloud sync'
-              : "Couldn't reach the server — will retry automatically"),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(message),
+          // The friendly message above is a guess at *why* sync failed —
+          // showing the actual exception too is what makes a wrong guess
+          // diagnosable instead of a dead end (see network_error.dart).
+          if (result.error != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              '${result.error.runtimeType}: ${result.error}'
+              '${result.errorDetail != null ? '\n${result.errorDetail}' : ''}',
+              style: const TextStyle(fontSize: 11),
+            ),
+          ],
+        ],
+      ),
       backgroundColor: result.success ? AppColors.success : AppColors.error,
     ));
   }

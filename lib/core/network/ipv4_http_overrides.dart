@@ -17,7 +17,21 @@ class Ipv4HttpOverrides extends HttpOverrides {
     final client = super.createHttpClient(context);
     client.connectionFactory = (Uri uri, String? proxyHost, int? proxyPort) async {
       final addresses = await InternetAddress.lookup(uri.host, type: InternetAddressType.IPv4);
-      return Socket.startConnect(addresses.first, uri.port);
+      final task = await Socket.startConnect(addresses.first, uri.port);
+      if (!uri.isScheme('https')) return task;
+      // Setting a custom connectionFactory makes HttpClient skip its own
+      // SecureSocket upgrade for https:// requests entirely (see
+      // _HttpClientConnection._openUrl in the Dart SDK: it only auto-secures
+      // when connectionFactory is null) — every https:// request from this
+      // app was going out as plain HTTP to the origin's TLS port, which the
+      // origin correctly rejected. `host: uri.host` (not the resolved IP)
+      // keeps SNI and certificate hostname checks pointed at the real domain.
+      return ConnectionTask.fromSocket<Socket>(
+        task.socket.then<Socket>(
+          (socket) => SecureSocket.secure(socket, host: uri.host, context: context),
+        ),
+        task.cancel,
+      );
     };
     return client;
   }

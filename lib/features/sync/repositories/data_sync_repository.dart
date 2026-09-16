@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/constants.dart';
 import '../../auth/repositories/shop_repository.dart';
@@ -26,6 +27,17 @@ class SyncResult {
   // fresh SMS OTP), so the caller should tell the user to log out and back
   // in rather than imply retrying will fix it.
   final bool sessionExpired;
+  // The raw exception behind a failed sync — null on success. Kept around
+  // (rather than swallowed) purely so callers can show it alongside the
+  // friendly "couldn't reach the server" message: that message is a guess at
+  // *why* it failed, and has been wrong before (see network_error.dart) —
+  // having the actual exception on screen is what makes a wrong guess
+  // diagnosable instead of a dead end.
+  final Object? error;
+  // Top stack frame of [error] — where the failure actually happened, e.g.
+  // which model's fromJson threw a null-cast. Cheap enough to always keep;
+  // only matters when error is non-null.
+  final String? errorDetail;
   final int products;
   final int customers;
   final int invoices;
@@ -35,6 +47,8 @@ class SyncResult {
   const SyncResult({
     required this.success,
     this.sessionExpired = false,
+    this.error,
+    this.errorDetail,
     this.products = 0,
     this.customers = 0,
     this.invoices = 0,
@@ -194,8 +208,13 @@ class DataSyncRepository {
       // and back in (which requires an SMS OTP) — never by retrying.
       await prefs.remove(AppConstants.keyShopBackendToken);
       return const SyncResult(success: false, sessionExpired: true);
-    } catch (_) {
-      return const SyncResult(success: false);
+    } catch (e, st) {
+      // Full stack goes to the device log; only the top frame (where the
+      // cast/error actually happened) rides along in SyncResult.errorDetail
+      // so it's visible on screen without needing `flutter logs`/logcat access.
+      debugPrint('[Sync] syncNow failed: ${e.runtimeType}: $e\n$st');
+      final topFrame = st.toString().split('\n').take(2).join(' | ');
+      return SyncResult(success: false, error: e, errorDetail: topFrame);
     }
   }
 
@@ -327,7 +346,11 @@ class DataSyncRepository {
       final json = raw as Map<String, dynamic>;
       final localId = json['localId'] as int;
       final isDeleted = json['deletedAt'] != null;
-      final cloudUpdatedAt = DateTime.parse(json['updatedAt'] as String);
+      // updatedAt was only backend-populated going forward (see
+      // shop-sync.service.js) — rows synced before that fix still come back
+      // with it null, so this falls back to createdAt rather than crashing.
+      final cloudUpdatedAt =
+          DateTime.parse((json['updatedAt'] ?? json['createdAt']) as String);
       final existing = await _paymentRepo.getById(localId);
       if (!_shouldApplyCloudRecord(
           existingUpdatedAt: existing?.updatedAt ?? existing?.createdAt,
@@ -593,5 +616,6 @@ class DataSyncRepository {
         'paymentMode': p.paymentMode,
         'notes': p.notes,
         'createdAt': p.createdAt.toIso8601String(),
+        'updatedAt': (p.updatedAt ?? p.createdAt).toIso8601String(),
       };
 }
