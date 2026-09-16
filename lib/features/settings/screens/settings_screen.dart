@@ -9,6 +9,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/di/injector.dart';
+import '../../../core/auth/logout_helper.dart';
 import '../../../shared/models/shop.dart';
 import '../../auth/repositories/shop_repository.dart';
 import '../../billing/repositories/invoice_repository.dart';
@@ -144,38 +145,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
 
     if (confirm == true && mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
-          backgroundColor: c.surface,
-          content: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(width: 16),
-              Text('Syncing before logout…', style: TextStyle(color: c.textPrimary)),
-            ],
-          ),
-        ),
-      );
-      // Data safety over speed at a deliberate logout — worth the wait.
-      await getIt<DataSyncRepository>().syncNow();
-      if (!mounted) return;
-      Navigator.of(context).pop(); // dismiss syncing dialog
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(AppConstants.keyIsLoggedIn, false);
-      await prefs.setBool(AppConstants.keyIsSetupComplete, false);
-      await prefs.remove(AppConstants.keyShopPhone);
-      await prefs.remove(AppConstants.keyShopId);
-      await prefs.remove(AppConstants.keyIsDemoMode);
-      if (!mounted) return;
-      context.go('/login');
+      await performLogout(context);
     }
   }
 

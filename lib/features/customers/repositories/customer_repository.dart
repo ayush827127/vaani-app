@@ -31,6 +31,24 @@ class CustomerRepository {
     return Customer.fromMap(rows.first);
   }
 
+  /// Returns the active customer already using [phone] in [shopId], if any
+  /// — there's no DB-level uniqueness constraint on phone (unlike products'
+  /// barcode), so this is the only thing that can catch a duplicate before
+  /// it's saved. `null`/empty phones are never checked — many customers
+  /// legitimately have no phone on file.
+  Future<Customer?> getCustomerByPhone(int shopId, String phone) async {
+    if (phone.trim().isEmpty) return null;
+    final db = await _db.database;
+    final rows = await db.query(
+      'customers',
+      where: 'shop_id = ? AND deleted_at IS NULL AND phone = ?',
+      whereArgs: [shopId, phone.trim()],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return Customer.fromMap(rows.first);
+  }
+
   Future<int> insertCustomer(Customer customer) async {
     final db = await _db.database;
     final map = customer.toMap()..remove('id');

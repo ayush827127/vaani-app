@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import '../services/voice_action_parser.dart';
@@ -15,6 +16,7 @@ import '../../../shared/models/product.dart';
 import '../../../shared/models/customer.dart';
 import '../../inventory/repositories/product_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
+import '../../subscription/providers/subscription_provider.dart';
 import '../providers/billing_providers.dart';
 import '../../../shared/widgets/hamburger_icon.dart';
 import '../../../shared/widgets/product_avatar.dart';
@@ -130,6 +132,29 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   }
 
   Future<void> _init() async {
+    // The FAB/drawer/quick-actions each independently check this before
+    // navigating here, but nothing stopped a route that skipped that check
+    // (the drawer's menu item and the Bills screen's "New Bill" button both
+    // did) from reaching this screen directly. Checking here too closes
+    // every such gap in one place instead of relying on every call site to
+    // remember it.
+    if (!ref.read(subscriptionProvider.notifier).isModuleEnabled('billing')) {
+      // Deferred to after the first frame — this runs from initState (via
+      // _init), too early for ScaffoldMessenger.of(context)/context.go to
+      // safely resolve their ancestors.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Upgrade your plan to unlock Billing'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        context.go('/home');
+      });
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _shopId = prefs.getInt(AppConstants.keyShopId) ?? 1;
@@ -179,7 +204,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
     );
     if (code == null || !mounted) return;
-    print('[Barcode] Scanner returned raw: "${code.replaceAll('\r', '\\r').replaceAll('\n', '\\n')}" (len:${code.length})');
     final product = await getIt<ProductRepository>().getProductByBarcode(_shopId, code);
     if (!mounted) return;
     if (product != null) {
@@ -368,6 +392,19 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       return;
     }
 
+    // Unlike the voice sheet and voice billing screen, push-to-talk used to
+    // apply parsed actions straight to the live cart with no review step — a
+    // misheard product/quantity/price silently changed the bill. This brings
+    // PTT in line with the other two voice entry points, which both already
+    // require an explicit confirm before touching the cart.
+    if (!await _confirmVoiceActions(result.actions)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice command cancelled')));
+      }
+      return;
+    }
+    if (!mounted) return;
+
     final productsById = {for (final p in _allProducts) if (p.id != null) p.id!: p};
     final executor = ActionExecutor(ref: ref, productsById: productsById);
     final execResult = executor.execute(result.actions);
@@ -432,6 +469,64 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         );
       }
     }
+  }
+
+  String _describeVoiceAction(VoiceAction a) => switch (a) {
+        SetQuantityAction(:final productName, :final quantity) =>
+          'Set $productName to $quantity',
+        IncreaseQuantityAction(:final productName, :final delta) =>
+          'Add $delta × $productName',
+        DecreaseQuantityAction(:final productName, :final delta) =>
+          'Remove $delta × $productName',
+        RemoveItemAction(:final productName) => 'Remove $productName from cart',
+        ClearCartAction() => 'Clear the entire cart',
+        UpdatePriceAction(:final productName, :final price) =>
+          'Set $productName price to ${AppFormatters.formatCurrency(price)}',
+        DiscountAction(:final discountType, :final value) => discountType == 'percent'
+            ? 'Apply $value% discount'
+            : 'Apply ${AppFormatters.formatCurrency(value)} discount',
+        PaymentModeAction(:final mode) => 'Set payment mode to $mode',
+        SelectCustomerAction(:final customerName) => 'Bill to $customerName',
+        CustomerNotFoundAction(:final name) => 'New customer: $name',
+        UnknownProductAction(:final rawName) => 'Could not match product "$rawName"',
+        UnknownAction(:final message) => message,
+      };
+
+  Future<bool> _confirmVoiceActions(List<VoiceAction> actions) async {
+    final c = context.colors;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Confirm voice command', style: TextStyle(color: c.textPrimary)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final a in actions)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text('• ${_describeVoiceAction(a)}',
+                      style: TextStyle(color: c.textPrimary)),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
   }
 
   String _pttUserMessage(String reason) {

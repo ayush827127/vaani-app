@@ -61,43 +61,68 @@ class ActionExecutor {
     for (final action in actions) {
       switch (action) {
         case SetQuantityAction():
+          final product = productsById[action.productId];
+          if (product == null) {
+            errors.add('Product not found: ${action.productName}');
+            break;
+          }
+          // Manual +/- tapping in the cart hard-clamps to available stock
+          // (see billing_screen.dart's _increaseQty); this used to only set
+          // a soft `inventoryWarning` flag and apply the parsed quantity
+          // unclamped, so a misheard number ("do" heard as a higher count)
+          // could check out with more units than the shop actually has —
+          // clamping here at execution time (not just at parse time, where
+          // the stock snapshot can be a moment stale) closes that gap.
+          final requestedQty = action.quantity;
+          final clampedQty =
+              product.stockQuantity > 0 ? requestedQty.clamp(1, product.stockQuantity) : 0;
+          if (clampedQty == 0) {
+            errors.add('${action.productName} is out of stock');
+            break;
+          }
           final currentCart = ref.read(cartProvider);
           final inCart =
               currentCart.any((c) => c.product.id == action.productId);
           if (inCart) {
-            cartNotifier.updateQuantity(action.productId, action.quantity);
+            cartNotifier.updateQuantity(action.productId, clampedQty);
           } else {
-            final product = productsById[action.productId];
-            if (product != null) {
-              cartNotifier.addProduct(product, qty: action.quantity);
-            } else {
-              errors.add('Product not found: ${action.productName}');
-              break;
-            }
+            cartNotifier.addProduct(product, qty: clampedQty);
           }
-          messages.add('${action.productName} × ${action.quantity}');
-          if (action.inventoryWarning) {
-            warnings.add('Low stock: ${action.productName}');
+          messages.add('${action.productName} × $clampedQty');
+          if (clampedQty < requestedQty) {
+            warnings.add(
+                '${action.productName}: only ${product.stockQuantity} in stock, set to $clampedQty');
           }
 
         case IncreaseQuantityAction():
+          final product = productsById[action.productId];
+          if (product == null) {
+            errors.add('${action.productName} not found');
+            break;
+          }
           final cart = ref.read(cartProvider);
           final existing =
               cart.where((c) => c.product.id == action.productId).firstOrNull;
+          final currentQty = existing?.quantity ?? 0;
+          final requestedQty = currentQty + action.delta;
+          // Same stock clamp as SetQuantityAction above — this path had no
+          // inventory check at all before, soft or otherwise.
+          final clampedQty =
+              product.stockQuantity > 0 ? requestedQty.clamp(1, product.stockQuantity) : 0;
+          if (clampedQty == 0) {
+            errors.add('${action.productName} is out of stock');
+            break;
+          }
           if (existing == null) {
-            // Not in cart — add via addProduct
-            final product = productsById[action.productId];
-            if (product != null) {
-              cartNotifier.addProduct(product, qty: action.delta);
-              messages.add('${action.productName} × ${action.delta} added');
-            } else {
-              errors.add('${action.productName} not found');
-            }
+            cartNotifier.addProduct(product, qty: clampedQty);
+            messages.add('${action.productName} × $clampedQty added');
           } else {
-            final newQty = existing.quantity + action.delta;
-            cartNotifier.updateQuantity(action.productId, newQty);
-            messages.add(
-                '${action.productName}: ${existing.quantity} → $newQty');
+            cartNotifier.updateQuantity(action.productId, clampedQty);
+            messages.add('${action.productName}: $currentQty → $clampedQty');
+          }
+          if (clampedQty < requestedQty) {
+            warnings.add(
+                '${action.productName}: capped at available stock (${product.stockQuantity})');
           }
 
         case DecreaseQuantityAction():

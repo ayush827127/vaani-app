@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +22,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   bool _isLoading = true;
   int _shopId = 1;
   final _searchCtrl = TextEditingController();
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -40,14 +42,21 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     });
   }
 
-  Future<void> _search(String q) async {
+  // Was firing a full DB query on every keystroke — debounced so a query
+  // only runs once typing pauses.
+  void _search(String q) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () => _runSearch(q));
+  }
+
+  Future<void> _runSearch(String q) async {
     if (q.trim().isEmpty) {
       _load();
       return;
     }
     final repo = getIt<CustomerRepository>();
     final results = await repo.searchCustomers(_shopId, q);
-    setState(() => _customers = results);
+    if (mounted) setState(() => _customers = results);
   }
 
   void _showAddCustomer() {
@@ -85,10 +94,26 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (nameCtrl.text.trim().isEmpty) return;
+                final phone = phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim();
+                // No DB-level uniqueness on phone — without this check the
+                // same number could be saved on any number of customer
+                // records with nothing anywhere to catch it.
+                if (phone != null) {
+                  final dup = await getIt<CustomerRepository>().getCustomerByPhone(_shopId, phone);
+                  if (dup != null) {
+                    if (dialogCtx.mounted) {
+                      ScaffoldMessenger.of(dialogCtx).showSnackBar(SnackBar(
+                        content: Text('${dup.name} already has this phone number'),
+                        backgroundColor: c.danger,
+                      ));
+                    }
+                    return;
+                  }
+                }
                 final customer = Customer(
                   shopId: _shopId,
                   name: nameCtrl.text.trim(),
-                  phone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                  phone: phone,
                   createdAt: DateTime.now(),
                   updatedAt: DateTime.now(),
                 );
@@ -106,6 +131,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }

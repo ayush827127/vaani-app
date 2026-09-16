@@ -1,9 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/utils/constants.dart';
+import '../../../core/auth/logout_helper.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/shop.dart';
 import '../repositories/shop_repository.dart';
@@ -62,14 +61,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
     if (confirm == true && mounted) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(AppConstants.keyIsLoggedIn, false);
-      await prefs.setBool(AppConstants.keyIsSetupComplete, false);
-      await prefs.remove(AppConstants.keyShopPhone);
-      await prefs.remove(AppConstants.keyShopId);
-      await prefs.remove(AppConstants.keyIsDemoMode);
-      if (!mounted) return;
-      context.go('/login');
+      await performLogout(context);
     }
   }
 

@@ -17,6 +17,14 @@ class UnauthorizedException implements Exception {
   String toString() => message;
 }
 
+/// Thrown by [SubscriptionApiClient.changePhone] when the new number is
+/// already registered to a different shop on the backend.
+class PhoneAlreadyRegisteredException implements Exception {
+  const PhoneAlreadyRegisteredException();
+  @override
+  String toString() => 'This phone number is already registered to another shop';
+}
+
 class SubscriptionApiClient {
   final String _baseUrl;
   final http.Client _client;
@@ -59,6 +67,35 @@ class SubscriptionApiClient {
         )
         .timeout(const Duration(seconds: 60));
     if (response.statusCode == 404) return null;
+    return _parseAuthResponse(response);
+  }
+
+  /// Updates the shop's phone number on the backend and returns a fresh
+  /// token (the old one embeds the old phone — see signShopToken on the
+  /// backend). [newPhone] must already be OTP-verified via [otpToken].
+  /// Throws [PhoneAlreadyRegisteredException] if another shop already has
+  /// that number (HTTP 409).
+  Future<ShopAuthResult> changePhone(
+    String currentToken,
+    String newPhone,
+    String otpToken,
+  ) async {
+    final response = await _client
+        .post(
+          Uri.parse('$_baseUrl/api/shop/auth/change-phone'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $currentToken',
+          },
+          body: jsonEncode({'phone': newPhone, 'otpToken': otpToken}),
+        )
+        .timeout(const Duration(seconds: 60));
+    if (response.statusCode == 401) {
+      throw const UnauthorizedException('Shop token rejected by backend');
+    }
+    if (response.statusCode == 409) {
+      throw const PhoneAlreadyRegisteredException();
+    }
     return _parseAuthResponse(response);
   }
 

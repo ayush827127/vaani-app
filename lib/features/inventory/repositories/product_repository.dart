@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import '../../../core/db/database_helper.dart';
+import '../../../core/utils/constants.dart';
 import '../../../shared/models/product.dart';
 
 class ProductRepository {
@@ -23,8 +24,12 @@ class ProductRepository {
 
   Future<List<Product>> getLowStockProducts(int shopId) async {
     final db = await _db.database;
+    // stock_quantity > 0 matches Product.isLowStock and the Inventory
+    // screen's own "low stock" filter — without it, out-of-stock items were
+    // double-counted here (once as "low stock" on the dashboard, again as
+    // "out of stock" on the Inventory screen), inflating the dashboard's count.
     final rows = await db.rawQuery(
-      'SELECT * FROM products WHERE shop_id = ? AND is_active = 1 AND stock_quantity <= reorder_level ORDER BY stock_quantity ASC',
+      'SELECT * FROM products WHERE shop_id = ? AND is_active = 1 AND stock_quantity > 0 AND stock_quantity <= reorder_level ORDER BY stock_quantity ASC',
       [shopId],
     );
     final products = <Product>[];
@@ -53,16 +58,13 @@ class ProductRepository {
     final db = await _db.database;
     // Normalize: trim whitespace and line endings so scanner output matches stored value.
     final normalized = barcode.trim().replaceAll(RegExp(r'[\r\n\t]'), '').toLowerCase();
-    print('[Barcode] Scanned raw: "${barcode.replaceAll('\r', '\\r').replaceAll('\n', '\\n')}" (len:${barcode.length}) | Normalized: "$normalized" | shopId: $shopId');
     final rows = await db.query(
       'products',
       where: 'shop_id = ? AND is_active = 1 AND LOWER(barcode) = ?',
       whereArgs: [shopId, normalized],
       limit: 1,
     );
-    print('[Barcode] DB matched: ${rows.length} row(s)');
     if (rows.isNotEmpty) {
-      print('[Barcode] Product: "${rows.first['name']}", stored barcode: "${rows.first['barcode']}"');
       final id = rows.first['id'] as int;
       final aliases = await _getAliases(id);
       return Product.fromMap(rows.first, aliases: aliases);
@@ -173,8 +175,9 @@ class ProductRepository {
   Future<void> updateProduct(Product product) async {
     final db = await _db.database;
     final existing = await db.query('products',
-        columns: ['image_path'], where: 'id = ?', whereArgs: [product.id]);
+        columns: ['image_path', 'stock_quantity'], where: 'id = ?', whereArgs: [product.id]);
     final oldImagePath = existing.isNotEmpty ? existing.first['image_path'] as String? : null;
+    final oldStock = existing.isNotEmpty ? existing.first['stock_quantity'] as int : product.stockQuantity;
 
     final map = product.toMap();
     if (oldImagePath != product.imagePath) {
@@ -183,17 +186,37 @@ class ProductRepository {
       // cloud sync re-uploads the new image instead of keeping a stale one.
       map['image_url'] = null;
     }
-    await db.update('products', map, where: 'id = ?', whereArgs: [product.id]);
-    // Update aliases
-    await db.delete('product_aliases', where: 'product_id = ?', whereArgs: [product.id]);
-    for (final alias in product.aliases) {
-      if (alias.trim().isNotEmpty) {
-        await db.insert('product_aliases', {
+
+    await db.transaction((txn) async {
+      await txn.update('products', map, where: 'id = ?', whereArgs: [product.id]);
+      // The dedicated stock-adjust flow (adjustStock()) always logs an
+      // inventory_transactions row; editing the quantity field directly on
+      // this form silently didn't, leaving a gap in the audit trail that
+      // reports rely on for anything edited this way instead of via +/-.
+      final delta = product.stockQuantity - oldStock;
+      if (delta != 0) {
+        await txn.insert('inventory_transactions', {
           'product_id': product.id,
-          'alias': alias.trim().toLowerCase(),
+          'invoice_id': null,
+          'type': AppConstants.txnAdjustment,
+          'quantity_change': delta,
+          'stock_before': oldStock,
+          'stock_after': product.stockQuantity,
+          'notes': 'Edited via product form',
+          'created_at': DateTime.now().toIso8601String(),
         });
       }
-    }
+      // Update aliases
+      await txn.delete('product_aliases', where: 'product_id = ?', whereArgs: [product.id]);
+      for (final alias in product.aliases) {
+        if (alias.trim().isNotEmpty) {
+          await txn.insert('product_aliases', {
+            'product_id': product.id,
+            'alias': alias.trim().toLowerCase(),
+          });
+        }
+      }
+    });
   }
 
   /// Called after a successful Cloudinary upload during cloud sync — the
@@ -228,6 +251,11 @@ class ProductRepository {
     final map = product.toMap();
     map['image_path'] = localImagePath;
     map['image_url'] = product.imageUrl;
+    // Same reasoning as deleteProduct() — a cloud-side tombstone still
+    // carries its original barcode in the pull payload, and writing that
+    // through as-is would keep blocking the barcode's reuse via the
+    // all-rows unique index even though the product is inactive.
+    if (!product.isActive) map['barcode'] = null;
     await db.insert('products', map, conflictAlgorithm: ConflictAlgorithm.replace);
 
     await db.delete('product_aliases', where: 'product_id = ?', whereArgs: [product.id]);
@@ -243,8 +271,19 @@ class ProductRepository {
 
   Future<void> deleteProduct(int id) async {
     final db = await _db.database;
-    await db.update('products', {'is_active': 0, 'updated_at': DateTime.now().toIso8601String()},
-        where: 'id = ?', whereArgs: [id]);
+    // Clearing the barcode here (not just is_active) matters because
+    // idx_products_barcode is a UNIQUE index over *all* rows with a non-null
+    // barcode, regardless of is_active — isBarcodeUnique() above only checks
+    // active products, so without this a soft-deleted product would keep
+    // silently blocking its old barcode from ever being reused: the app-level
+    // check says "unique", the INSERT then throws an uncaught
+    // DatabaseException.
+    await db.update(
+      'products',
+      {'is_active': 0, 'barcode': null, 'updated_at': DateTime.now().toIso8601String()},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<void> adjustStock(int productId, int quantityChange, String type,

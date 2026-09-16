@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../../core/db/database_helper.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/constants.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../l10n/l10n_extensions.dart';
 
@@ -127,6 +128,19 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         if (await f.exists()) await f.delete();
       }
       await File(pickedPath).copy(dbPath);
+
+      // The restored data's state relative to the cloud is unknown — it
+      // could be older (this backup predates some cloud-side edits) or
+      // newer (it has local changes never pushed). Clearing both sync
+      // cursors makes the next sync do a full push and a full pull instead
+      // of comparing against cursors that describe a database that no
+      // longer exists on this device; without this, anything the cloud
+      // changed after the backup's timestamp would never come back down,
+      // and any restored row older than the stale push cursor would never
+      // go back up — a silent, permanent gap in both directions.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(AppConstants.keyLastFullSyncAt);
+      await prefs.remove(AppConstants.keyLastPullSyncAt);
 
       if (mounted) await _showRestoredDialog();
     } catch (e) {

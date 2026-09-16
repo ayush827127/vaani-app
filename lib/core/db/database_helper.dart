@@ -368,13 +368,18 @@ class DatabaseHelper {
   Future<void> resetDatabase() async {
     // Use the initialized database so all tables are guaranteed to exist.
     final db = await database;
-    // Delete in FK-safe order (children before parents).
+    // Delete in FK-safe order (children before parents). payment_transactions
+    // and categories were missing here — both reference shops/customers, so
+    // skipping them left orphaned rows behind after every reset (account
+    // deletion, and now also createShop()'s wipe-before-create).
+    await db.delete('payment_transactions');
     await db.delete('inventory_transactions');
     await db.delete('invoice_items');
     await db.delete('invoices');
     await db.delete('sales_summary');
     await db.delete('notifications');
     await db.delete('product_aliases');
+    await db.delete('categories');
     await db.delete('customers');
     await db.delete('products');
     await db.delete('shops');

@@ -239,15 +239,30 @@ class _AddProductScreenState extends State<AddProductScreen> {
       updatedAt: DateTime.now(),
     );
 
-    if (_isEditing) {
-      await repo.updateProduct(product);
-    } else {
-      await repo.insertProduct(product);
-    }
+    // Previously unguarded — a DatabaseException here (e.g. the barcode
+    // uniqueness race: isBarcodeUnique() above only checks active products,
+    // but the DB's unique index covers every row, so reusing a just-deleted
+    // product's barcode could still throw here) left the form permanently
+    // stuck on its loading spinner with no error shown and no way to retry.
+    try {
+      if (_isEditing) {
+        await repo.updateProduct(product);
+      } else {
+        await repo.insertProduct(product);
+      }
 
-    // Persist category in categories table so it's available for other products
-    if (_category != null) {
-      await getIt<CategoryRepository>().addCategory(_shopId, _category!);
+      // Persist category in categories table so it's available for other products
+      if (_category != null) {
+        await getIt<CategoryRepository>().addCategory(_shopId, _category!);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.l10n.errorGeneric('$e')),
+        backgroundColor: context.colors.danger,
+      ));
+      return;
     }
 
     if (!mounted) return;

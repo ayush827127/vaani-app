@@ -25,20 +25,29 @@ class ProductAvatar extends StatelessWidget {
     final isNetwork = hasImage && (path.startsWith('http://') || path.startsWith('https://'));
     final isFile = hasImage && !isNetwork;
     final fileExists = isFile && File(path).existsSync();
+    // product.imageUrl is the Cloudinary URL cloud sync uploads to
+    // specifically so a photo taken on one device shows up on others (see
+    // the v8 migration in database_helper.dart) — falling back to it here
+    // when there's no local file is what actually makes that work. Without
+    // this, every device other than the one the photo was taken on shows
+    // just the letter-avatar forever, even though the image exists in sync.
+    final networkFallback = !fileExists && (product.imageUrl?.isNotEmpty ?? false)
+        ? product.imageUrl
+        : (isNetwork ? path : null);
 
     Widget imageChild;
 
-    if (isNetwork) {
-      imageChild = Image.network(
-        path,
+    if (fileExists) {
+      imageChild = Image.file(
+        File(path),
         width: size,
         height: size,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => _initial(),
       );
-    } else if (fileExists) {
-      imageChild = Image.file(
-        File(path),
+    } else if (networkFallback != null) {
+      imageChild = Image.network(
+        networkFallback,
         width: size,
         height: size,
         fit: BoxFit.cover,
@@ -58,7 +67,7 @@ class ProductAvatar extends StatelessWidget {
           border: Border.all(color: catColor.withValues(alpha: 0.3)),
           borderRadius: BorderRadius.circular(borderRadiusValue),
         ),
-        child: (isNetwork || fileExists)
+        child: (networkFallback != null || fileExists)
             ? imageChild
             : Center(child: imageChild),
       ),

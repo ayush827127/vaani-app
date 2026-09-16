@@ -17,12 +17,10 @@ import '../../../core/di/injector.dart';
 import '../../../shared/models/cart_item.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/models/invoice.dart';
-import '../../../shared/models/payment_transaction.dart';
 import '../../../shared/models/shop.dart';
 import '../../auth/repositories/shop_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
 import '../repositories/invoice_repository.dart';
-import '../repositories/payment_transaction_repository.dart';
 import '../../../l10n/l10n_extensions.dart';
 
 // ── Public entry-point ─────────────────────────────────────────────────────────
@@ -291,6 +289,12 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
   // ── Generate Bill ──────────────────────────────────────────────────────────
 
   Future<void> _generateBill() async {
+    // Without this, a fast double-tap could call this twice before the
+    // button's own rebuild (disabledBackgroundColor/onPressed: null) takes
+    // effect — the invoice_number UNIQUE constraint stops a duplicate row,
+    // but the user just sees a confusing failure for what was actually a
+    // successful first submission.
+    if (_isProcessing) return;
     if (!_validate()) return;
 
     // Walk-in partial payment guard
@@ -301,12 +305,11 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
 
     setState(() => _isProcessing = true);
 
+    String invoiceNum;
     try {
       final invoiceRepo = getIt<InvoiceRepository>();
-      final customerRepo = getIt<CustomerRepository>();
-      final txnRepo = getIt<PaymentTransactionRepository>();
 
-      final invoiceNum = await invoiceRepo.getNextInvoiceNumber(widget.shopId);
+      invoiceNum = await invoiceRepo.getNextInvoiceNumber(widget.shopId);
 
       // receivedAmount on the invoice = advance applied + cash/UPI/card towards this bill
       final billCoveredByCustomer =
@@ -331,86 +334,67 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
         createdAt: DateTime.now(),
       );
 
-      // Save invoice (deducts stock + updates customer purchase stats)
-      final savedInvoice = await invoiceRepo.createInvoice(
+      // Ledger rows to record alongside the invoice — built here (amounts
+      // only) since the invoiceId they need doesn't exist until
+      // createInvoice() inserts the invoice inside its own transaction.
+      final paymentTxns = <PendingPaymentTxn>[
+        if (_advanceApplied > 0)
+          PendingPaymentTxn(type: 'advance_used', amount: _advanceApplied, paymentMode: 'advance'),
+        if (billCoveredByCustomer > 0)
+          PendingPaymentTxn(type: 'bill_payment', amount: billCoveredByCustomer, paymentMode: _method),
+        if (_outstandingReduced > 0)
+          PendingPaymentTxn(type: 'outstanding_collection', amount: _outstandingReduced, paymentMode: _method),
+        if (_newAdvanceFromOverpayment > 0)
+          PendingPaymentTxn(type: 'advance_deposit', amount: _newAdvanceFromOverpayment, paymentMode: _method),
+      ];
+
+      // Invoice + items + stock deduction + customer balance + payment
+      // ledger, all in one database transaction — either the whole sale
+      // commits or none of it does.
+      await invoiceRepo.createInvoice(
         invoice: invoice,
         cartItems: widget.cartItems,
         customerId: _customer?.id,
+        newOutstanding: _customer != null ? _newOutstanding : null,
+        newAdvanceBalance: _customer != null ? _newAdvanceBalance : null,
+        paymentTransactions: _customer != null ? paymentTxns : const [],
       );
-
-      // Update both customer balance fields atomically
-      if (_customer != null) {
-        await customerRepo.updateCustomerBalances(
-          _customer!.id!,
-          _newOutstanding,
-          _newAdvanceBalance,
-        );
-
-        // Record payment transactions for the ledger
-        final now = DateTime.now();
-        if (_advanceApplied > 0) {
-          await txnRepo.insert(PaymentTransaction(
-            shopId: widget.shopId,
-            customerId: _customer!.id!,
-            invoiceId: savedInvoice.id,
-            type: 'advance_used',
-            amount: _advanceApplied,
-            paymentMode: 'advance',
-            createdAt: now,
-          ));
-        }
-        if (billCoveredByCustomer > 0) {
-          await txnRepo.insert(PaymentTransaction(
-            shopId: widget.shopId,
-            customerId: _customer!.id!,
-            invoiceId: savedInvoice.id,
-            type: 'bill_payment',
-            amount: billCoveredByCustomer,
-            paymentMode: _method,
-            createdAt: now,
-          ));
-        }
-        if (_outstandingReduced > 0) {
-          await txnRepo.insert(PaymentTransaction(
-            shopId: widget.shopId,
-            customerId: _customer!.id!,
-            invoiceId: savedInvoice.id,
-            type: 'outstanding_collection',
-            amount: _outstandingReduced,
-            paymentMode: _method,
-            createdAt: now,
-          ));
-        }
-        if (_newAdvanceFromOverpayment > 0) {
-          await txnRepo.insert(PaymentTransaction(
-            shopId: widget.shopId,
-            customerId: _customer!.id!,
-            invoiceId: savedInvoice.id,
-            type: 'advance_deposit',
-            amount: _newAdvanceFromOverpayment,
-            paymentMode: _method,
-            createdAt: now,
-          ));
-        }
-      }
-
-      // Generate PDF
-      final pdfBytes = await _buildPdf(invoiceNum: invoiceNum);
-
-      if (mounted) setState(() { _isProcessing = false; _success = true; });
-      await Future.delayed(const Duration(milliseconds: 600));
-
+    } on InsufficientStockException catch (e) {
       if (mounted) {
-        Navigator.pop(context);
-        widget.onSuccess();
+        setState(() => _isProcessing = false);
+        _snack('${e.productName}: only ${e.available} in stock, ${e.requested} requested');
       }
-
-      await Printing.layoutPdf(onLayout: (_) async => pdfBytes);
+      return;
     } catch (e) {
+      // Nothing committed — the whole attempt is one transaction, so it's
+      // safe to say the sale did not go through.
       if (mounted) {
         setState(() => _isProcessing = false);
         _snack(context.l10n.failedToGenerateBill('$e'));
       }
+      return;
+    }
+
+    // The sale is already committed at this point — a failure from here on
+    // (PDF generation, printing) must not be reported as "bill failed", or a
+    // shopkeeper retrying in response would create a second, duplicate sale
+    // for the same cart.
+    if (mounted) setState(() { _isProcessing = false; _success = true; });
+    await Future.delayed(const Duration(milliseconds: 600));
+
+    if (mounted) {
+      Navigator.pop(context);
+      widget.onSuccess();
+    }
+
+    try {
+      final pdfBytes = await _buildPdf(invoiceNum: invoiceNum);
+      await Printing.layoutPdf(onLayout: (_) async => pdfBytes);
+    } catch (e) {
+      debugPrint('[Checkout] Sale $invoiceNum saved, but PDF/print failed: $e');
+      // The sale sheet is already dismissed by this point — nothing left to
+      // update in this widget. The bill is safely saved and can be reprinted
+      // from Bills > invoice detail at any time.
     }
   }
 

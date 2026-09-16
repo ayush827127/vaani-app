@@ -7,6 +7,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/di/injector.dart';
 import '../repositories/shop_repository.dart';
 import '../services/otp_service.dart';
+import '../../subscription/services/subscription_api_client.dart';
 import '../../../l10n/l10n_extensions.dart';
 
 class ChangePhoneScreen extends StatefulWidget {
@@ -89,7 +90,22 @@ class _ChangePhoneScreenState extends State<ChangePhoneScreen> {
     }
 
     setState(() => _isVerifying = true);
-    final otpToken = await OtpService.instance.verifyOtp(_newPhone, otp);
+
+    String? otpToken;
+    try {
+      otpToken = await OtpService.instance.verifyOtp(_newPhone, otp);
+    } catch (e) {
+      // Network failure (offline, timeout, server waking up) — not the same
+      // as a wrong code, and previously left this screen stuck spinning
+      // forever with no way to recover short of navigating away (login_screen
+      // handles this same call with a try/catch; this one didn't).
+      if (!mounted) return;
+      setState(() => _isVerifying = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.errorGeneric('$e')), backgroundColor: AppColors.error),
+      );
+      return;
+    }
     if (otpToken == null) {
       if (!mounted) return;
       setState(() => _isVerifying = false);
@@ -107,6 +123,18 @@ class _ChangePhoneScreenState extends State<ChangePhoneScreen> {
       final shopId = prefs.getInt(AppConstants.keyShopId);
       if (shopId == null) throw Exception('Shop not found');
 
+      // Update the backend first (and get a fresh token — the old one
+      // embeds the old phone) — previously only the local row was updated,
+      // so a re-login with the new number couldn't find this shop on the
+      // backend and would be treated as a brand-new signup, orphaning the
+      // cloud data.
+      final currentToken = prefs.getString(AppConstants.keyShopBackendToken);
+      if (currentToken != null) {
+        final result = await getIt<SubscriptionApiClient>()
+            .changePhone(currentToken, _newPhone, otpToken);
+        await prefs.setString(AppConstants.keyShopBackendToken, result.token);
+      }
+
       await getIt<ShopRepository>().updatePhone(shopId, _newPhone);
       await prefs.setString(AppConstants.keyShopPhone, _newPhone);
 
@@ -120,6 +148,12 @@ class _ChangePhoneScreenState extends State<ChangePhoneScreen> {
         ),
       );
       context.pop();
+    } on PhoneAlreadyRegisteredException catch (e) {
+      if (!mounted) return;
+      setState(() => _isVerifying = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: AppColors.error),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isVerifying = false);

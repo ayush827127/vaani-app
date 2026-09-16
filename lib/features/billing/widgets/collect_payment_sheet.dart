@@ -6,10 +6,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/models/invoice.dart';
-import '../../../shared/models/payment_transaction.dart';
-import '../../customers/repositories/customer_repository.dart';
 import '../repositories/invoice_repository.dart';
-import '../repositories/payment_transaction_repository.dart';
 import '../../../l10n/l10n_extensions.dart';
 
 // ── Public entry-point ─────────────────────────────────────────────────────────
@@ -125,63 +122,58 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
   }
 
   Future<void> _confirm() async {
+    if (_isProcessing) return;
     if (_amount <= 0) {
       _snack(context.l10n.enterValidAmount);
       return;
     }
     setState(() => _isProcessing = true);
     try {
-      final customerRepo = getIt<CustomerRepository>();
       final invoiceRepo = getIt<InvoiceRepository>();
-      final txnRepo = getIt<PaymentTransactionRepository>();
-      final now = DateTime.now();
 
       double newOutstanding = widget.customer.totalOutstanding;
       double newAdvance = widget.customer.advanceBalance;
+      List<InvoicePaymentAllocation> allocations = const [];
 
       if (_isAdvanceDeposit) {
         newAdvance += _amount;
-        await txnRepo.insert(PaymentTransaction(
-          shopId: widget.shopId,
-          customerId: widget.customer.id!,
-          type: 'advance_deposit',
-          amount: _amount,
-          paymentMode: _method,
-          createdAt: now,
-        ));
       } else {
         // Settle each selected invoice individually so its own
         // received/pending/status stay accurate, then reflect the same
         // total against the customer's aggregate outstanding.
-        for (final inv in _outstandingInvoices) {
-          final allocated = _allocationFor(inv);
-          if (allocated <= 0) continue;
-          final newReceived = inv.receivedAmount + allocated;
-          final newPending = (inv.pendingAmount - allocated).clamp(0.0, double.infinity);
-          final newStatus = newPending <= 0.01
-              ? AppConstants.statusPaid
-              : AppConstants.statusPartialPaid;
-          await invoiceRepo.updateInvoicePayment(
-            inv.id!,
-            receivedAmount: newReceived,
-            pendingAmount: newPending,
-            status: newStatus,
-          );
-          await txnRepo.insert(PaymentTransaction(
-            shopId: widget.shopId,
-            customerId: widget.customer.id!,
-            invoiceId: inv.id,
-            type: 'outstanding_collection',
-            amount: allocated,
-            paymentMode: _method,
-            createdAt: now,
-          ));
-        }
+        allocations = _outstandingInvoices
+            .map((inv) {
+              final allocated = _allocationFor(inv);
+              if (allocated <= 0) return null;
+              final newReceived = inv.receivedAmount + allocated;
+              final newPending = (inv.pendingAmount - allocated).clamp(0.0, double.infinity);
+              final newStatus = newPending <= 0.01
+                  ? AppConstants.statusPaid
+                  : AppConstants.statusPartialPaid;
+              return InvoicePaymentAllocation(
+                invoiceId: inv.id!,
+                allocated: allocated,
+                newReceivedAmount: newReceived,
+                newPendingAmount: newPending,
+                newStatus: newStatus,
+              );
+            })
+            .whereType<InvoicePaymentAllocation>()
+            .toList();
         newOutstanding = (newOutstanding - _totalAllocated).clamp(0.0, double.infinity);
       }
 
-      await customerRepo.updateCustomerBalances(
-          widget.customer.id!, newOutstanding, newAdvance);
+      // Invoice payment fields + ledger rows + customer balance, all in one
+      // database transaction — see collectPayment()'s doc comment.
+      await invoiceRepo.collectPayment(
+        shopId: widget.shopId,
+        customerId: widget.customer.id!,
+        newOutstanding: newOutstanding,
+        newAdvanceBalance: newAdvance,
+        paymentMode: _method,
+        advanceDepositAmount: _isAdvanceDeposit ? _amount : null,
+        invoiceAllocations: allocations,
+      );
 
       if (mounted) setState(() { _isProcessing = false; _success = true; });
       await Future.delayed(const Duration(milliseconds: 600));

@@ -83,6 +83,16 @@ class DataSyncRepository {
   final CategoryRepository _categoryRepo;
   final CloudinaryUploadService _cloudinary;
 
+  // The hourly timer, app-resume check, and manual "Cloud Sync" button can
+  // all call syncNow() independently with nothing stopping two calls from
+  // overlapping — both would read the same push/pull cursors and race to
+  // advance them, risking one call's cursor update clobbering progress the
+  // other hadn't actually finished pushing/pulling yet. Guarding here (the
+  // one choke point every caller goes through) instead of in each caller
+  // means a second call while one is already running just awaits the same
+  // in-flight result rather than starting a competing sync.
+  Future<SyncResult>? _inFlight;
+
   DataSyncRepository(
     this._api,
     this._shopRepo,
@@ -109,7 +119,16 @@ class DataSyncRepository {
   /// `SyncResult(success: false, sessionExpired: true)` — see
   /// [SyncResult.sessionExpired] for why callers should treat that
   /// differently.
-  Future<SyncResult> syncNow() async {
+  Future<SyncResult> syncNow() {
+    final inFlight = _inFlight;
+    if (inFlight != null) return inFlight;
+    final result = _syncNow();
+    _inFlight = result;
+    result.whenComplete(() => _inFlight = null);
+    return result;
+  }
+
+  Future<SyncResult> _syncNow() async {
     final prefs = await SharedPreferences.getInstance();
     final isDemoMode = prefs.getBool(AppConstants.keyIsDemoMode) ?? false;
     if (isDemoMode) return const SyncResult(success: false);
@@ -286,7 +305,12 @@ class DataSyncRepository {
       final json = raw as Map<String, dynamic>;
       final localId = json['localId'] as int;
       final isDeleted = json['deletedAt'] != null;
-      final cloudUpdatedAt = DateTime.parse(json['updatedAt'] as String);
+      // Falls back to createdAt rather than crashing if updatedAt is ever
+      // missing — same defense added for payments after a null updatedAt
+      // there took down the whole sync cycle (pull is one try block with
+      // push in DataSyncRepository.syncNow).
+      final cloudUpdatedAt =
+          DateTime.parse((json['updatedAt'] ?? json['createdAt']) as String);
       final existing = await _productRepo.getProductById(localId);
       if (!_shouldApplyCloudRecord(
           existingUpdatedAt: existing?.updatedAt,
@@ -306,7 +330,9 @@ class DataSyncRepository {
       final json = raw as Map<String, dynamic>;
       final localId = json['localId'] as int;
       final isDeleted = json['deletedAt'] != null;
-      final cloudUpdatedAt = DateTime.parse(json['updatedAt'] as String);
+      // See the matching comment in _mergeProducts.
+      final cloudUpdatedAt =
+          DateTime.parse((json['updatedAt'] ?? json['createdAt']) as String);
       final existing = await _customerRepo.getCustomerById(localId);
       if (!_shouldApplyCloudRecord(
           existingUpdatedAt: existing?.updatedAt,
@@ -326,7 +352,9 @@ class DataSyncRepository {
       final json = raw as Map<String, dynamic>;
       final localId = json['localId'] as int;
       final isDeleted = json['deletedAt'] != null;
-      final cloudUpdatedAt = DateTime.parse(json['updatedAt'] as String);
+      // See the matching comment in _mergeProducts.
+      final cloudUpdatedAt =
+          DateTime.parse((json['updatedAt'] ?? json['createdAt']) as String);
       final existing = await _invoiceRepo.getInvoiceById(localId);
       if (!_shouldApplyCloudRecord(
           existingUpdatedAt: existing?.updatedAt ?? existing?.createdAt,

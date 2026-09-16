@@ -5,6 +5,60 @@ import '../../../shared/models/customer.dart';
 import '../../../shared/models/invoice.dart';
 import '../../../shared/models/cart_item.dart';
 
+/// Thrown by [InvoiceRepository.createInvoice] when a cart item would drive
+/// a product's stock below zero — the transaction is rolled back (sqflite
+/// rolls back automatically on any thrown error inside `db.transaction`), so
+/// nothing about the sale is partially committed. Every earlier stock check
+/// (manual +/- buttons, voice quantity actions) is UI-level and can go stale
+/// between being shown and checkout actually running; this is the last line
+/// of defense that always sees the real row at the moment of the write.
+class InsufficientStockException implements Exception {
+  final String productName;
+  final int available;
+  final int requested;
+  const InsufficientStockException({
+    required this.productName,
+    required this.available,
+    required this.requested,
+  });
+  @override
+  String toString() =>
+      'Insufficient stock for $productName: only $available available, $requested requested';
+}
+
+/// A payment ledger row to record alongside the invoice it belongs to — see
+/// [InvoiceRepository.createInvoice]'s `paymentTransactions` parameter. Left
+/// without an `invoiceId` because that id doesn't exist until the invoice
+/// insert happens inside the same transaction.
+class PendingPaymentTxn {
+  final String type;
+  final double amount;
+  final String paymentMode;
+  const PendingPaymentTxn({
+    required this.type,
+    required this.amount,
+    required this.paymentMode,
+  });
+}
+
+/// One invoice's share of a standalone payment collection (see
+/// [InvoiceRepository.collectPayment]) — the new payment fields for that
+/// invoice, plus how much of the collected amount was allocated to it.
+class InvoicePaymentAllocation {
+  final int invoiceId;
+  final double allocated;
+  final double newReceivedAmount;
+  final double newPendingAmount;
+  final String newStatus;
+  const InvoicePaymentAllocation({
+    required this.invoiceId,
+    required this.allocated,
+    required this.newReceivedAmount,
+    required this.newPendingAmount,
+    required this.newStatus,
+  });
+}
+
 class InvoiceRepository {
   final DatabaseHelper _db = DatabaseHelper.instance;
 
@@ -22,10 +76,22 @@ class InvoiceRepository {
     return 'INV-$ym-$nextSeq';
   }
 
+  /// Creates the invoice, its items, deducts stock, and — when [customerId]
+  /// is set — updates that customer's outstanding/advance balance and
+  /// inserts [paymentTransactions], all inside the same database
+  /// transaction. Previously the balance update and ledger inserts happened
+  /// as separate calls made by the caller *after* this returned; a crash or
+  /// kill between this method committing and those calls running could
+  /// leave stock deducted and the invoice recorded with no matching balance
+  /// change or ledger entry (or, on a retry, double-apply them). Passing
+  /// everything in up front makes the whole checkout one atomic unit.
   Future<Invoice> createInvoice({
     required Invoice invoice,
     required List<CartItem> cartItems,
     int? customerId,
+    double? newOutstanding,
+    double? newAdvanceBalance,
+    List<PendingPaymentTxn> paymentTransactions = const [],
   }) async {
     final db = await _db.database;
     late Invoice savedInvoice;
@@ -68,8 +134,26 @@ class InvoiceRepository {
         // Get current stock
         final stockRows = await txn.query('products',
             columns: ['stock_quantity'], where: 'id = ?', whereArgs: [item.product.id]);
+        if (stockRows.isEmpty) {
+          throw InsufficientStockException(
+            productName: item.product.name,
+            available: 0,
+            requested: item.quantity,
+          );
+        }
         final stockBefore = stockRows.first['stock_quantity'] as int;
         final stockAfter = stockBefore - item.quantity;
+        if (stockAfter < 0) {
+          // Every earlier check (manual buttons, voice actions) is UI-level
+          // and can be stale by the time checkout actually runs — this is
+          // the one point that always sees the real row, so it's the one
+          // that must actually refuse rather than just warn.
+          throw InsufficientStockException(
+            productName: item.product.name,
+            available: stockBefore,
+            requested: item.quantity,
+          );
+        }
 
         // Deduct stock
         await txn.update(
@@ -144,6 +228,37 @@ class InvoiceRepository {
         ]);
       }
 
+      // Outstanding/advance balance + payment ledger — same transaction as
+      // everything above (see the method doc comment for why).
+      if (customerId != null && (newOutstanding != null || newAdvanceBalance != null)) {
+        await txn.update(
+          'customers',
+          {
+            if (newOutstanding != null)
+              'total_outstanding': newOutstanding < 0 ? 0.0 : newOutstanding,
+            if (newAdvanceBalance != null)
+              'advance_balance': newAdvanceBalance < 0 ? 0.0 : newAdvanceBalance,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [customerId],
+        );
+      }
+
+      for (final p in paymentTransactions) {
+        await txn.insert('payment_transactions', {
+          'shop_id': invoice.shopId,
+          'customer_id': customerId,
+          'invoice_id': invoiceId,
+          'type': p.type,
+          'amount': p.amount,
+          'payment_mode': p.paymentMode,
+          'notes': null,
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      }
+
       savedInvoice = invoice.toMap().containsKey('id')
           ? invoice
           : Invoice.fromMap({...invoice.toMap(), 'id': invoiceId});
@@ -203,6 +318,81 @@ class InvoiceRepository {
       where: 'id = ?',
       whereArgs: [invoiceId],
     );
+  }
+
+  /// Records a standalone payment collection (collect_payment_sheet.dart) —
+  /// an advance deposit, or an outstanding-balance collection allocated
+  /// across one or more invoices — atomically: every invoice's payment
+  /// fields, every matching ledger row, and the customer's resulting
+  /// outstanding/advance balance are all written in one transaction. This
+  /// used to be a loop of separate repository calls (updateInvoicePayment,
+  /// then a ledger insert, per invoice, then a final balance update); a
+  /// crash partway through could leave an invoice marked paid with no
+  /// ledger row for it, or a ledger row recorded against a balance that
+  /// was never actually updated.
+  Future<void> collectPayment({
+    required int shopId,
+    required int customerId,
+    required double newOutstanding,
+    required double newAdvanceBalance,
+    required String paymentMode,
+    double? advanceDepositAmount,
+    List<InvoicePaymentAllocation> invoiceAllocations = const [],
+  }) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      final now = DateTime.now().toIso8601String();
+
+      if (advanceDepositAmount != null && advanceDepositAmount > 0) {
+        await txn.insert('payment_transactions', {
+          'shop_id': shopId,
+          'customer_id': customerId,
+          'invoice_id': null,
+          'type': 'advance_deposit',
+          'amount': advanceDepositAmount,
+          'payment_mode': paymentMode,
+          'notes': null,
+          'created_at': now,
+          'updated_at': now,
+        });
+      }
+
+      for (final alloc in invoiceAllocations) {
+        await txn.update(
+          'invoices',
+          {
+            'received_amount': alloc.newReceivedAmount,
+            'pending_amount': alloc.newPendingAmount,
+            'status': alloc.newStatus,
+            'updated_at': now,
+          },
+          where: 'id = ?',
+          whereArgs: [alloc.invoiceId],
+        );
+        await txn.insert('payment_transactions', {
+          'shop_id': shopId,
+          'customer_id': customerId,
+          'invoice_id': alloc.invoiceId,
+          'type': 'outstanding_collection',
+          'amount': alloc.allocated,
+          'payment_mode': paymentMode,
+          'notes': null,
+          'created_at': now,
+          'updated_at': now,
+        });
+      }
+
+      await txn.update(
+        'customers',
+        {
+          'total_outstanding': newOutstanding < 0 ? 0.0 : newOutstanding,
+          'advance_balance': newAdvanceBalance < 0 ? 0.0 : newAdvanceBalance,
+          'updated_at': now,
+        },
+        where: 'id = ?',
+        whereArgs: [customerId],
+      );
+    });
   }
 
   Future<List<Invoice>> getOutstandingInvoicesByCustomer(int customerId) async {

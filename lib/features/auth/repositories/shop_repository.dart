@@ -6,7 +6,13 @@ class ShopRepository {
 
   Future<Shop?> getShop() async {
     final db = await _db.database;
-    final rows = await db.query('shops', limit: 1);
+    // A device is only ever supposed to hold one shop row — createShop()
+    // enforces that going forward by wiping any existing shop before
+    // inserting a new one — but this orders by id DESC as a safety net for
+    // any row left over from before that fix existed, so it deterministically
+    // picks the most recently created shop rather than "whatever SQLite
+    // happens to return first".
+    final rows = await db.query('shops', orderBy: 'id DESC', limit: 1);
     if (rows.isEmpty) return null;
     return Shop.fromMap(rows.first);
   }
@@ -18,7 +24,15 @@ class ShopRepository {
     return Shop.fromMap(rows.first);
   }
 
+  /// Creates the device's shop. A device only ever holds one shop's data at
+  /// a time, but nothing previously enforced that — logging out and setting
+  /// up (or cloud-restoring) a *different* shop on the same device could
+  /// leave a second `shops` row behind with the old shop's products,
+  /// customers, and invoices still in their tables underneath it. Wiping
+  /// first guarantees a clean slate for the new shop; it's a no-op on a
+  /// genuinely fresh install since there's nothing to wipe.
   Future<int> createShop(Shop shop) async {
+    await _db.resetDatabase();
     final db = await _db.database;
     final map = shop.toMap()..remove('id');
     return db.insert('shops', map);

@@ -1,9 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/utils/constants.dart';
+import '../../core/auth/logout_helper.dart';
 import '../../core/di/injector.dart';
 import '../../features/auth/repositories/shop_repository.dart';
 import '../../l10n/l10n_extensions.dart';
@@ -71,13 +70,7 @@ class _CommonDrawerState extends State<CommonDrawer> {
       ),
     );
     if (confirm == true && ctx.mounted) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(AppConstants.keyIsLoggedIn, false);
-      await prefs.setBool(AppConstants.keyIsSetupComplete, false);
-      await prefs.remove(AppConstants.keyShopPhone);
-      await prefs.remove(AppConstants.keyShopId);
-      await prefs.remove(AppConstants.keyIsDemoMode);
-      if (ctx.mounted) ctx.go('/login');
+      await performLogout(ctx);
     }
   }
 
