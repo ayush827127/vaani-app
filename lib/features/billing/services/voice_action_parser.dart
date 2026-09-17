@@ -151,12 +151,40 @@ class VoiceActionParser {
   /// the provider API key never ships inside the app.
   VoiceActionParser(this._backendBaseUrl, this._shopToken) : _client = http.Client();
 
-  /// The backend and its database both run on free-tier hosts that idle-sleep
-  /// after a few minutes and take a few seconds to wake — the very first
-  /// request after a lull can come back as a transient 5xx while the shop's
-  /// connection pool is still spinning up, even though the service is
-  /// healthy moments later. One silent retry papers over exactly that case
-  /// without changing what the user sees for a real (non-transient) failure.
+  /// A response that doesn't start with `{`/`[` never came from our Express
+  /// app — every one of our routes, success or error, answers JSON. Seeing
+  /// `<!DOCTYPE html>...` means something in front of the app answered
+  /// instead: most likely Render's own gateway serving its default error/
+  /// "deploying" page while the origin is unreachable or still starting.
+  /// Just as retry-worthy as an explicit 5xx.
+  bool _looksLikeJson(String body) {
+    final t = body.trimLeft();
+    return t.startsWith('{') || t.startsWith('[');
+  }
+
+  /// The backend (Render free tier) and its database (Neon free tier) both
+  /// idle-sleep after a few minutes and can take up to ~50s to fully wake.
+  /// The very first request after a lull can come back as a transient 5xx
+  /// (or a non-JSON gateway page — see [_looksLikeJson]) while the service
+  /// is still spinning up, even though it's healthy moments later. Poll the
+  /// cheap `/health` route until it answers real JSON (or we give up)
+  /// rather than guessing a fixed retry delay, then retry the real
+  /// (expensive, Groq-backed) call once.
+  Future<void> _waitForBackendHealth() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 50));
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        final r = await _client
+            .get(Uri.parse('$_backendBaseUrl/health'))
+            .timeout(const Duration(seconds: 5));
+        if (r.statusCode == 200 && _looksLikeJson(r.body)) return;
+      } catch (_) {
+        // still asleep/waking — keep polling until the deadline
+      }
+      await Future.delayed(const Duration(seconds: 3));
+    }
+  }
+
   Future<http.Response> _postWithRetry(String endpoint, String prompt) async {
     Future<http.Response> attempt() => _client
         .post(
@@ -174,9 +202,10 @@ class VoiceActionParser {
     var response = await attempt();
     debugPrint('$_tag HTTP ${response.statusCode} in ${sw.elapsedMilliseconds}ms');
 
-    if (response.statusCode >= 500) {
-      debugPrint('$_tag transient ${response.statusCode}, retrying once after backend wake-up delay');
-      await Future.delayed(const Duration(seconds: 3));
+    if (response.statusCode >= 500 || !_looksLikeJson(response.body)) {
+      debugPrint('$_tag transient failure (status=${response.statusCode}, '
+          'json=${_looksLikeJson(response.body)}), waiting for backend wake-up before retry');
+      await _waitForBackendHealth();
       sw = Stopwatch()..start();
       response = await attempt();
       debugPrint('$_tag retry HTTP ${response.statusCode} in ${sw.elapsedMilliseconds}ms');

@@ -54,16 +54,21 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     });
     final repo = getIt<SubscriptionRepository>();
     try {
-      final results = await Future.wait([
-        repo.listPlans(),
-        repo.listMyPaymentClaims(),
-        repo.getVoiceUsage(),
-      ]);
+      // Sequential, not Future.wait — three requests landing on Render's
+      // free-tier instance in the same instant was reproducibly enough load
+      // to make some of them fail outright (confirmed via on-device logs:
+      // one sibling got a clean 200 while another got back a generic
+      // server-level failure, all fired within the same millisecond). One
+      // at a time costs a bit of latency but is what the backend can
+      // actually handle reliably.
+      final plans = await repo.listPlans();
+      final claims = await repo.listMyPaymentClaims();
+      final voiceUsage = await repo.getVoiceUsage();
       if (!mounted) return;
       setState(() {
-        _plans = results[0] as List<Plan>;
-        _claims = results[1] as List<PaymentClaim>;
-        _voiceUsage = results[2] as VoiceUsage;
+        _plans = plans;
+        _claims = claims;
+        _voiceUsage = voiceUsage;
         _loading = false;
       });
     } catch (e) {

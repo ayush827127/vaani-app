@@ -28,7 +28,9 @@ class PaymentClaim {
         id: json['id'] as String,
         planId: json['planId'] as String,
         planName: (json['plan'] as Map<String, dynamic>)['name'] as String,
-        amount: (json['amount'] as num).toDouble(),
+        // Same Decimal-as-JSON-string shape as Plan.price — see that
+        // model's comment.
+        amount: num.parse(json['amount'].toString()).toDouble(),
         reference: json['reference'] as String,
         status: json['status'] as String,
         createdAt: DateTime.parse(json['createdAt'] as String),

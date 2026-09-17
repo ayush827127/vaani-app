@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/subscription_status.dart';
 import '../models/plan.dart';
@@ -46,22 +47,64 @@ class SubscriptionApiClient {
 
   SubscriptionApiClient(this._baseUrl) : _client = http.Client();
 
-  /// The backend and its database both run on free-tier hosts that idle-sleep
-  /// after a few minutes and take a few seconds to wake — the first request
-  /// after a lull (very plausible right when the Subscription screen is
-  /// opened) can come back as a transient 5xx while the connection pool is
-  /// still spinning up, even though the service is healthy moments later.
-  /// One silent retry papers over exactly that case for reads.
+  /// A response that doesn't start with `{`/`[` never came from our Express
+  /// app at all — every one of our own routes, success or error, answers
+  /// JSON. Seeing `<!DOCTYPE html>...` means something in front of the app
+  /// answered instead: most likely Render's own gateway serving its default
+  /// error/"deploying" page while the origin is unreachable or still
+  /// starting. That's exactly as retry-worthy as an explicit 5xx, so it's
+  /// checked for right alongside it below.
+  bool _looksLikeJson(String body) {
+    final t = body.trimLeft();
+    return t.startsWith('{') || t.startsWith('[');
+  }
+
+  /// The backend (Render free tier) and its database (Neon free tier) both
+  /// idle-sleep after a few minutes and can take up to ~50s to fully wake —
+  /// see [backend_warmup.dart]'s doc comment. The first request after a lull
+  /// (very plausible right when the Subscription screen is opened) can come
+  /// back as a transient 5xx (or a non-JSON gateway page — see
+  /// [_looksLikeJson]) while the service is still spinning up. Rather than
+  /// guess a fixed retry delay, poll the cheap `/health` route until it
+  /// answers real JSON (or we give up) and only then retry the real call
+  /// once — a flat few-second wait isn't remotely enough for a full cold
+  /// start, and a bare `statusCode == 200` isn't proof /health itself was
+  /// answered by our app rather than the same gateway page.
+  Future<void> _waitForBackendHealth() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 50));
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        final r = await _client.get(Uri.parse('$_baseUrl/health')).timeout(const Duration(seconds: 5));
+        debugPrint('$_tag [health-poll] ${r.statusCode} content-type=${r.headers['content-type']} '
+            'bodyStart="${r.body.substring(0, r.body.length < 80 ? r.body.length : 80)}"');
+        if (r.statusCode == 200 && _looksLikeJson(r.body)) return;
+      } catch (e) {
+        debugPrint('$_tag [health-poll] threw ${e.runtimeType}: $e');
+      }
+      await Future.delayed(const Duration(seconds: 3));
+    }
+  }
+
+  static const _tag = '[Subscription]';
+
   Future<http.Response> _getWithRetry(String path, String token) async {
+    final url = '$_baseUrl$path';
     Future<http.Response> attempt() => _client.get(
-          Uri.parse('$_baseUrl$path'),
+          Uri.parse(url),
           headers: {'Authorization': 'Bearer $token'},
         ).timeout(const Duration(seconds: 60));
 
+    debugPrint('$_tag GET $url');
     var response = await attempt();
-    if (response.statusCode >= 500) {
-      await Future.delayed(const Duration(seconds: 3));
+    debugPrint('$_tag <- ${response.statusCode} content-type=${response.headers['content-type']} '
+        'bodyStart="${response.body.substring(0, response.body.length < 120 ? response.body.length : 120)}"');
+    if (response.statusCode >= 500 || !_looksLikeJson(response.body)) {
+      debugPrint('$_tag treating as transient (status=${response.statusCode}, '
+          'json=${_looksLikeJson(response.body)}) — waiting for backend health before retry');
+      await _waitForBackendHealth();
       response = await attempt();
+      debugPrint('$_tag retry <- ${response.statusCode} content-type=${response.headers['content-type']} '
+          'bodyStart="${response.body.substring(0, response.body.length < 120 ? response.body.length : 120)}"');
     }
     return response;
   }
@@ -198,10 +241,7 @@ class SubscriptionApiClient {
   }
 
   Future<List<PaymentClaim>> listMyPaymentClaims(String token) async {
-    final response = await _client.get(
-      Uri.parse('$_baseUrl/api/shop/payment-claims'),
-      headers: {'Authorization': 'Bearer $token'},
-    ).timeout(const Duration(seconds: 60));
+    final response = await _getWithRetry('/api/shop/payment-claims', token);
     final data = _unwrap(response) as List;
     return data.map((e) => PaymentClaim.fromJson(e as Map<String, dynamic>)).toList();
   }
@@ -211,10 +251,7 @@ class SubscriptionApiClient {
   /// count for *display*, even though checkout itself still gates on the
   /// local count for instant, offline-friendly feedback.
   Future<VoiceUsage> getVoiceUsage(String token) async {
-    final response = await _client.get(
-      Uri.parse('$_baseUrl/api/shop/subscription/voice-usage'),
-      headers: {'Authorization': 'Bearer $token'},
-    ).timeout(const Duration(seconds: 60));
+    final response = await _getWithRetry('/api/shop/subscription/voice-usage', token);
     return VoiceUsage.fromJson(_unwrap(response) as Map<String, dynamic>);
   }
 
@@ -222,6 +259,15 @@ class SubscriptionApiClient {
   /// [UnauthorizedException] for a 401 and [SubscriptionApiException] (with
   /// the backend's own message) for any other non-2xx response.
   dynamic _unwrap(http.Response response) {
+    if (!_looksLikeJson(response.body)) {
+      // Still not JSON after the retry in _getWithRetry — the gateway/
+      // infra issue outlasted the wait budget. Surface something a shop
+      // owner can act on instead of a raw FormatException.
+      throw SubscriptionApiException(
+        'Server is temporarily unavailable (HTTP ${response.statusCode}). Please try again in a moment.',
+        response.statusCode,
+      );
+    }
     final envelope = jsonDecode(response.body) as Map<String, dynamic>?;
     if (response.statusCode == 401) {
       throw const UnauthorizedException('Shop token rejected by backend');
