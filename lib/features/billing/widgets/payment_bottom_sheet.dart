@@ -141,10 +141,19 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
   // Net cash/UPI/card the customer still owes after advance
   double get _netBillDue => max(0, widget.grandTotal - _advanceApplied);
 
-  // Physical amount the customer is actually handing over now
+  // Unpaid amount carried over from the customer's earlier bills.
+  double get _previousDue => _customer?.totalOutstanding ?? 0;
+
+  // Everything the customer would need to pay to leave with nothing owed:
+  // this bill (after any advance applied) plus the previous due.
+  double get _totalPayable => _netBillDue + _previousDue;
+
+  // Physical amount the customer is actually handing over now — pre-filled
+  // with _totalPayable but freely editable: less leaves a remaining due,
+  // exactly that clears it, more is kept as advance.
   double get _receivedFromCustomer {
     if (_isWalkIn) return widget.grandTotal;
-    return max(0, double.tryParse(_receivedCtrl.text.replaceAll(',', '')) ?? _netBillDue);
+    return max(0, double.tryParse(_receivedCtrl.text.replaceAll(',', '')) ?? _totalPayable);
   }
 
   // How much of this invoice remains unpaid
@@ -211,7 +220,9 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
         ? min(widget.initialCustomer!.advanceBalance, widget.grandTotal)
         : 0.0;
     _receivedCtrl = TextEditingController(
-        text: max(0, widget.grandTotal - initialAdvance).toStringAsFixed(2));
+        text: (max(0, widget.grandTotal - initialAdvance) +
+                (widget.initialCustomer?.totalOutstanding ?? 0))
+            .toStringAsFixed(2));
     _receivedCtrl.addListener(() => setState(() {
           _walkInPartialWarning = false;
         }));
@@ -220,8 +231,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
 
   // Recalculate suggested received amount when advance toggle or customer changes
   void _resetReceivedDefault() {
-    final net = max(0, widget.grandTotal - _advanceApplied);
-    _receivedCtrl.text = net.toStringAsFixed(2);
+    _receivedCtrl.text = _totalPayable.toStringAsFixed(2);
   }
 
   Future<void> _loadShop() async {
@@ -882,12 +892,6 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
             _buildHeader(),
             const SizedBox(height: 16),
 
-            // Balance card (registered only, when outstanding or advance exists)
-            if (!_isWalkIn &&
-                (_customer!.totalOutstanding > 0 ||
-                    _customer!.advanceBalance > 0))
-              _buildBalanceCard(),
-
             // Amount section
             _buildAmountSection(),
             const SizedBox(height: 16),
@@ -905,16 +909,6 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
             if (_walkInPartialWarning) ...[
               const SizedBox(height: 12),
               _buildPartialWarning(),
-            ],
-
-            // After-bill balance summary (registered, when balances change)
-            if (!_isWalkIn &&
-                (_pendingAmount > 0 ||
-                    _outstandingReduced > 0 ||
-                    _newAdvanceFromOverpayment > 0 ||
-                    _advanceApplied > 0)) ...[
-              const SizedBox(height: 12),
-              _buildOutstandingSummary(),
             ],
 
             const SizedBox(height: 20),
@@ -989,118 +983,54 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
     );
   }
 
-  Widget _buildBalanceCard() {
+  // Only shown when the customer has advance credit on file: lets the
+  // shopkeeper choose whether to spend it on this bill. (Extra money paid
+  // now is NOT a separate field — see the Receive Amount result row.)
+  Widget _buildAdvanceToggle() {
     final l10n = context.l10n;
     final c = context.colors;
-    final hasOutstanding = _customer!.totalOutstanding > 0;
-    final hasAdvance = _customer!.advanceBalance > 0;
-
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: c.surfaceBorder),
-        ),
-        child: Column(
-          children: [
-            // Outstanding row
-            if (hasOutstanding) ...[
-              Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded,
-                      color: Color(0xFFFF8C00), size: 16),
-                  const SizedBox(width: 8),
-                  Text(l10n.previousDue,
-                      style: const TextStyle(
-                          color: Color(0xFFFF8C00),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600)),
-                  const Spacer(),
-                  Text(
-                    AppFormatters.formatCurrency(_customer!.totalOutstanding),
-                    style: const TextStyle(
-                        color: Color(0xFFFF6B00),
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ],
+      padding: const EdgeInsets.only(top: 8),
+      child: GestureDetector(
+        onTap: () {
+          setState(() => _applyAdvance = !_applyAdvance);
+          _resetReceivedDefault();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: _applyAdvance
+                ? c.success.withValues(alpha: 0.12)
+                : c.divider.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: _applyAdvance
+                    ? c.success.withValues(alpha: 0.35)
+                    : c.surfaceBorder),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                _applyAdvance
+                    ? Icons.check_box_rounded
+                    : Icons.check_box_outline_blank_rounded,
+                color: _applyAdvance ? c.success : c.textHint,
+                size: 18,
               ),
-              if (hasAdvance) const SizedBox(height: 10),
-            ],
-            // Advance row
-            if (hasAdvance) ...[
-              Row(
-                children: [
-                  Icon(Icons.account_balance_wallet_rounded,
-                      color: c.success, size: 16),
-                  const SizedBox(width: 8),
-                  Text(l10n.advanceBalance,
-                      style: TextStyle(
-                          color: c.success,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600)),
-                  const Spacer(),
-                  Text(
-                    AppFormatters.formatCurrency(_customer!.advanceBalance),
-                    style: TextStyle(
-                        color: c.success,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              // Advance toggle
-              GestureDetector(
-                onTap: () {
-                  setState(() => _applyAdvance = !_applyAdvance);
-                  _resetReceivedDefault();
-                },
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: _applyAdvance
-                        ? c.success.withValues(alpha: 0.12)
-                        : c.divider.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: _applyAdvance
-                            ? c.success.withValues(alpha: 0.35)
-                            : c.surfaceBorder),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _applyAdvance
-                            ? Icons.check_box_rounded
-                            : Icons.check_box_outline_blank_rounded,
-                        color: _applyAdvance ? c.success : c.textHint,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          l10n.applyAdvance(
-                              AppFormatters.formatCurrency(_advanceApplied > 0
-                                  ? _advanceApplied
-                                  : _customer!.advanceBalance)),
-                          style: TextStyle(
-                              color: _applyAdvance ? c.success : c.textHint,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    ],
-                  ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  l10n.applyAdvance(AppFormatters.formatCurrency(_advanceApplied > 0
+                      ? _advanceApplied
+                      : _customer!.advanceBalance)),
+                  style: TextStyle(
+                      color: _applyAdvance ? c.success : c.textHint,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500),
                 ),
               ),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -1142,44 +1072,83 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
       );
     }
 
-    // Registered customer: full breakdown
+    // Registered customer: Current Bill + Previous Due, then one editable
+    // Receive Amount and one result line under it.
+    final received = _receivedFromCustomer;
+    final diff = received - _totalPayable;
+    final String resultLabel;
+    final double resultValue;
+    final Color resultColor;
+    if (diff > 0.005) {
+      resultLabel = l10n.advanceBalance;
+      resultValue = diff;
+      resultColor = c.success;
+    } else if (diff < -0.005) {
+      resultLabel = l10n.remainingDue;
+      resultValue = -diff;
+      resultColor = const Color(0xFFFF6B00);
+    } else {
+      resultLabel = l10n.remainingDue;
+      resultValue = 0;
+      resultColor = c.success;
+    }
+
     return Column(
       children: [
-        // Current bill
         _AmountRow(
           label: l10n.currentBill,
           value: AppFormatters.formatCurrency(widget.grandTotal),
           valueColor: c.textPrimary,
         ),
-
-        // Advance deduction row (only when advance is applied)
-        if (_advanceApplied > 0) ...[
-          const SizedBox(height: 6),
-          _AmountRow(
-            label: l10n.advanceApplied,
-            value: '− ${AppFormatters.formatCurrency(_advanceApplied)}',
-            valueColor: c.success,
-          ),
-          const SizedBox(height: 6),
-          Divider(height: 1, color: c.divider),
-          const SizedBox(height: 6),
-          _AmountRow(
-            label: l10n.netDue,
-            value: AppFormatters.formatCurrency(_netBillDue),
-            valueColor: c.textPrimary,
-          ),
-        ],
-
-        const SizedBox(height: 10),
-
-        // Received (editable)
+        const SizedBox(height: 6),
         Row(
           children: [
-            Text(l10n.received,
+            Text(l10n.previousDue,
                 style: TextStyle(color: c.textSecondary, fontSize: 14)),
+            const SizedBox(width: 4),
+            Tooltip(
+              message: l10n.previousDueInfo,
+              triggerMode: TooltipTriggerMode.tap,
+              showDuration: const Duration(seconds: 3),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(Icons.info_outline_rounded, size: 16, color: c.textHint),
+              ),
+            ),
+            const Spacer(),
+            Text(
+              AppFormatters.formatCurrency(_previousDue),
+              style: TextStyle(
+                  color: _previousDue > 0 ? const Color(0xFFFF6B00) : c.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+
+        // Existing advance credit (only when the customer has some).
+        if (_customer!.advanceBalance > 0) ...[
+          _buildAdvanceToggle(),
+          if (_advanceApplied > 0) ...[
+            const SizedBox(height: 8),
+            _AmountRow(
+              label: l10n.advanceApplied,
+              value: '− ${AppFormatters.formatCurrency(_advanceApplied)}',
+              valueColor: c.success,
+            ),
+          ],
+        ],
+
+        const SizedBox(height: 14),
+
+        // Receive Amount (editable, pre-filled with Current Bill + Previous Due)
+        Row(
+          children: [
+            Text(l10n.receiveAmount,
+                style: TextStyle(color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
             const Spacer(),
             SizedBox(
-              width: 140,
+              width: 150,
               child: TextFormField(
                 controller: _receivedCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1188,9 +1157,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
                   FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
                 ],
                 style: TextStyle(
-                    color: c.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600),
+                    color: c.textPrimary, fontSize: 17, fontWeight: FontWeight.w700),
                 decoration: InputDecoration(
                   prefixText: '₹ ',
                   prefixStyle: TextStyle(color: c.textSecondary, fontSize: 14),
@@ -1213,31 +1180,12 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
         ),
         const SizedBox(height: 10),
 
-        // Pending on this bill
+        // One result line: Remaining Due / Advance Balance.
         _AmountRow(
-          label: l10n.pending,
-          value: AppFormatters.formatCurrency(_pendingAmount),
-          valueColor: _pendingAmount > 0 ? const Color(0xFFFF6B00) : c.success,
+          label: resultLabel,
+          value: AppFormatters.formatCurrency(resultValue),
+          valueColor: resultColor,
         ),
-
-        // Excess goes to old dues or new advance
-        if (_excessPayment > 0) ...[
-          const SizedBox(height: 6),
-          if (_outstandingReduced > 0)
-            _AmountRow(
-              label: l10n.oldDuesReduced,
-              value: '− ${AppFormatters.formatCurrency(_outstandingReduced)}',
-              valueColor: c.success,
-            ),
-          if (_newAdvanceFromOverpayment > 0) ...[
-            const SizedBox(height: 4),
-            _AmountRow(
-              label: l10n.addedToAdvance,
-              value: '+ ${AppFormatters.formatCurrency(_newAdvanceFromOverpayment)}',
-              valueColor: c.success,
-            ),
-          ],
-        ],
       ],
     );
   }
@@ -1417,57 +1365,6 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
     );
   }
 
-  Widget _buildOutstandingSummary() {
-    final c = context.colors;
-    final l10n = context.l10n;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2A2750) : c.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.surfaceBorder),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(l10n.newOutstanding,
-                  style: TextStyle(color: c.textSecondary, fontSize: 13)),
-              Text(
-                AppFormatters.formatCurrency(_newOutstanding),
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: _newOutstanding > 0
-                        ? const Color(0xFFFF8C00)
-                        : c.success),
-              ),
-            ],
-          ),
-          if (_newAdvanceBalance > 0) ...[
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(l10n.newAdvanceBalance,
-                    style: TextStyle(color: c.textSecondary, fontSize: 13)),
-                Text(
-                  AppFormatters.formatCurrency(_newAdvanceBalance),
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: c.success),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildGenerateButton() {
     final c = context.colors;
     final l10n = context.l10n;
@@ -1516,7 +1413,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
                             color: Colors.white, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          l10n.generateBill(AppFormatters.formatCurrency(widget.grandTotal)),
+                          l10n.generateBill(AppFormatters.formatCurrency(_receivedFromCustomer)),
                           style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,

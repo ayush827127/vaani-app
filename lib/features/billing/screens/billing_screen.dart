@@ -652,7 +652,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     );
   }
 
-  void _showPaymentSheet() {
+  Future<void> _showPaymentSheet() async {
     final cart = ref.read(cartProvider);
     if (cart.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -666,6 +666,26 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final gst = _calcGst(cart, subtotal, discount);
     final grandTotal = subtotal - discount + gst;
 
+    // _selectedCustomer (and _customers) are snapshots from when the screen
+    // opened or the customer was picked — a due added or collected since
+    // (a previous bill, a "Give Credit", a payment) isn't reflected in
+    // them, so the payment sheet showed ₹0 pending for a customer who
+    // actually owes money. Re-read the real row right before it opens.
+    final selected = _selectedCustomer;
+    if (selected?.id != null) {
+      final fresh = await getIt<CustomerRepository>().getCustomerById(selected!.id!);
+      if (!mounted) return;
+      if (fresh != null) {
+        setState(() {
+          _selectedCustomer = fresh;
+          _customers = [
+            for (final c in _customers) c.id == fresh.id ? fresh : c,
+          ];
+        });
+      }
+    }
+    if (!mounted) return;
+
     showPaymentSheet(
       context: context,
       shopId: _shopId,
@@ -678,7 +698,10 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       discountValue: _discountValue,
       initialPaymentMode: _paymentMode,
       initialCustomer: _selectedCustomer,
-      onSuccess: () {
+      onSuccess: () async {
+        final refreshed = await getIt<CustomerRepository>().getAllCustomers(_shopId);
+        if (mounted) setState(() => _customers = refreshed);
+        if (!mounted) return;
         ref.read(cartProvider.notifier).clear();
         setState(() {
           _selectedCustomer = null;
@@ -2443,9 +2466,9 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
       RemoveItemAction() => 'Remove ${action.productName}',
       ClearCartAction() => 'Clear entire cart',
       UpdatePriceAction() =>
-        '${action.productName} → ₹${action.price.toStringAsFixed(0)}',
+        '${action.productName} → ${AppFormatters.formatCurrency(action.price)}',
       DiscountAction() =>
-        'Discount: ${action.discountType == "percent" ? "${action.value.toStringAsFixed(0)}%" : "₹${action.value.toStringAsFixed(0)}"}',
+        'Discount: ${action.discountType == "percent" ? "${action.value.toStringAsFixed(0)}%" : AppFormatters.formatCurrency(action.value)}',
       PaymentModeAction() => 'Payment: ${action.mode.toUpperCase()}',
       SelectCustomerAction() => 'Customer: ${action.customerName}',
       CustomerNotFoundAction() => 'Add customer: ${action.name}',

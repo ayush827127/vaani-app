@@ -1,3 +1,4 @@
+import '../../../core/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -775,7 +776,7 @@ class _ProductCard extends StatelessWidget {
                         const SizedBox(width: 6),
                       ],
                       Text(
-                        '₹${product.sellingPrice.toStringAsFixed(0)}',
+                        AppFormatters.formatCurrency(product.sellingPrice),
                         style: const TextStyle(
                           color: AppColors.primaryLight,
                           fontSize: 13,

@@ -5,6 +5,28 @@ class CategoryRepository {
 
   Future<List<String>> getCategories(int shopId) async {
     final db = await _db.database;
+
+    // The billing screen builds its category chips from products' own
+    // `category` values, while this table is what the Products screen and
+    // the category picker read — nothing kept the two in step, so a shop
+    // could have products tagged "Drinks"/"Soft Drinks" (visible in
+    // billing) and an empty categories table ("Category not found" in
+    // Products). Any category an active product already uses is by
+    // definition a real category, so fold those in (idempotent, and it
+    // also means the list pushed to the cloud is complete).
+    final used = await db.rawQuery(
+      "SELECT DISTINCT TRIM(category) AS name FROM products "
+      "WHERE shop_id = ? AND is_active = 1 AND category IS NOT NULL AND TRIM(category) != ''",
+      [shopId],
+    );
+    final now = DateTime.now().toIso8601String();
+    for (final r in used) {
+      await db.rawInsert(
+        'INSERT OR IGNORE INTO categories (shop_id, name, created_at) VALUES (?, ?, ?)',
+        [shopId, r['name'], now],
+      );
+    }
+
     final rows = await db.query(
       'categories',
       where: 'shop_id = ?',
@@ -53,6 +75,11 @@ class CategoryRepository {
   Future<void> replaceCategories(int shopId, List<String> names) async {
     final db = await _db.database;
     final incoming = names.map((n) => n.trim()).where((n) => n.isNotEmpty).toSet();
+    // An empty snapshot means the cloud simply has no category list yet (a
+    // shop that never pushed one), not that an admin deleted every
+    // category — treating it as authoritative would wipe the local list
+    // and null every product's category.
+    if (incoming.isEmpty) return;
     await db.transaction((txn) async {
       final existingRows =
           await txn.query('categories', columns: ['name'], where: 'shop_id = ?', whereArgs: [shopId]);

@@ -636,7 +636,16 @@ class AppLocalizationsHi extends AppLocalizations {
   String get noPurchasesYet => 'अभी तक कोई खरीदारी नहीं';
 
   @override
-  String get previousDue => 'पिछला बकाया';
+  String get previousDue => 'पिछला बाकी';
+
+  @override
+  String get previousDueInfo => 'पिछले बिलों की बकाया राशि';
+
+  @override
+  String get receiveAmount => 'प्राप्त राशि दर्ज करें';
+
+  @override
+  String get remainingDue => 'बाकी राशि';
 
   @override
   String get advanceBalance => 'अग्रिम राशि';
@@ -650,7 +659,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get advanceApplied => 'अग्रिम लागू';
 
   @override
-  String get netDue => 'शुद्ध देय';
+  String get netDue => 'शुद्ध बिल';
 
   @override
   String get oldDuesReduced => 'पुराना बकाया कम हुआ';
@@ -737,7 +746,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String dueAmount(String amount) {
-    return '$amount बकाया';
+    return '$amount बाकी';
   }
 
   @override
@@ -902,7 +911,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get totalPurchases => 'कुल खरीद';
 
   @override
-  String get totalBusiness => 'कुल व्यापार';
+  String get totalBusiness => 'कुल बिक्री';
 
   @override
   String get recentInvoices => 'हाल के इनवॉइस';
@@ -925,10 +934,16 @@ class AppLocalizationsHi extends AppLocalizations {
   String get paymentHistory => 'भुगतान इतिहास';
 
   @override
+  String get ledger => 'खाता';
+
+  @override
   String get noInvoicesYet => 'अभी तक कोई बिल नहीं';
 
   @override
   String get noPaymentHistoryYet => 'कोई भुगतान इतिहास नहीं';
+
+  @override
+  String get noLedgerEntriesYet => 'अभी तक कोई खाता प्रविष्टि नहीं';
 
   @override
   String get billPayment => 'बिल भुगतान';
@@ -941,6 +956,39 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get advanceDeposit => 'अग्रिम जमा';
+
+  @override
+  String get billDue => 'बिल बकाया';
+
+  @override
+  String get billVoided => 'बिल रद्द';
+
+  @override
+  String get creditGiven => 'उधार दिया';
+
+  @override
+  String get giveCredit => 'उधार दें';
+
+  @override
+  String get giveCreditTo => 'इन्हें उधार दें';
+
+  @override
+  String get reasonOptional => 'कारण (वैकल्पिक)';
+
+  @override
+  String get reasonHint => 'जैसे उधार सामान, नकद उधार';
+
+  @override
+  String get creditRecorded => 'उधार दर्ज हुआ!';
+
+  @override
+  String get youGave => 'आपने दिया';
+
+  @override
+  String get youGot => 'आपको मिला';
+
+  @override
+  String get balance => 'शेष';
 
   @override
   String get poweredByVaani => 'वाणी द्वारा संचालित';
@@ -1513,8 +1561,13 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String billsCountLabel(String count) {
-    return '$count बिल';
+  String billsCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count बिल',
+    );
+    return '$_temp0';
   }
 
   @override

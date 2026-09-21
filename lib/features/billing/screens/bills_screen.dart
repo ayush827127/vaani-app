@@ -350,6 +350,7 @@ class _MonthSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final l10n = context.l10n;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -380,7 +381,7 @@ class _MonthSection extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    '· ${group.invoices.length} ${group.invoices.length == 1 ? 'bill' : 'bills'}',
+                    '· ${l10n.billsCountLabel(group.invoices.length)}',
                     style: TextStyle(color: c.textSecondary, fontSize: 12),
                   ),
                   const SizedBox(width: 4),

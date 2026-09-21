@@ -1,3 +1,4 @@
+import '../../../core/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,6 +17,8 @@ class AIManagerScreen extends StatefulWidget {
 }
 
 class _AIManagerScreenState extends State<AIManagerScreen> {
+  static String _billsText(int n) => '$n ${n == 1 ? 'bill' : 'bills'}';
+
   final _messageCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final List<_ChatMessage> _messages = [];
@@ -100,7 +103,7 @@ class _AIManagerScreenState extends State<AIManagerScreen> {
       ''', [_shopId, today]);
       final total = (result.first['total'] as num).toDouble();
       final bills = result.first['bills'] as int;
-      return '💰 You\'ve made ₹${total.toStringAsFixed(0)} today across $bills bills. ${total > 5000 ? '🚀 Great day!' : 'Keep going!'}';
+      return '💰 You\'ve made ${AppFormatters.formatCurrency(total.toDouble())} today across ${_billsText(bills)}. ${total > 5000 ? '🚀 Great day!' : 'Keep going!'}';
     }
 
     // PROFIT_TODAY
@@ -111,7 +114,7 @@ class _AIManagerScreenState extends State<AIManagerScreen> {
         WHERE i.shop_id = ? AND DATE(i.created_at) = ? AND i.deleted_at IS NULL AND i.status != 'cancelled'
       ''', [_shopId, today]);
       final profit = (result.first['profit'] as num).toDouble();
-      return '🟢 Today\'s estimated profit is ₹${profit.toStringAsFixed(0)}. Great going, $_ownerName!';
+      return '🟢 Today\'s estimated profit is ${AppFormatters.formatCurrency(profit.toDouble())}. Great going, $_ownerName!';
     }
 
     // SALES_WEEK
@@ -124,7 +127,7 @@ class _AIManagerScreenState extends State<AIManagerScreen> {
       final total = (result.first['total'] as num).toDouble();
       final bills = result.first['bills'] as int;
       final avg = bills > 0 ? total / 7 : 0;
-      return '📈 This week\'s sales total is ₹${total.toStringAsFixed(0)} across $bills bills. That\'s ₹${avg.toStringAsFixed(0)} per day on average.';
+      return '📈 This week\'s sales total is ${AppFormatters.formatCurrency(total.toDouble())} across ${_billsText(bills)}. That\'s ${AppFormatters.formatCurrency(avg.toDouble())} per day on average.';
     }
 
     // SALES_MONTH
@@ -136,7 +139,7 @@ class _AIManagerScreenState extends State<AIManagerScreen> {
       ''', [_shopId, thisMonth]);
       final total = (result.first['total'] as num).toDouble();
       final bills = result.first['bills'] as int;
-      return '📊 This month\'s sales: ₹${total.toStringAsFixed(0)} in $bills bills.';
+      return '📊 This month\'s sales: ${AppFormatters.formatCurrency(total.toDouble())} in ${_billsText(bills)}.';
     }
 
     // RESTOCK_NEEDED
@@ -158,7 +161,7 @@ class _AIManagerScreenState extends State<AIManagerScreen> {
         ORDER BY total_purchases DESC LIMIT 3
       ''', [_shopId]);
       if (result.isEmpty) return '👥 No customer data yet. Start adding customers to track their purchases!';
-      final list = result.asMap().entries.map((e) => '${e.key + 1}. ${e.value['name']} (₹${(e.value['total_purchases'] as num).toStringAsFixed(0)})').join('\n');
+      final list = result.asMap().entries.map((e) => '${e.key + 1}. ${e.value['name']} (${AppFormatters.formatCurrency((e.value['total_purchases'] as num).toDouble())})').join('\n');
       return '⭐ Your top customers:\n$list';
     }
 
@@ -168,7 +171,7 @@ class _AIManagerScreenState extends State<AIManagerScreen> {
         SELECT COUNT(*) as cnt FROM invoices WHERE DATE(created_at) = ? AND shop_id = ?
       ''', [today, _shopId]);
       final count = result.first['cnt'] as int;
-      return '🧾 You\'ve generated $count bills so far today.';
+      return '🧾 You\'ve generated ${_billsText(count)} so far today.';
     }
 
     // INVENTORY_STATUS

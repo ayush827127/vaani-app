@@ -7,12 +7,6 @@ class AppFormatters {
     decimalDigits: 2,
   );
 
-  static final NumberFormat _currencyCompact = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: 0,
-  );
-
   static final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
   static final DateFormat _dateTimeFormat = DateFormat('dd MMM yyyy, hh:mm a');
   static final DateFormat _timeFormat = DateFormat('hh:mm a');
@@ -20,7 +14,10 @@ class AppFormatters {
   static final DateFormat _monthYear = DateFormat('MMMM yyyy');
 
   static String formatCurrency(double amount) => _currency.format(amount);
-  static String formatCurrencyCompact(double amount) => _currencyCompact.format(amount);
+  // Kept as an alias so existing call sites keep compiling, but deliberately
+  // NOT a shorter format any more: whole-rupee rounding here made the same
+  // amount read ₹247 on one screen and ₹247.25 on another.
+  static String formatCurrencyCompact(double amount) => _currency.format(amount);
 
   static String formatDate(DateTime date) => _dateFormat.format(date);
   static String formatDateTime(DateTime date) => _dateTimeFormat.format(date);

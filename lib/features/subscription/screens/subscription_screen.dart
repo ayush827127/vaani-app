@@ -1,3 +1,5 @@
+import '../../../core/utils/formatters.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -106,6 +108,56 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     }
   }
 
+  /// Resolves the next time the app comes back to the foreground — used
+  /// right after handing off to an external UPI app, since that's the only
+  /// signal available (no payment-gateway callback) that the shopkeeper has
+  /// finished with it, one way or another. Falls back to a timeout so a
+  /// shopkeeper who switches to a different app entirely, rather than
+  /// returning to VANI, doesn't leave the flow stuck waiting forever.
+  Future<void> _waitForAppResume() {
+    final completer = Completer<void>();
+    late final AppLifecycleListener listener;
+    listener = AppLifecycleListener(
+      onResume: () {
+        if (!completer.isCompleted) completer.complete();
+      },
+    );
+    return completer.future
+        .timeout(const Duration(minutes: 5), onTimeout: () {})
+        .whenComplete(() => listener.dispose());
+  }
+
+  /// Explicit yes/no — the only honest way to gate a claim without a
+  /// payment gateway to verify against. Defaults visually to "No" (outlined)
+  /// so a reflexive tap doesn't accidentally claim an unpaid amount.
+  Future<bool?> _confirmPaymentCompleted(Plan plan) {
+    final c = context.colors;
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Did the payment go through?', style: TextStyle(color: c.textPrimary)),
+        content: Text(
+          "Did you complete the ${AppFormatters.formatCurrency(plan.price)} payment for ${plan.name} "
+          'in your UPI app?',
+          style: TextStyle(color: c.textSecondary),
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('No, cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('Yes, I paid'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _payForPlan(Plan plan) async {
     setState(() => _actingOnPlanId = plan.id);
     try {
@@ -127,11 +179,21 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         return;
       }
 
-      // Recording the claim only after the UPI app actually opened (not
-      // before) — if no UPI app exists, nothing is submitted at all. Either
-      // way, opening the UPI app is never itself proof of payment — see
-      // UpiPaymentService's doc comment — so this claim starts PENDING and
-      // stays that way until an admin confirms it.
+      // launchUrl only confirms the UPI app opened — it resolves instantly,
+      // before the shopkeeper has done anything inside it. Submitting a
+      // claim right there meant "Payment submitted" could appear even if
+      // they immediately backed out of the UPI app without paying anything.
+      // Waiting for the app to actually resume (they've left the UPI app,
+      // one way or another) and then asking explicitly is the only honest
+      // way to gate this without a payment gateway to verify against.
+      await _waitForAppResume();
+      if (!mounted) return;
+      final reallyPaid = await _confirmPaymentCompleted(plan);
+      if (reallyPaid != true) return;
+
+      // Still just a claim, not proof — see UpiPaymentService's doc comment
+      // — so this starts PENDING and stays that way until an admin confirms
+      // it against their own bank/UPI statement.
       await getIt<SubscriptionRepository>().submitPaymentClaim(
         planId: plan.id,
         reference: reference,
@@ -146,7 +208,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text('Payment submitted', style: TextStyle(color: context.colors.textPrimary)),
           content: Text(
-            "We've recorded your ₹${plan.price.toStringAsFixed(0)} payment for ${plan.name}. "
+            "We've recorded your ${AppFormatters.formatCurrency(plan.price)} payment for ${plan.name}. "
             "It'll be verified and activated shortly — usually within a few hours. "
             'You can keep using the app in the meantime.',
             style: TextStyle(color: context.colors.textSecondary),
@@ -365,7 +427,7 @@ class _PendingClaimBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Payment of ₹${claim.amount.toStringAsFixed(0)} for ${claim.planName} is awaiting '
+              'Payment of ${AppFormatters.formatCurrency(claim.amount)} for ${claim.planName} is awaiting '
               'verification.',
               style: TextStyle(color: c.textPrimary, fontSize: 12.5),
             ),
@@ -424,7 +486,7 @@ class _PlanCard extends StatelessWidget {
                 ),
               const Spacer(),
               Text(
-                plan.isFree ? 'Free' : '₹${plan.price.toStringAsFixed(0)}/mo',
+                plan.isFree ? 'Free' : '${AppFormatters.formatCurrency(plan.price)}/mo',
                 style: TextStyle(
                     color: AppColors.primaryLight, fontSize: 16, fontWeight: FontWeight.bold),
               ),
@@ -467,7 +529,7 @@ class _PlanCard extends StatelessWidget {
                             height: 20,
                             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                           )
-                        : Text(plan.isFree ? 'Switch to ${plan.name}' : 'Pay ₹${plan.price.toStringAsFixed(0)} via UPI'),
+                        : Text(plan.isFree ? 'Switch to ${plan.name}' : 'Pay ${AppFormatters.formatCurrency(plan.price)} via UPI'),
                   ),
           ),
         ],

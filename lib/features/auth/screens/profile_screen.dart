@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +17,7 @@ import '../../billing/repositories/invoice_repository.dart';
 import '../../settings/providers/theme_provider.dart';
 import '../../settings/providers/locale_provider.dart';
 import '../../subscription/providers/subscription_provider.dart';
+import '../../subscription/repositories/subscription_repository.dart';
 import '../../sync/repositories/data_sync_repository.dart';
 import '../../../l10n/l10n_extensions.dart';
 
@@ -42,6 +44,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _exporting = false;
   DateTime? _lastSyncedAt;
   bool _syncingData = false;
+  // True once we've confirmed there's no cached backend token — see
+  // SubscriptionRepository.hasBackendToken's doc comment for why this is
+  // the one condition that makes "Checking status…" permanently stuck
+  // rather than transiently loading, and needs its own, different message.
+  bool _notLinkedToBackend = false;
 
   @override
   void initState() {
@@ -49,6 +56,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _load();
     _loadPrefs();
     _loadSyncStatus();
+    // The provider only loads whatever was already cached on disk at app
+    // startup and never re-syncs itself — if that raced ahead of the
+    // splash screen's background refresh (routine right after a fresh
+    // login), this tile would show "Free trial / Checking status…"
+    // indefinitely until something else happened to trigger a reload. A
+    // live re-check here, every time this screen opens, is what actually
+    // keeps it current — e.g. right after an admin activates a plan, or
+    // after the reset both plans were just cleared in.
+    unawaited(ref.read(subscriptionProvider.notifier).refresh().then((_) async {
+      // refreshStatus() silently no-ops (by design — see its doc comment)
+      // when there's no token AND no fresh OTP proof, which is exactly the
+      // case a background call like this one never has. If that's what
+      // happened, no amount of retrying here will ever fix it — only a
+      // real login (Change Mobile Number, or log out and back in) gets a
+      // fresh token. Check for it explicitly so the tile can say something
+      // true instead of "Checking status…" forever.
+      final hasToken = await getIt<SubscriptionRepository>().hasBackendToken();
+      if (mounted) setState(() => _notLinkedToBackend = !hasToken);
+    }));
   }
 
   Future<void> _load() async {
@@ -370,8 +396,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const _SectionHeader('Subscription'),
                       _SettingsTile(
                         icon: Icons.workspace_premium_rounded,
-                        title: ref.watch(subscriptionProvider)?.planName ?? 'Free trial',
-                        subtitle: ref.watch(subscriptionProvider)?.subscriptionStatus ?? 'Checking status…',
+                        title: ref.watch(subscriptionProvider)?.planName ??
+                            (_notLinkedToBackend ? 'Not connected' : 'Free trial'),
+                        subtitle: ref.watch(subscriptionProvider)?.subscriptionStatus ??
+                            (_notLinkedToBackend
+                                ? 'Log out and log back in to reconnect'
+                                : 'Checking status…'),
                         onTap: () => context.push('/profile/subscription'),
                       ),
                     ]),

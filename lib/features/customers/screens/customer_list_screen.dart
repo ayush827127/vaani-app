@@ -425,7 +425,7 @@ class _CustomerCard extends StatelessWidget {
                   AppFormatters.formatCurrencyCompact(customer.totalPurchases),
                   style: const TextStyle(color: AppColors.primaryLight, fontWeight: FontWeight.bold, fontSize: 14),
                 ),
-                Text(l10n.billsCountLabel('${customer.totalBills}'),
+                Text(l10n.billsCountLabel(customer.totalBills),
                     style: TextStyle(color: c.textSecondary, fontSize: 11)),
                 if (customer.totalOutstanding > 0) ...[
                   const SizedBox(height: 4),
@@ -436,7 +436,7 @@ class _CustomerCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      'Due ${AppFormatters.formatCurrencyCompact(customer.totalOutstanding)}',
+                      '${l10n.outstanding} ${AppFormatters.formatCurrency(customer.totalOutstanding)}',
                       style: TextStyle(color: c.danger, fontSize: 10, fontWeight: FontWeight.w600),
                     ),
                   ),

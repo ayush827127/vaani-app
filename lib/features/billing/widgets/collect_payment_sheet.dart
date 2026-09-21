@@ -51,6 +51,14 @@ class CollectPaymentSheet extends StatefulWidget {
 
 class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
   final _advanceAmountCtrl = TextEditingController();
+  // Used when the customer has an outstanding balance but no specific
+  // invoice to allocate it against — e.g. it came entirely from a "Give
+  // Credit" ledger entry (give_credit_sheet.dart), which has no invoice at
+  // all. Kept separate from _allocationCtrls (invoice-specific) rather than
+  // folded into that map under a fake key, since it represents a genuinely
+  // different kind of collection (against the customer's aggregate balance,
+  // not a specific bill).
+  final _generalCollectionCtrl = TextEditingController();
   String _method = 'cash';
   bool _isAdvanceDeposit = false; // true = add to advance; false = reduce outstanding
   bool _isProcessing = false;
@@ -88,10 +96,18 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
   @override
   void dispose() {
     _advanceAmountCtrl.dispose();
+    _generalCollectionCtrl.dispose();
     for (final c in _allocationCtrls.values) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  double get _generalCollectionAmount {
+    final raw = double.tryParse(_generalCollectionCtrl.text.replaceAll(',', '')) ?? 0;
+    if (raw < 0) return 0;
+    final cap = widget.customer.totalOutstanding;
+    return raw > cap ? cap : raw;
   }
 
   double _allocationFor(Invoice inv) {
@@ -105,10 +121,15 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
   double get _totalAllocated =>
       _outstandingInvoices.fold(0.0, (s, inv) => s + _allocationFor(inv));
 
+  // Only relevant when there are no outstanding invoices to allocate
+  // against — see _generalCollectionCtrl's doc comment.
+  double get _duesAmount =>
+      _outstandingInvoices.isEmpty ? _generalCollectionAmount : _totalAllocated;
+
   double get _advanceAmount =>
       double.tryParse(_advanceAmountCtrl.text.replaceAll(',', '')) ?? 0;
 
-  double get _amount => _isAdvanceDeposit ? _advanceAmount : _totalAllocated;
+  double get _amount => _isAdvanceDeposit ? _advanceAmount : _duesAmount;
 
   void _toggleInvoice(Invoice inv) {
     setState(() {
@@ -135,8 +156,16 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
       double newAdvance = widget.customer.advanceBalance;
       List<InvoicePaymentAllocation> allocations = const [];
 
+      double? generalCollection;
+
       if (_isAdvanceDeposit) {
         newAdvance += _amount;
+      } else if (_outstandingInvoices.isEmpty) {
+        // No specific invoice to allocate against — this customer's due
+        // came from a "Give Credit" ledger entry, not a bill. Collect
+        // straight against the aggregate balance instead.
+        generalCollection = _generalCollectionAmount;
+        newOutstanding = (newOutstanding - generalCollection).clamp(0.0, double.infinity);
       } else {
         // Settle each selected invoice individually so its own
         // received/pending/status stay accurate, then reflect the same
@@ -173,6 +202,7 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
         paymentMode: _method,
         advanceDepositAmount: _isAdvanceDeposit ? _amount : null,
         invoiceAllocations: allocations,
+        generalCollectionAmount: generalCollection,
       );
 
       if (mounted) setState(() { _isProcessing = false; _success = true; });
@@ -544,6 +574,53 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
       );
     }
     if (_outstandingInvoices.isEmpty) {
+      // A balance with no invoice behind it — most likely a "Give Credit"
+      // ledger entry — still needs somewhere to collect against, just not
+      // an invoice picker.
+      if (widget.customer.totalOutstanding > 0) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('No specific bill for this balance — collect against the total owed',
+                style: TextStyle(color: c.textSecondary, fontSize: 12, letterSpacing: 0.5)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(context.l10n.amount, style: TextStyle(color: c.textSecondary, fontSize: 14)),
+                const Spacer(),
+                SizedBox(
+                  width: 160,
+                  child: TextFormField(
+                    controller: _generalCollectionCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textAlign: TextAlign.right,
+                    autofocus: true,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                    ],
+                    style: TextStyle(
+                        color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                    decoration: InputDecoration(
+                      prefixText: '₹ ',
+                      prefixStyle: TextStyle(color: c.textSecondary, fontSize: 15),
+                      filled: true,
+                      fillColor: c.surface,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: Theme.of(context).brightness == Brightness.dark
+                            ? BorderSide.none
+                            : BorderSide(color: c.inputBorder),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      }
       return Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -552,7 +629,7 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
           border: Border.all(color: c.surfaceBorder),
         ),
         child: Text(
-          'No outstanding bills for this customer. Switch to "Deposit as advance" to record a prepayment instead.',
+          'No pending bills for this customer. Switch to "Deposit as advance" to record a prepayment instead.',
           style: TextStyle(color: c.textSecondary, fontSize: 13),
         ),
       );
@@ -622,7 +699,7 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
                       style: TextStyle(
                           color: c.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
                   Text(
-                    '${AppFormatters.formatDate(inv.createdAt)} · Due ${AppFormatters.formatCurrency(inv.pendingAmount)}',
+                    '${AppFormatters.formatDate(inv.createdAt)} · ${context.l10n.pending} ${AppFormatters.formatCurrency(inv.pendingAmount)}',
                     style: TextStyle(color: c.textSecondary, fontSize: 11),
                   ),
                 ],

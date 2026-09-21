@@ -11,6 +11,7 @@ import '../repositories/customer_repository.dart';
 import '../../billing/repositories/invoice_repository.dart';
 import '../../billing/repositories/payment_transaction_repository.dart';
 import '../../billing/widgets/collect_payment_sheet.dart';
+import '../../billing/widgets/give_credit_sheet.dart';
 import '../../billing/services/invoice_pdf_helper.dart';
 import '../../../l10n/l10n_extensions.dart';
 
@@ -26,7 +27,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     with SingleTickerProviderStateMixin {
   Customer? _customer;
   List<Invoice> _invoices = [];
-  List<Invoice> _outstandingInvoices = [];
   List<PaymentTransaction> _transactions = [];
   bool _isLoading = true;
   late final TabController _tabController;
@@ -44,9 +44,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     super.dispose();
   }
 
-  double get _pendingTotal =>
-      _outstandingInvoices.fold(0.0, (sum, inv) => sum + inv.pendingAmount);
-
   Future<void> _load() async {
     final customerRepo = getIt<CustomerRepository>();
     final invoiceRepo = getIt<InvoiceRepository>();
@@ -54,15 +51,13 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     final results = await Future.wait([
       customerRepo.getCustomerById(widget.customerId),
       invoiceRepo.getInvoicesByCustomer(widget.customerId),
-      invoiceRepo.getOutstandingInvoicesByCustomer(widget.customerId),
       txnRepo.getByCustomer(widget.customerId, limit: 200),
     ]);
     if (!mounted) return;
     setState(() {
       _customer = results[0] as Customer?;
       _invoices = (results[1] as List).cast<Invoice>();
-      _outstandingInvoices = (results[2] as List).cast<Invoice>();
-      _transactions = (results[3] as List).cast<PaymentTransaction>();
+      _transactions = (results[2] as List).cast<PaymentTransaction>();
       _isLoading = false;
     });
   }
@@ -71,6 +66,17 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     final cust = _customer;
     if (cust == null) return;
     showCollectPaymentSheet(
+      context: context,
+      customer: cust,
+      shopId: cust.shopId,
+      onSuccess: _load,
+    );
+  }
+
+  void _openGiveCredit() {
+    final cust = _customer;
+    if (cust == null) return;
+    showGiveCreditSheet(
       context: context,
       customer: cust,
       shopId: cust.shopId,
@@ -124,30 +130,78 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
           tabs: [
             Tab(text: l10n.overview),
             Tab(text: l10n.allInvoices),
-            Tab(text: l10n.paymentHistory),
+            Tab(text: l10n.ledger),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openCollectPayment,
-        backgroundColor: AppColors.primaryLight,
-        icon: const Icon(Icons.payments_rounded, color: Colors.white),
-        label: Text(
-          l10n.collectPayment,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
+      // Khata-style "You Gave / You Got" pair, not a single FAB — the whole
+      // point of a ledger is that both directions are equally one tap away,
+      // not one primary action with the other buried in a tab.
+      bottomNavigationBar: _LedgerActionBar(
+        onGiveCredit: _openGiveCredit,
+        onCollectPayment: _openCollectPayment,
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          _OverviewTab(
-            customer: cust,
-            pendingTotal: _pendingTotal,
-            onCollect: _openCollectPayment,
-          ),
+          _OverviewTab(customer: cust),
           _InvoicesTab(invoices: _invoices),
-          _HistoryTab(transactions: _transactions),
+          _LedgerTab(transactions: _transactions, currentOutstanding: cust.totalOutstanding),
         ],
+      ),
+    );
+  }
+}
+
+class _LedgerActionBar extends StatelessWidget {
+  final VoidCallback onGiveCredit;
+  final VoidCallback onCollectPayment;
+
+  const _LedgerActionBar({required this.onGiveCredit, required this.onCollectPayment});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final l10n = context.l10n;
+    const danger = Color(0xFFE24C4C);
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onGiveCredit,
+                icon: const Icon(Icons.arrow_upward_rounded, size: 16, color: danger),
+                label: Text(l10n.youGave,
+                    style: const TextStyle(
+                        color: danger, fontSize: 13, fontWeight: FontWeight.w700)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: danger),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: onCollectPayment,
+                icon: const Icon(Icons.arrow_downward_rounded, size: 16, color: Colors.white),
+                label: Text(l10n.youGot,
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: c.success,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -157,14 +211,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
 
 class _OverviewTab extends StatelessWidget {
   final Customer customer;
-  final double pendingTotal;
-  final VoidCallback onCollect;
 
-  const _OverviewTab({
-    required this.customer,
-    required this.pendingTotal,
-    required this.onCollect,
-  });
+  const _OverviewTab({required this.customer});
 
   @override
   Widget build(BuildContext context) {
@@ -216,44 +264,45 @@ class _OverviewTab extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // 4-stat grid: Total Business, Total Bills, Outstanding, Advance
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.7,
-            children: [
-              _StatCard(
-                value: AppFormatters.formatCurrency(customer.totalPurchases),
-                label: l10n.totalBusiness,
-                color: AppColors.primaryLight,
-                icon: Icons.trending_up_rounded,
-                c: c,
-              ),
-              _StatCard(
-                value: '${customer.totalBills}',
-                label: l10n.totalBills,
-                color: c.success,
-                icon: Icons.receipt_long_rounded,
-                c: c,
-              ),
-              _StatCard(
-                value: AppFormatters.formatCurrency(customer.totalOutstanding),
-                label: l10n.outstanding,
-                color: const Color(0xFFFF6B00),
-                icon: Icons.warning_amber_rounded,
-                c: c,
-              ),
-              _StatCard(
-                value: AppFormatters.formatCurrency(pendingTotal),
-                label: l10n.pending,
-                color: const Color(0xFFFF8C00),
-                icon: Icons.hourglass_bottom_rounded,
-                c: c,
-              ),
-            ],
+          // Total Sales / Total Bills side by side, then the customer's total
+          // Outstanding on its own. There is deliberately no separate
+          // "Pending" figure here: pending is a per-bill amount (shown on
+          // each bill and in the billing payment screen), and summing it
+          // here just showed the same number as Outstanding under a second
+          // name.
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _StatCard(
+                    value: AppFormatters.formatCurrency(customer.totalPurchases),
+                    label: l10n.totalSales,
+                    color: AppColors.primaryLight,
+                    icon: Icons.trending_up_rounded,
+                    c: c,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _StatCard(
+                    value: l10n.billsCountLabel(customer.totalBills),
+                    label: l10n.totalBills,
+                    color: c.success,
+                    icon: Icons.receipt_long_rounded,
+                    c: c,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _StatCard(
+            value: AppFormatters.formatCurrency(customer.totalOutstanding),
+            label: l10n.outstanding,
+            color: const Color(0xFFFF6B00),
+            icon: Icons.warning_amber_rounded,
+            c: c,
           ),
 
           // Balance card with advance + collect payment
@@ -294,28 +343,10 @@ class _OverviewTab extends StatelessWidget {
                       value: AppFormatters.formatCurrency(customer.advanceBalance),
                       color: c.success,
                     ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: onCollect,
-                      icon: const Icon(Icons.payments_rounded,
-                          size: 16, color: AppColors.primaryLight),
-                      label: Text(
-                        l10n.collectPayment,
-                        style: const TextStyle(
-                            color: AppColors.primaryLight,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.primaryLight),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                      ),
-                    ),
-                  ),
+                  // No action buttons here — the persistent "You Gave / You
+                  // Got" bar at the bottom of this screen already covers
+                  // both directions on every tab; repeating one of them
+                  // here would just be a second, redundant button.
                 ],
               ),
             ),
@@ -518,7 +549,7 @@ class _InvoiceTile extends StatelessWidget {
                   Icon(Icons.timer_outlined, size: 12, color: statusColor),
                   const SizedBox(width: 4),
                   Text(
-                    '${l10n.due}: ${AppFormatters.formatCurrency(inv.pendingAmount)}',
+                    '${l10n.pending}: ${AppFormatters.formatCurrency(inv.pendingAmount)}',
                     style: TextStyle(
                         color: statusColor,
                         fontSize: 12,
@@ -547,12 +578,33 @@ class _InvoiceTile extends StatelessWidget {
   }
 }
 
-// ── History Tab ───────────────────────────────────────────────────────────────
+// ── Ledger Tab ────────────────────────────────────────────────────────────────
 
-class _HistoryTab extends StatelessWidget {
+// Effect of each transaction type on the customer's OUTSTANDING balance —
+// must mirror invoice_repository.dart's write paths exactly (createInvoice's
+// 'invoice_due' insert, collectPayment's 'outstanding_collection', giveCredit's
+// 'manual_credit', _reverseInvoiceItems' 'invoice_due_reversal') since this is
+// purely a display-side reconstruction of a value the database already holds
+// as customer.totalOutstanding — it has to reproduce the same arithmetic to
+// walk it backward correctly.
+double _outstandingDelta(PaymentTransaction txn) {
+  switch (txn.type) {
+    case 'invoice_due':
+    case 'manual_credit':
+      return txn.amount;
+    case 'outstanding_collection':
+    case 'invoice_due_reversal':
+      return -txn.amount;
+    default:
+      return 0;
+  }
+}
+
+class _LedgerTab extends StatelessWidget {
   final List<PaymentTransaction> transactions;
+  final double currentOutstanding;
 
-  const _HistoryTab({required this.transactions});
+  const _LedgerTab({required this.transactions, required this.currentOutstanding});
 
   @override
   Widget build(BuildContext context) {
@@ -564,33 +616,50 @@ class _HistoryTab extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.history_rounded, size: 56, color: c.textHint),
+            Icon(Icons.receipt_long_outlined, size: 56, color: c.textHint),
             const SizedBox(height: 12),
-            Text(l10n.noPaymentHistoryYet,
-                style: TextStyle(color: c.textSecondary)),
+            Text(l10n.noLedgerEntriesYet, style: TextStyle(color: c.textSecondary)),
           ],
         ),
       );
+    }
+
+    // transactions is newest-first (PaymentTransactionRepository.getByCustomer
+    // orders by created_at DESC) — walk it in that order starting from the
+    // customer's current balance, subtracting each entry's own effect to
+    // arrive at the balance that stood just before it (i.e. just after the
+    // next-older entry). Only accurate back as far as this list actually
+    // reaches (capped at 200 rows) — a customer with a longer history will
+    // see correct balances for their most recent 200 entries and a slightly
+    // drifted figure beyond that, which is an acceptable trade for not
+    // needing to load/compute over an unbounded transaction history.
+    final runningBalances = <double>[];
+    double runningAfter = currentOutstanding;
+    for (final txn in transactions) {
+      runningBalances.add(runningAfter);
+      runningAfter -= _outstandingDelta(txn);
     }
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       itemCount: transactions.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (ctx, i) => _TxnTile(txn: transactions[i]),
+      itemBuilder: (ctx, i) =>
+          _TxnTile(txn: transactions[i], balanceAfter: runningBalances[i]),
     );
   }
 }
 
 class _TxnTile extends StatelessWidget {
   final PaymentTransaction txn;
-  const _TxnTile({required this.txn});
+  final double balanceAfter;
+  const _TxnTile({required this.txn, required this.balanceAfter});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
-    final (icon, color, label) = _meta(txn.type, c, l10n);
+    final (icon, color, label, isDebit) = _meta(txn.type, c, l10n);
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -600,6 +669,7 @@ class _TxnTile extends StatelessWidget {
         border: Border.all(color: c.surfaceBorder),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 42,
@@ -622,6 +692,13 @@ class _TxnTile extends StatelessWidget {
                       fontSize: 13,
                       fontWeight: FontWeight.w600),
                 ),
+                if (txn.notes != null && txn.notes!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(txn.notes!,
+                      style: TextStyle(color: c.textSecondary, fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ],
                 const SizedBox(height: 2),
                 Row(
                   children: [
@@ -647,38 +724,60 @@ class _TxnTile extends StatelessWidget {
               ],
             ),
           ),
-          Text(
-            AppFormatters.formatCurrency(txn.amount),
-            style: TextStyle(
-                color: color, fontWeight: FontWeight.bold, fontSize: 15),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${isDebit ? '+' : '-'}${AppFormatters.formatCurrency(txn.amount)}',
+                style: TextStyle(
+                    color: color, fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${l10n.balance}: ${AppFormatters.formatCurrency(balanceAfter)}',
+                style: TextStyle(color: c.textHint, fontSize: 10),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  (IconData, Color, String) _meta(String type, dynamic c, dynamic l10n) {
+  // isDebit = true when this entry increases what the customer owes
+  // (shown with a '+' prefix, matching the "You Gave" framing); false when
+  // it reduces it or has no effect on outstanding at all.
+  (IconData, Color, String, bool) _meta(String type, dynamic c, dynamic l10n) {
+    const danger = Color(0xFFE24C4C);
     switch (type) {
       case 'bill_payment':
-        return (Icons.receipt_long_rounded, AppColors.primaryLight, l10n.billPayment as String);
+        return (Icons.receipt_long_rounded, AppColors.primaryLight, l10n.billPayment as String, false);
       case 'advance_used':
         return (
           Icons.account_balance_wallet_rounded,
           const Color(0xFF6B46C1),
-          l10n.advanceUsed as String
+          l10n.advanceUsed as String,
+          false,
         );
       case 'outstanding_collection':
         return (
           Icons.check_circle_rounded,
-          const Color(0xFFFF8C00),
-          l10n.outstandingCollected as String
+          c.success as Color,
+          l10n.outstandingCollected as String,
+          false,
         );
       case 'advance_deposit':
-        return (Icons.add_card_rounded, c.success as Color, l10n.advanceDeposit as String);
+        return (Icons.add_card_rounded, c.success as Color, l10n.advanceDeposit as String, false);
       case 'refund':
-        return (Icons.replay_rounded, c.success as Color, 'Refund (voided/returned bill)');
+        return (Icons.replay_rounded, c.success as Color, 'Refund (voided/returned bill)', false);
+      case 'manual_credit':
+        return (Icons.arrow_upward_rounded, danger, l10n.creditGiven as String, true);
+      case 'invoice_due':
+        return (Icons.receipt_rounded, const Color(0xFFFF8C00), l10n.billDue as String, true);
+      case 'invoice_due_reversal':
+        return (Icons.undo_rounded, c.success as Color, l10n.billVoided as String, false);
       default:
-        return (Icons.payments_rounded, c.textSecondary as Color, type);
+        return (Icons.payments_rounded, c.textSecondary as Color, type, false);
     }
   }
 }

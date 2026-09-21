@@ -246,6 +246,72 @@ class InvoiceRepository {
       }
 
       for (final p in paymentTransactions) {
+        if (p.type == 'outstanding_collection' && customerId != null) {
+          // Excess cash on this bill that pays down OLD dues. The customer's
+          // total was already reduced above, but until now none of the old
+          // invoices were marked paid — they kept showing their full pending
+          // amount, so they were offered again for collection (double-
+          // counting the same money) and the invoice list disagreed with the
+          // customer balance. Settle the oldest unpaid invoices first, one
+          // ledger row per invoice; whatever is left over (a due that has
+          // no invoice, e.g. a "Give Credit" entry) is recorded with no
+          // invoice.
+          var remaining = p.amount;
+          final oldInvoices = await txn.query(
+            'invoices',
+            where: 'customer_id = ? AND pending_amount > 0.005 AND id != ? '
+                "AND status != 'cancelled' AND deleted_at IS NULL",
+            whereArgs: [customerId, invoiceId],
+            orderBy: 'created_at ASC, id ASC',
+          );
+          final stamp = DateTime.now().toIso8601String();
+          for (final row in oldInvoices) {
+            if (remaining <= 0.005) break;
+            final pending = (row['pending_amount'] as num).toDouble();
+            final received = (row['received_amount'] as num).toDouble();
+            final applied = remaining < pending ? remaining : pending;
+            final newPending = pending - applied;
+            await txn.update(
+              'invoices',
+              {
+                'received_amount': received + applied,
+                'pending_amount': newPending,
+                'status': newPending <= 0.01
+                    ? AppConstants.statusPaid
+                    : AppConstants.statusPartialPaid,
+                'updated_at': stamp,
+              },
+              where: 'id = ?',
+              whereArgs: [row['id']],
+            );
+            await txn.insert('payment_transactions', {
+              'shop_id': invoice.shopId,
+              'customer_id': customerId,
+              'invoice_id': row['id'],
+              'type': 'outstanding_collection',
+              'amount': applied,
+              'payment_mode': p.paymentMode,
+              'notes': null,
+              'created_at': stamp,
+              'updated_at': stamp,
+            });
+            remaining -= applied;
+          }
+          if (remaining > 0.005) {
+            await txn.insert('payment_transactions', {
+              'shop_id': invoice.shopId,
+              'customer_id': customerId,
+              'invoice_id': null,
+              'type': 'outstanding_collection',
+              'amount': remaining,
+              'payment_mode': p.paymentMode,
+              'notes': null,
+              'created_at': stamp,
+              'updated_at': stamp,
+            });
+          }
+          continue;
+        }
         await txn.insert('payment_transactions', {
           'shop_id': invoice.shopId,
           'customer_id': customerId,
@@ -259,7 +325,34 @@ class InvoiceRepository {
         });
       }
 
-      savedInvoice = invoice.toMap().containsKey('id')
+      // A ledger row for the pending (unpaid) portion of this bill, purely
+      // additive to what already happens above — nothing here changes any
+      // existing field or the cash-side payment rows just inserted. This is
+      // what lets the customer ledger (customer_details_screen.dart) show a
+      // complete, accurate running balance from payment_transactions alone,
+      // rather than needing to separately reason about every invoice's
+      // current pendingAmount. Reversed by _reverseInvoiceItems below via a
+      // matching 'invoice_due_reversal' row if the bill is later voided/
+      // returned before being fully paid.
+      if (customerId != null && invoice.pendingAmount > 0) {
+        await txn.insert('payment_transactions', {
+          'shop_id': invoice.shopId,
+          'customer_id': customerId,
+          'invoice_id': invoiceId,
+          'type': 'invoice_due',
+          'amount': invoice.pendingAmount,
+          'payment_mode': 'adjustment',
+          'notes': null,
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      }
+
+      // toMap() always contains an 'id' key (null for a new invoice), so
+      // the old containsKey('id') check was always true and this returned
+      // the caller's id-less invoice — anything using the returned invoice
+      // (PDF, void, share) had no id to work with.
+      savedInvoice = invoice.id != null
           ? invoice
           : Invoice.fromMap({...invoice.toMap(), 'id': invoiceId});
     });
@@ -370,6 +463,7 @@ class InvoiceRepository {
     required String paymentMode,
     double? advanceDepositAmount,
     List<InvoicePaymentAllocation> invoiceAllocations = const [],
+    double? generalCollectionAmount,
   }) async {
     final db = await _db.database;
     await db.transaction((txn) async {
@@ -382,6 +476,24 @@ class InvoiceRepository {
           'invoice_id': null,
           'type': 'advance_deposit',
           'amount': advanceDepositAmount,
+          'payment_mode': paymentMode,
+          'notes': null,
+          'created_at': now,
+          'updated_at': now,
+        });
+      }
+
+      // Collecting against the customer's aggregate outstanding with no
+      // specific invoice behind it — e.g. paying down a "Give Credit" ledger
+      // entry, which has no invoice to allocate against at all (see
+      // CollectPaymentSheet's _generalCollectionCtrl).
+      if (generalCollectionAmount != null && generalCollectionAmount > 0) {
+        await txn.insert('payment_transactions', {
+          'shop_id': shopId,
+          'customer_id': customerId,
+          'invoice_id': null,
+          'type': 'outstanding_collection',
+          'amount': generalCollectionAmount,
           'payment_mode': paymentMode,
           'notes': null,
           'created_at': now,
@@ -419,6 +531,44 @@ class InvoiceRepository {
         {
           'total_outstanding': newOutstanding < 0 ? 0.0 : newOutstanding,
           'advance_balance': newAdvanceBalance < 0 ? 0.0 : newAdvanceBalance,
+          'updated_at': now,
+        },
+        where: 'id = ?',
+        whereArgs: [customerId],
+      );
+    });
+  }
+
+  /// The other half of the customer ledger, mirroring [collectPayment]'s
+  /// atomicity: records a khata-style "You Gave" entry — goods or cash
+  /// given to a customer on credit with no formal invoice (give_credit_
+  /// sheet.dart) — as a 'manual_credit' ledger row and increases the
+  /// customer's outstanding balance, in one transaction.
+  Future<void> giveCredit({
+    required int shopId,
+    required int customerId,
+    required double amount,
+    required double newOutstanding,
+    String? notes,
+  }) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      final now = DateTime.now().toIso8601String();
+      await txn.insert('payment_transactions', {
+        'shop_id': shopId,
+        'customer_id': customerId,
+        'invoice_id': null,
+        'type': 'manual_credit',
+        'amount': amount,
+        'payment_mode': 'adjustment',
+        'notes': notes,
+        'created_at': now,
+        'updated_at': now,
+      });
+      await txn.update(
+        'customers',
+        {
+          'total_outstanding': newOutstanding < 0 ? 0.0 : newOutstanding,
           'updated_at': now,
         },
         where: 'id = ?',
@@ -783,6 +933,23 @@ class InvoiceRepository {
             'invoice_id': invoice.id,
             'type': 'refund',
             'amount': refundToAdvance,
+            'payment_mode': 'adjustment',
+            'notes': note,
+            'created_at': now,
+          });
+        }
+
+        // Matching write-off for the 'invoice_due' row createInvoice() may
+        // have recorded for this bill — keeps the ledger's running balance
+        // correct when a void/return shrinks or clears an unpaid due,
+        // rather than leaving that due looking permanently outstanding.
+        if (outstandingDrop > 0) {
+          await txn.insert('payment_transactions', {
+            'shop_id': invoice.shopId,
+            'customer_id': invoice.customerId,
+            'invoice_id': invoice.id,
+            'type': 'invoice_due_reversal',
+            'amount': outstandingDrop,
             'payment_mode': 'adjustment',
             'notes': note,
             'created_at': now,

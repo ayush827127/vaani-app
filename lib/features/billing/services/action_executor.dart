@@ -1,3 +1,4 @@
+import '../../../core/utils/formatters.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/product.dart';
 import '../providers/billing_providers.dart';
@@ -176,7 +177,7 @@ class ActionExecutor {
           } else {
             cartNotifier.updatePrice(action.productId, action.price);
             messages.add(
-                '${action.productName} price → ₹${action.price.toStringAsFixed(0)}');
+                '${action.productName} price → ${AppFormatters.formatCurrency(action.price)}');
           }
 
         case DiscountAction():
@@ -185,7 +186,7 @@ class ActionExecutor {
           newDiscountValue = action.value;
           final label = action.discountType == 'percent'
               ? '${action.value.toStringAsFixed(0)}%'
-              : '₹${action.value.toStringAsFixed(0)}';
+              : AppFormatters.formatCurrency(action.value);
           messages.add('Discount: $label');
 
         case PaymentModeAction():

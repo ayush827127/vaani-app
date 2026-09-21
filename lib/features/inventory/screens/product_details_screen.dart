@@ -464,7 +464,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         children: [
                           Text(l10n.reorderAt('${p.reorderLevel}'),
                               style: TextStyle(color: c.textHint, fontSize: 12)),
-                          Text(l10n.stockValue('₹${(p.sellingPrice * p.stockQuantity).toStringAsFixed(0)}'),
+                          Text(l10n.stockValue(AppFormatters.formatCurrency(p.sellingPrice * p.stockQuantity)),
                               style: TextStyle(color: c.textHint, fontSize: 12)),
                         ],
                       ),

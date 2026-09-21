@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -16,6 +17,23 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     _database ??= await _initDatabase();
+    return _database!;
+  }
+
+  /// Test-only: opens an in-memory database with the real schema through
+  /// the same onCreate/onConfigure path as production, and makes it the
+  /// shared instance so repositories can be exercised against genuine
+  /// SQLite. The caller must have set `databaseFactory` (e.g. to
+  /// sqflite_common_ffi's) first.
+  @visibleForTesting
+  static Future<Database> openInMemoryForTesting() async {
+    await _database?.close();
+    _database = await openDatabase(
+      inMemoryDatabasePath,
+      version: AppConstants.dbVersion,
+      onCreate: instance._onCreate,
+      onConfigure: instance._onConfigure,
+    );
     return _database!;
   }
 

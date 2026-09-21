@@ -641,6 +641,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get previousDue => 'Previous Due';
 
   @override
+  String get previousDueInfo => 'Unpaid amount from previous bills';
+
+  @override
+  String get receiveAmount => 'Receive Amount';
+
+  @override
+  String get remainingDue => 'Remaining Due';
+
+  @override
   String get advanceBalance => 'Advance Balance';
 
   @override
@@ -652,10 +661,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get advanceApplied => 'Advance Applied';
 
   @override
-  String get netDue => 'Net Due';
+  String get netDue => 'Net Bill';
 
   @override
-  String get oldDuesReduced => 'Old Dues Reduced';
+  String get oldDuesReduced => 'Previous Outstanding Reduced';
 
   @override
   String get addedToAdvance => 'Added to Advance';
@@ -778,8 +787,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count bills',
-      one: '$count bill',
+      other: '$count Bills',
+      one: '1 Bill',
     );
     return '$_temp0';
   }
@@ -905,7 +914,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get totalPurchases => 'Total Purchases';
 
   @override
-  String get totalBusiness => 'Total Business';
+  String get totalBusiness => 'Total Sales';
 
   @override
   String get recentInvoices => 'Recent Invoices';
@@ -928,10 +937,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paymentHistory => 'Payment History';
 
   @override
+  String get ledger => 'Ledger';
+
+  @override
   String get noInvoicesYet => 'No invoices yet';
 
   @override
   String get noPaymentHistoryYet => 'No payment history';
+
+  @override
+  String get noLedgerEntriesYet => 'No ledger entries yet';
 
   @override
   String get billPayment => 'Bill Payment';
@@ -944,6 +959,39 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get advanceDeposit => 'Advance Deposit';
+
+  @override
+  String get billDue => 'Bill Due';
+
+  @override
+  String get billVoided => 'Bill Voided';
+
+  @override
+  String get creditGiven => 'Credit Given';
+
+  @override
+  String get giveCredit => 'Give Credit';
+
+  @override
+  String get giveCreditTo => 'Give credit to';
+
+  @override
+  String get reasonOptional => 'Reason (optional)';
+
+  @override
+  String get reasonHint => 'e.g. goods on credit, cash loan';
+
+  @override
+  String get creditRecorded => 'Credit Recorded!';
+
+  @override
+  String get youGave => 'You Gave';
+
+  @override
+  String get youGot => 'You Got';
+
+  @override
+  String get balance => 'Balance';
 
   @override
   String get poweredByVaani => 'Powered by Vaani';
@@ -1514,8 +1562,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String billsCountLabel(String count) {
-    return '$count bills';
+  String billsCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Bills',
+      one: '1 Bill',
+    );
+    return '$_temp0';
   }
 
   @override

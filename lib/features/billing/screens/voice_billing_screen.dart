@@ -1,3 +1,4 @@
+import '../../../core/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -327,7 +328,7 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
                         RemoveItemAction() => 'Remove ${action.productName}',
                         ClearCartAction() => 'Clear cart',
                         UpdatePriceAction() =>
-                          '${action.productName} → ₹${action.price.toStringAsFixed(0)}',
+                          '${action.productName} → ${AppFormatters.formatCurrency(action.price)}',
                         DiscountAction() =>
                           'Discount: ${action.discountType == "percent" ? "${action.value}%" : "₹${action.value}"}',
                         PaymentModeAction() =>

@@ -23,6 +23,19 @@ class SubscriptionRepository {
 
   SubscriptionRepository(this._api, this._shopRepo);
 
+  /// If this is ever false with no cached [SubscriptionStatus] either, the
+  /// shop is stuck: [refreshStatus] silently no-ops forever without an
+  /// [otpToken] (which only exists right after a fresh login/OTP verify —
+  /// nothing else can safely re-prove identity to the backend), so nothing
+  /// will ever populate the cache in the background. That combination is
+  /// what a permanently-stuck "Checking status…" on the Profile screen
+  /// means — see profile_screen.dart, which checks this to show something
+  /// actionable instead of an endless loading label.
+  Future<bool> hasBackendToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(AppConstants.keyShopBackendToken) != null;
+  }
+
   Future<SubscriptionStatus?> getCachedStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(AppConstants.keySubscriptionStatusJson);

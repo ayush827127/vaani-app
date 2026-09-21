@@ -194,7 +194,15 @@ class DataSyncRepository {
           'defaultGstRate': refreshedShop.defaultGstRate,
           'upiId': refreshedShop.upiId,
           'categories': categories,
-          'logoUrl': logoUrl,
+          // Omitted (not sent as null) when we have nothing to say about it
+          // locally — e.g. right after a fresh login, before a pull has
+          // restored the cached logoUrl and there's no local logoPath file
+          // to upload either. The backend treats an absent key as "leave it
+          // alone" but an explicit null as "clear it" (shop-sync.service.js:
+          // `shopProfile.logoUrl !== undefined`), so sending null here was
+          // wiping an already-uploaded logo on the very next sync after
+          // logging back in — this was a real, confirmed data-loss bug.
+          if (logoUrl != null) 'logoUrl': logoUrl,
         },
         'products': productsWithImages.map(_productJson).toList(),
         'customers': customers.map(_customerJson).toList(),

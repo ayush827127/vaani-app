@@ -12,6 +12,15 @@ class PaymentTransaction {
   // 'refund'             — money already collected for an invoice is handed
   //                        back onto the customer's advance balance after a
   //                        void or return shrinks what's actually owed
+  // 'manual_credit'      — khata-style "You Gave": goods/cash given to the
+  //                        customer on credit with no formal invoice
+  //                        (give_credit_sheet.dart)
+  // 'invoice_due'        — the pending (unpaid) portion of a new invoice,
+  //                        recorded at creation so the customer ledger's
+  //                        running balance can be reconstructed from this
+  //                        table alone, without re-reading every invoice
+  // 'invoice_due_reversal' — write-off of an 'invoice_due' row when a void/
+  //                        return shrinks or clears that due before payment
   final String type;
 
   final double amount;

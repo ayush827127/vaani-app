@@ -1286,6 +1286,24 @@ abstract class AppLocalizations {
   /// **'Previous Due'**
   String get previousDue;
 
+  /// No description provided for @previousDueInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpaid amount from previous bills'**
+  String get previousDueInfo;
+
+  /// No description provided for @receiveAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Receive Amount'**
+  String get receiveAmount;
+
+  /// No description provided for @remainingDue.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining Due'**
+  String get remainingDue;
+
   /// No description provided for @advanceBalance.
   ///
   /// In en, this message translates to:
@@ -1307,13 +1325,13 @@ abstract class AppLocalizations {
   /// No description provided for @netDue.
   ///
   /// In en, this message translates to:
-  /// **'Net Due'**
+  /// **'Net Bill'**
   String get netDue;
 
   /// No description provided for @oldDuesReduced.
   ///
   /// In en, this message translates to:
-  /// **'Old Dues Reduced'**
+  /// **'Previous Outstanding Reduced'**
   String get oldDuesReduced;
 
   /// No description provided for @addedToAdvance.
@@ -1529,7 +1547,7 @@ abstract class AppLocalizations {
   /// No description provided for @billsCount.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{{count} bill} other{{count} bills}}'**
+  /// **'{count, plural, =1{1 Bill} other{{count} Bills}}'**
   String billsCount(int count);
 
   /// No description provided for @billDetail.
@@ -1769,7 +1787,7 @@ abstract class AppLocalizations {
   /// No description provided for @totalBusiness.
   ///
   /// In en, this message translates to:
-  /// **'Total Business'**
+  /// **'Total Sales'**
   String get totalBusiness;
 
   /// No description provided for @recentInvoices.
@@ -1808,6 +1826,12 @@ abstract class AppLocalizations {
   /// **'Payment History'**
   String get paymentHistory;
 
+  /// No description provided for @ledger.
+  ///
+  /// In en, this message translates to:
+  /// **'Ledger'**
+  String get ledger;
+
   /// No description provided for @noInvoicesYet.
   ///
   /// In en, this message translates to:
@@ -1819,6 +1843,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No payment history'**
   String get noPaymentHistoryYet;
+
+  /// No description provided for @noLedgerEntriesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No ledger entries yet'**
+  String get noLedgerEntriesYet;
 
   /// No description provided for @billPayment.
   ///
@@ -1843,6 +1873,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Advance Deposit'**
   String get advanceDeposit;
+
+  /// No description provided for @billDue.
+  ///
+  /// In en, this message translates to:
+  /// **'Bill Due'**
+  String get billDue;
+
+  /// No description provided for @billVoided.
+  ///
+  /// In en, this message translates to:
+  /// **'Bill Voided'**
+  String get billVoided;
+
+  /// No description provided for @creditGiven.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit Given'**
+  String get creditGiven;
+
+  /// No description provided for @giveCredit.
+  ///
+  /// In en, this message translates to:
+  /// **'Give Credit'**
+  String get giveCredit;
+
+  /// No description provided for @giveCreditTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Give credit to'**
+  String get giveCreditTo;
+
+  /// No description provided for @reasonOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason (optional)'**
+  String get reasonOptional;
+
+  /// No description provided for @reasonHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. goods on credit, cash loan'**
+  String get reasonHint;
+
+  /// No description provided for @creditRecorded.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit Recorded!'**
+  String get creditRecorded;
+
+  /// No description provided for @youGave.
+  ///
+  /// In en, this message translates to:
+  /// **'You Gave'**
+  String get youGave;
+
+  /// No description provided for @youGot.
+  ///
+  /// In en, this message translates to:
+  /// **'You Got'**
+  String get youGot;
+
+  /// No description provided for @balance.
+  ///
+  /// In en, this message translates to:
+  /// **'Balance'**
+  String get balance;
 
   /// No description provided for @poweredByVaani.
   ///
@@ -2843,8 +2939,8 @@ abstract class AppLocalizations {
   /// No description provided for @billsCountLabel.
   ///
   /// In en, this message translates to:
-  /// **'{count} bills'**
-  String billsCountLabel(String count);
+  /// **'{count, plural, =1{1 Bill} other{{count} Bills}}'**
+  String billsCountLabel(int count);
 
   /// No description provided for @gstEnabledPercent.
   ///
