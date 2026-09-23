@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/network_error.dart';
 import '../../../core/auth/logout_helper.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/shop.dart';
@@ -17,6 +18,7 @@ import '../repositories/shop_repository.dart';
 import '../../billing/repositories/invoice_repository.dart';
 import '../../settings/providers/theme_provider.dart';
 import '../../settings/providers/locale_provider.dart';
+import '../../subscription/models/subscription_status.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../subscription/repositories/subscription_repository.dart';
 import '../../sync/repositories/data_sync_repository.dart';
@@ -50,6 +52,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // the one condition that makes "Checking status…" permanently stuck
   // rather than transiently loading, and needs its own, different message.
   bool _notLinkedToBackend = false;
+  // True once the live refresh() below has actually finished at least once
+  // (successfully or not) — distinguishes "still checking, first time" from
+  // "we tried and there's still nothing cached", which needs its own
+  // message + retry action instead of "Checking status…" hanging forever
+  // (e.g. shop has a token but the backend has been unreachable every time
+  // this screen has been opened).
+  bool _statusCheckDone = false;
 
   @override
   void initState() {
@@ -74,8 +83,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       // fresh token. Check for it explicitly so the tile can say something
       // true instead of "Checking status…" forever.
       final hasToken = await getIt<SubscriptionRepository>().hasBackendToken();
-      if (mounted) setState(() => _notLinkedToBackend = !hasToken);
+      if (mounted) {
+        setState(() {
+          _notLinkedToBackend = !hasToken;
+          _statusCheckDone = true;
+        });
+      }
     }));
+  }
+
+  Future<void> _retrySubscriptionStatus() async {
+    setState(() => _statusCheckDone = false);
+    await ref.read(subscriptionProvider.notifier).refresh();
+    final hasToken = await getIt<SubscriptionRepository>().hasBackendToken();
+    if (mounted) {
+      setState(() {
+        _notLinkedToBackend = !hasToken;
+        _statusCheckDone = true;
+      });
+    }
   }
 
   Future<void> _load() async {
@@ -114,29 +140,64 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     setState(() => _syncingData = false);
     await _loadSyncStatus();
     if (!mounted) return;
+    // Local data is never at risk here either way — sync is background/
+    // best-effort, so a failure just means this device's changes haven't
+    // reached the cloud yet, not that anything here broke. The friendly
+    // line adapts to what actually went wrong (offline vs. the free-tier
+    // backend waking up vs. something else) instead of one generic guess.
     final message = result.success
         ? 'Synced ${result.totalRecords} record(s) to the cloud'
         : result.sessionExpired
             ? 'Your session expired — log out and log back in to resume cloud sync'
-            : "Couldn't reach the server — will retry automatically";
+            : friendlyNetworkError(result.error ?? Exception('sync failed'));
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(message),
-          if (result.error != null) ...[
+          if (!result.success && !result.sessionExpired && result.error != null) ...[
             const SizedBox(height: 4),
             Text(
-              '${result.error.runtimeType}: ${result.error}'
+              '${technicalErrorDetail(result.error!)}'
               '${result.errorDetail != null ? '\n${result.errorDetail}' : ''}',
-              style: const TextStyle(fontSize: 11),
+              style: const TextStyle(fontSize: 11, color: Colors.white70),
             ),
           ],
         ],
       ),
       backgroundColor: result.success ? AppColors.success : AppColors.error,
+      duration: const Duration(seconds: 8),
     ));
+  }
+
+  // The tile used to key off `status?.planName`, which is null for the
+  // (very common) case of a shop on the free default plan with no paid
+  // subscription record — that's a legitimate, successfully-fetched status,
+  // not "still checking". Keying off `status == null` instead is what
+  // actually distinguishes "we have no idea yet" from "we know, and it's
+  // free" — see the matching bug this fixes in _subscriptionSubtitle below.
+  String _subscriptionTitle(SubscriptionStatus? status) {
+    if (status != null) return status.effectivePlanName ?? status.planName ?? 'Basic';
+    if (_notLinkedToBackend) return 'Not connected';
+    if (_statusCheckDone) return 'Unable to check status';
+    return 'Subscription';
+  }
+
+  String _subscriptionSubtitle(SubscriptionStatus? status) {
+    if (status != null) {
+      final raw = status.subscriptionStatus ?? status.shopStatus;
+      final label = raw.isEmpty
+          ? 'Active'
+          : raw[0].toUpperCase() + raw.substring(1).toLowerCase();
+      return label;
+    }
+    if (_notLinkedToBackend) return 'Log out and log back in to reconnect';
+    // _statusCheckDone but still no cached status at all (token exists, the
+    // backend has just never been reachable yet) — an honest dead end with
+    // a retry, not an infinite "Checking status…".
+    if (_statusCheckDone) return 'No internet connection — tap to retry';
+    return 'Checking status…';
   }
 
   String _syncSubtitle() {
@@ -395,16 +456,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     // Subscription
                     _SettingsCard(children: [
                       const _SectionHeader('Subscription'),
-                      _SettingsTile(
-                        icon: Icons.workspace_premium_rounded,
-                        title: ref.watch(subscriptionProvider)?.planName ??
-                            (_notLinkedToBackend ? 'Not connected' : 'Free trial'),
-                        subtitle: ref.watch(subscriptionProvider)?.subscriptionStatus ??
-                            (_notLinkedToBackend
-                                ? 'Log out and log back in to reconnect'
-                                : 'Checking status…'),
-                        onTap: () => context.push('/profile/subscription'),
-                      ),
+                      Builder(builder: (context) {
+                        final status = ref.watch(subscriptionProvider);
+                        // We tried, there's a token, and still nothing cached
+                        // — almost certainly offline/unreachable rather than
+                        // "still loading". Retry in place instead of pushing
+                        // into the subscription screen, which would otherwise
+                        // just show its own separate loading spinner for the
+                        // same reason.
+                        final canRetryInPlace =
+                            status == null && !_notLinkedToBackend && _statusCheckDone;
+                        return _SettingsTile(
+                          icon: Icons.workspace_premium_rounded,
+                          title: _subscriptionTitle(status),
+                          subtitle: _subscriptionSubtitle(status),
+                          onTap: canRetryInPlace
+                              ? _retrySubscriptionStatus
+                              : () => context.push('/profile/subscription').then((_) => _load()),
+                        );
+                      }),
                     ]),
                     const SizedBox(height: 12),
 

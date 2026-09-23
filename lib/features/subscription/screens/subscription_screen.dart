@@ -1,4 +1,5 @@
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/network_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,6 +35,7 @@ class SubscriptionScreen extends ConsumerStatefulWidget {
 class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   bool _loading = true;
   String? _loadError;
+  String? _loadErrorDetail;
   List<Plan> _plans = [];
   List<PaymentClaim> _claims = [];
   VoiceUsage? _voiceUsage;
@@ -53,6 +55,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     setState(() {
       _loading = true;
       _loadError = null;
+      _loadErrorDetail = null;
     });
     final repo = getIt<SubscriptionRepository>();
     try {
@@ -76,7 +79,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _loadError = '$e';
+        _loadError = friendlyNetworkError(e);
+        _loadErrorDetail = technicalErrorDetail(e);
         _loading = false;
       });
     }
@@ -100,7 +104,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('$e'),
+        content: Text(friendlyNetworkError(e)),
         backgroundColor: AppColors.error,
       ));
     } finally {
@@ -225,7 +229,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('$e'),
+        content: Text(friendlyNetworkError(e)),
         backgroundColor: AppColors.error,
       ));
     } finally {
@@ -257,7 +261,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primaryLight))
           : _loadError != null
-              ? _ErrorState(message: _loadError!, onRetry: _load)
+              ? _ErrorState(message: _loadError!, detail: _loadErrorDetail, onRetry: _load)
               : RefreshIndicator(
                   onRefresh: _load,
                   color: AppColors.primaryLight,
@@ -540,8 +544,9 @@ class _PlanCard extends StatelessWidget {
 
 class _ErrorState extends StatelessWidget {
   final String message;
+  final String? detail;
   final VoidCallback onRetry;
-  const _ErrorState({required this.message, required this.onRetry});
+  const _ErrorState({required this.message, this.detail, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -558,6 +563,12 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 4),
             Text(message,
                 textAlign: TextAlign.center, style: TextStyle(color: c.textSecondary, fontSize: 12)),
+            if (detail != null) ...[
+              const SizedBox(height: 4),
+              Text(detail!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: c.textHint, fontSize: 10.5)),
+            ],
             const SizedBox(height: 16),
             ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
           ],

@@ -1,4 +1,5 @@
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/network_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -124,9 +125,13 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
       result = await _voiceParser!.parse(input, ctx);
     } catch (e, st) {
       debugPrint('[VoiceScreen] parse() threw: $e\n$st');
+      // A mid-conversation connection drop lands here (parse() calls the AI
+      // backend) — friendlyNetworkError turns that into "check your
+      // connection" instead of a raw SocketException/TimeoutException the
+      // shopkeeper has no way to act on.
       result = VoiceParseResult(
         actions: [],
-        failureReason: '[unexpected] ${e.runtimeType}: $e',
+        failureReason: '[unexpected] ${friendlyNetworkError(e)}',
       );
     }
 
