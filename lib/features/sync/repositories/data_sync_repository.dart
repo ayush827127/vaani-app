@@ -181,6 +181,7 @@ class DataSyncRepository {
       // sync. Only uploads images that haven't been uploaded yet (imageUrl
       // null); already-uploaded ones are skipped.
       final productsWithImages = await _withUploadedProductImages(products);
+      final customersWithImages = await _withUploadedCustomerImages(customers);
       final logoUrl = await _withUploadedShopLogo(refreshedShop);
 
       final payload = {
@@ -205,7 +206,7 @@ class DataSyncRepository {
           if (logoUrl != null) 'logoUrl': logoUrl,
         },
         'products': productsWithImages.map(_productJson).toList(),
-        'customers': customers.map(_customerJson).toList(),
+        'customers': customersWithImages.map(_customerJson).toList(),
         'invoices': invoices.map(_invoiceJson).toList(),
         'inventoryTransactions': inventoryTx.map(_inventoryTransactionJson).toList(),
         'paymentTransactions': paymentTx.map(_paymentTransactionJson).toList(),
@@ -266,6 +267,32 @@ class DataSyncRepository {
         }
       }
       result.add(p);
+    }
+    return result;
+  }
+
+  /// Uploads any customer photo that hasn't made it to Cloudinary yet
+  /// (imageUrl still null locally) and persists the result, so future syncs
+  /// skip it — the counterpart of [_withUploadedProductImages] that this
+  /// customer photo previously had none of, which is why a customer's photo
+  /// never survived a reinstall (it only ever lived in local file storage).
+  Future<List<Customer>> _withUploadedCustomerImages(List<Customer> customers) async {
+    if (!_cloudinary.isConfigured) return customers;
+    final result = <Customer>[];
+    for (final cust in customers) {
+      if (cust.imageUrl == null &&
+          cust.imagePath != null &&
+          cust.imagePath!.isNotEmpty &&
+          cust.id != null &&
+          await File(cust.imagePath!).exists()) {
+        final url = await _cloudinary.uploadImage(cust.imagePath!);
+        if (url != null) {
+          await _customerRepo.setImageUrl(cust.id!, url);
+          result.add(cust.copyWith(imageUrl: url));
+          continue;
+        }
+      }
+      result.add(cust);
     }
     return result;
   }
@@ -500,6 +527,7 @@ class DataSyncRepository {
       totalOutstanding: (json['totalOutstanding'] as num).toDouble(),
       advanceBalance: (json['advanceBalance'] as num).toDouble(),
       lastVisit: json['lastVisit'] != null ? DateTime.parse(json['lastVisit'] as String) : null,
+      imageUrl: json['imageUrl'] as String?,
       deletedAt: json['deletedAt'] != null ? DateTime.parse(json['deletedAt'] as String) : null,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
@@ -596,6 +624,7 @@ class DataSyncRepository {
         'totalOutstanding': c.totalOutstanding,
         'advanceBalance': c.advanceBalance,
         'lastVisit': c.lastVisit?.toIso8601String(),
+        'imageUrl': c.imageUrl,
         'createdAt': c.createdAt.toIso8601String(),
         'updatedAt': c.updatedAt.toIso8601String(),
       };

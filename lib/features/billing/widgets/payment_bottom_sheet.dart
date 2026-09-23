@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
@@ -20,6 +19,7 @@ import '../../../shared/models/cart_item.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/models/invoice.dart';
 import '../../../shared/models/shop.dart';
+import '../../../shared/widgets/shop_logo_image.dart';
 import '../../../shared/widgets/customer_avatar.dart';
 import '../../auth/repositories/shop_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
@@ -482,12 +482,10 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
 
     // ── Shop logo ─────────────────────────────────────────────────────────────
     pw.MemoryImage? shopLogoImage;
-    final logoPath = _shop?.logoPath;
-    if (logoPath != null && logoPath.isNotEmpty) {
-      final logoFile = File(logoPath);
-      if (await logoFile.exists()) {
-        shopLogoImage = pw.MemoryImage(await logoFile.readAsBytes());
-      }
+    final logoBytes =
+        await fetchShopLogoBytes(logoPath: _shop?.logoPath, logoUrl: _shop?.logoUrl);
+    if (logoBytes != null) {
+      shopLogoImage = pw.MemoryImage(logoBytes);
     }
 
     // ── UPI QR ────────────────────────────────────────────────────────────────

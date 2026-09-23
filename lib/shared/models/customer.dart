@@ -11,6 +11,11 @@ class Customer {
   final double advanceBalance;
   final DateTime? lastVisit;
   final String? imagePath;
+  // Cloudinary URL cloud sync uploads imagePath to, mirroring Product's
+  // imagePath/imageUrl pair — what makes a customer's photo survive a
+  // reinstall (imagePath is a local file path only, wiped along with the
+  // app's storage) instead of being lost with no way back.
+  final String? imageUrl;
   final DateTime? deletedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -28,13 +33,16 @@ class Customer {
     this.advanceBalance = 0,
     this.lastVisit,
     this.imagePath,
+    this.imageUrl,
     this.deletedAt,
     required this.createdAt,
     required this.updatedAt,
   });
 
-  // deleted_at is deliberately excluded — see the matching note on
-  // Product.toMap(). It's written only by CustomerRepository.upsertFromCloud().
+  // deleted_at and image_url are deliberately excluded — see the matching
+  // note on Product.toMap(). image_url is written only by
+  // CustomerRepository.setImageUrl()/upsertFromCloud(); deleted_at only by
+  // upsertFromCloud().
   Map<String, dynamic> toMap() => {
         'id': id,
         'shop_id': shopId,
@@ -65,6 +73,7 @@ class Customer {
         advanceBalance: (map['advance_balance'] as num?)?.toDouble() ?? 0,
         lastVisit: map['last_visit'] != null ? DateTime.parse(map['last_visit'] as String) : null,
         imagePath: map['image_path'] as String?,
+        imageUrl: map['image_url'] as String?,
         deletedAt: map['deleted_at'] != null ? DateTime.parse(map['deleted_at'] as String) : null,
         createdAt: DateTime.parse(map['created_at'] as String),
         updatedAt: DateTime.parse(map['updated_at'] as String),
@@ -81,6 +90,7 @@ class Customer {
     double? advanceBalance,
     DateTime? lastVisit,
     String? imagePath,
+    String? imageUrl,
   }) =>
       Customer(
         id: id,
@@ -95,6 +105,7 @@ class Customer {
         advanceBalance: advanceBalance ?? this.advanceBalance,
         lastVisit: lastVisit ?? this.lastVisit,
         imagePath: imagePath ?? this.imagePath,
+        imageUrl: imageUrl ?? this.imageUrl,
         createdAt: createdAt,
         updatedAt: DateTime.now(),
       );

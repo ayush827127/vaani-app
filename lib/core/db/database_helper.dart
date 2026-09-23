@@ -170,6 +170,13 @@ class DatabaseHelper {
       await db.execute(
           'ALTER TABLE invoices ADD COLUMN is_voice_created INTEGER NOT NULL DEFAULT 0');
     }
+    if (oldVersion < 13) {
+      // Customer photo now has a cloud counterpart, same pair as products'
+      // image_path/image_url — this is the fix for a customer's photo
+      // vanishing after a reinstall (v11's image_path alone is a local file
+      // path, wiped along with the app's storage; nothing backed it up).
+      await db.execute('ALTER TABLE customers ADD COLUMN image_url TEXT');
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -238,6 +245,7 @@ class DatabaseHelper {
         advance_balance REAL NOT NULL DEFAULT 0,
         last_visit TEXT,
         image_path TEXT,
+        image_url TEXT,
         deleted_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,

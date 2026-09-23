@@ -1,7 +1,7 @@
 class AppConstants {
   static const String appName = 'Vaani';
   static const String dbName = 'vaani.db';
-  static const int dbVersion = 12;
+  static const int dbVersion = 13;
 
   // Must match BASIC_VOICE_INVOICE_LIMIT in the backend's
   // src/utils/voiceQuota.js — this is only the *local, offline* gate for

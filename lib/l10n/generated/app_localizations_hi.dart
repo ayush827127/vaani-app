@@ -633,6 +633,75 @@ class AppLocalizationsHi extends AppLocalizations {
   String get customerFilterInactive => 'निष्क्रिय';
 
   @override
+  String get customersSubtitle => 'अपना ग्राहक खाता प्रबंधित करें';
+
+  @override
+  String get totalDueLabel => 'कुल बाकी';
+
+  @override
+  String get totalAdvanceLabel => 'कुल अग्रिम';
+
+  @override
+  String customersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ग्राहक',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get searchNameOrPhoneHint => 'नाम या फ़ोन नंबर से खोजें...';
+
+  @override
+  String get ledgerFilterWithDue => 'बाकी वाले';
+
+  @override
+  String get ledgerFilterWithAdvance => 'अग्रिम वाले';
+
+  @override
+  String get ledgerFilterSettled => 'चुकता';
+
+  @override
+  String get sortRecent => 'हाल के';
+
+  @override
+  String get sortOldest => 'पुराने';
+
+  @override
+  String get sortHighestDue => 'सबसे ज़्यादा बाकी';
+
+  @override
+  String get sortHighestAdvance => 'सबसे ज़्यादा अग्रिम';
+
+  @override
+  String get sortLabel => 'क्रम';
+
+  @override
+  String allCustomersHeading(int count) {
+    return 'सभी ग्राहक ($count)';
+  }
+
+  @override
+  String get advanceLabel => 'अग्रिम';
+
+  @override
+  String get addLabel => 'जोड़ें';
+
+  @override
+  String get noCustomersFound => 'कोई ग्राहक नहीं मिला';
+
+  @override
+  String get billsSubtitle => 'अपने बिल देखें और प्रबंधित करें';
+
+  @override
+  String get thisMonth => 'इस महीने';
+
+  @override
+  String get resetFilters => 'फ़िल्टर रीसेट करें';
+
+  @override
   String get noPurchasesYet => 'अभी तक कोई खरीदारी नहीं';
 
   @override
@@ -740,9 +809,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get searchCustomerHint => 'ग्राहक खोजें...';
-
-  @override
-  String get noCustomersFound => 'कोई ग्राहक नहीं मिला';
 
   @override
   String dueAmount(String amount) {

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,29 +7,13 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/widgets/customer_avatar.dart';
+import '../customer_ledger.dart';
 import '../repositories/customer_repository.dart';
 import '../../../l10n/l10n_extensions.dart';
 
-/// Categorizes a customer for the filter tabs — purely a display-time
-/// computation over fields the app already tracks (totalBills, createdAt,
-/// lastVisit), no new data or business logic. A customer falls into exactly
-/// one bucket so the tab counts stay intuitive: a lapsed repeat customer
-/// reads as "Inactive" (the more actionable signal) rather than "Regular".
-enum _CustomerCategory { regular, newCustomer, inactive, none }
-
-_CustomerCategory _categorize(Customer c) {
-  final now = DateTime.now();
-  final daysSinceVisit = c.lastVisit != null ? now.difference(c.lastVisit!).inDays : null;
-  final daysSinceCreated = now.difference(c.createdAt).inDays;
-
-  if (c.totalBills > 0 && (daysSinceVisit == null || daysSinceVisit > 60)) {
-    return _CustomerCategory.inactive;
-  }
-  if (daysSinceCreated <= 30) return _CustomerCategory.newCustomer;
-  if (c.totalBills >= 2) return _CustomerCategory.regular;
-  return _CustomerCategory.none;
-}
-
+/// Customers as a ledger: who owes money, who has credit with us, and a fast
+/// way into each account. Search, filter and sort all run over the loaded
+/// list in memory, so every keystroke or tap updates instantly.
 class CustomerListScreen extends StatefulWidget {
   const CustomerListScreen({super.key});
 
@@ -39,12 +22,14 @@ class CustomerListScreen extends StatefulWidget {
 }
 
 class _CustomerListScreenState extends State<CustomerListScreen> {
-  List<Customer> _customers = [];
+  List<Customer> _all = [];
   bool _isLoading = true;
   int _shopId = 1;
   final _searchCtrl = TextEditingController();
-  Timer? _searchDebounce;
-  _CustomerCategory? _categoryFilter; // null = All
+  final _searchFocus = FocusNode();
+  String _query = '';
+  LedgerFilter _filter = LedgerFilter.all;
+  LedgerSort _sort = LedgerSort.recent;
 
   @override
   void initState() {
@@ -53,41 +38,68 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _isLoading = true);
     final prefs = await SharedPreferences.getInstance();
     _shopId = prefs.getInt(AppConstants.keyShopId) ?? 1;
-    final repo = getIt<CustomerRepository>();
-    final customers = await repo.getAllCustomers(_shopId);
+    final customers = await getIt<CustomerRepository>().getAllCustomers(_shopId);
+    if (!mounted) return;
     setState(() {
-      _customers = customers;
+      _all = customers;
       _isLoading = false;
     });
   }
 
-  // Was firing a full DB query on every keystroke — debounced so a query
-  // only runs once typing pauses.
-  void _search(String q) {
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 300), () => _runSearch(q));
-  }
-
-  Future<void> _runSearch(String q) async {
-    if (q.trim().isEmpty) {
-      _load();
-      return;
+  String _sortLabel(LedgerSort s) {
+    final l10n = context.l10n;
+    switch (s) {
+      case LedgerSort.recent:
+        return l10n.sortRecent;
+      case LedgerSort.oldest:
+        return l10n.sortOldest;
+      case LedgerSort.highestDue:
+        return l10n.sortHighestDue;
+      case LedgerSort.highestAdvance:
+        return l10n.sortHighestAdvance;
+      case LedgerSort.nameAZ:
+        return l10n.sortNameAZ;
     }
-    final repo = getIt<CustomerRepository>();
-    final results = await repo.searchCustomers(_shopId, q);
-    if (mounted) setState(() => _customers = results);
   }
 
-  List<Customer> get _visibleCustomers => _categoryFilter == null
-      ? _customers
-      : _customers.where((c) => _categorize(c) == _categoryFilter).toList();
+  String _filterLabel(LedgerFilter f) {
+    final l10n = context.l10n;
+    switch (f) {
+      case LedgerFilter.all:
+        return l10n.all;
+      case LedgerFilter.withDue:
+        return l10n.ledgerFilterWithDue;
+      case LedgerFilter.withAdvance:
+        return l10n.ledgerFilterWithAdvance;
+      case LedgerFilter.settled:
+        return l10n.ledgerFilterSettled;
+    }
+  }
 
-  int _countFor(_CustomerCategory? category) => category == null
-      ? _customers.length
-      : _customers.where((c) => _categorize(c) == category).length;
+  List<PopupMenuEntry<LedgerSort>> _sortItems(BuildContext context) {
+    final c = context.colors;
+    return [
+      for (final s in LedgerSort.values)
+        PopupMenuItem<LedgerSort>(
+          value: s,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(_sortLabel(s),
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: s == _sort ? FontWeight.w700 : FontWeight.w400,
+                        color: s == _sort ? AppColors.primaryLight : c.textPrimary)),
+              ),
+              if (s == _sort)
+                const Icon(Icons.check_rounded, size: 18, color: AppColors.primaryLight),
+            ],
+          ),
+        ),
+    ];
+  }
 
   void _showAddCustomer() {
     final nameCtrl = TextEditingController();
@@ -161,8 +173,8 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
     _searchCtrl.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -170,39 +182,144 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
-    final visible = _visibleCustomers;
+    final summary = summarize(_all);
+    final visible = applyLedgerView(_all, query: _query, filter: _filter, sort: _sort);
+    int countFor(LedgerFilter f) => _all.where((x) => matchesFilter(x, f)).length;
 
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 64,
+        titleSpacing: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_rounded),
           onPressed: () => context.go('/home'),
         ),
-        title: Text(l10n.customers),
+        title: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.groups_rounded, size: 19, color: AppColors.primaryLight),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(l10n.customers,
+                      style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: c.textPrimary)),
+                  Text(l10n.customersSubtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11.5, color: c.textSecondary)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search_rounded),
+            tooltip: l10n.search,
+            onPressed: () => _searchFocus.requestFocus(),
+          ),
+          PopupMenuButton<LedgerSort>(
+            icon: const Icon(Icons.tune_rounded),
+            tooltip: l10n.sortLabel,
+            onSelected: (s) => setState(() => _sort = s),
+            itemBuilder: _sortItems,
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddCustomer,
         backgroundColor: AppColors.primary,
-        child: const Icon(Icons.person_add_rounded),
+        foregroundColor: Colors.white,
+        shape: const CircleBorder(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.add_rounded, size: 24),
+            Text(l10n.addLabel,
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, height: 1)),
+          ],
+        ),
       ),
       body: Column(
         children: [
+          // Key ledger figures, computed over every customer (not just the
+          // ones currently searched/filtered) — tapping one jumps to that
+          // group.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _MetricCard(
+                      amount: AppFormatters.formatCurrency(summary.totalDue),
+                      label: l10n.totalDueLabel,
+                      secondary: l10n.customersCount(summary.dueCount),
+                      color: c.danger,
+                      icon: Icons.arrow_upward_rounded,
+                      onTap: () => setState(() => _filter = LedgerFilter.withDue),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _MetricCard(
+                      amount: AppFormatters.formatCurrency(summary.totalAdvance),
+                      label: l10n.totalAdvanceLabel,
+                      secondary: l10n.customersCount(summary.advanceCount),
+                      color: c.success,
+                      icon: Icons.arrow_downward_rounded,
+                      onTap: () => setState(() => _filter = LedgerFilter.withAdvance),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: TextField(
               controller: _searchCtrl,
-              onChanged: _search,
+              focusNode: _searchFocus,
+              onChanged: (v) => setState(() => _query = v),
               style: TextStyle(color: c.textPrimary),
               decoration: InputDecoration(
-                hintText: l10n.searchCustomersHint,
+                hintText: l10n.searchNameOrPhoneHint,
                 hintStyle: TextStyle(color: c.textHint),
                 prefixIcon: Icon(Icons.search_rounded, color: c.textHint),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: Icon(Icons.close_rounded, color: c.textHint, size: 20),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() => _query = '');
+                        },
+                      ),
                 filled: true,
                 fillColor: c.surface,
                 border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide(color: c.inputBorder)),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: c.inputBorder)),
+                contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
               ),
             ),
           ),
@@ -213,37 +330,55 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
-                _FilterChip(
-                  label: l10n.customerFilterAll,
-                  count: _countFor(null),
-                  active: _categoryFilter == null,
-                  onTap: () => setState(() => _categoryFilter = null),
+                for (final f in LedgerFilter.values) ...[
+                  _FilterChip(
+                    label: '${_filterLabel(f)} (${countFor(f)})',
+                    active: _filter == f,
+                    onTap: () => setState(() => _filter = f),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 2),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _filter == LedgerFilter.all
+                        ? l10n.allCustomersHeading(visible.length)
+                        : '${_filterLabel(_filter)} (${visible.length})',
+                    style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: c.textPrimary),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: l10n.customerFilterRegular,
-                  count: _countFor(_CustomerCategory.regular),
-                  active: _categoryFilter == _CustomerCategory.regular,
-                  onTap: () => setState(() => _categoryFilter = _CustomerCategory.regular),
-                ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: l10n.customerFilterNew,
-                  count: _countFor(_CustomerCategory.newCustomer),
-                  active: _categoryFilter == _CustomerCategory.newCustomer,
-                  onTap: () => setState(() => _categoryFilter = _CustomerCategory.newCustomer),
-                ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: l10n.customerFilterInactive,
-                  count: _countFor(_CustomerCategory.inactive),
-                  active: _categoryFilter == _CustomerCategory.inactive,
-                  onTap: () => setState(() => _categoryFilter = _CustomerCategory.inactive),
+                PopupMenuButton<LedgerSort>(
+                  onSelected: (s) => setState(() => _sort = s),
+                  itemBuilder: _sortItems,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_sortLabel(_sort),
+                            style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primaryLight)),
+                        const Icon(Icons.arrow_drop_down_rounded,
+                            size: 20, color: AppColors.primaryLight),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: AppColors.primaryLight))
@@ -252,14 +387,14 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.people_outline_rounded, size: 64, color: context.colors.textSecondary),
-                            const SizedBox(height: 16),
+                            Icon(Icons.people_outline_rounded, size: 60, color: c.textHint),
+                            const SizedBox(height: 14),
                             Text(
-                              _categoryFilter != null ? l10n.noMatchingBills : l10n.noCustomersYet,
-                              style: TextStyle(color: context.colors.textSecondary),
+                              _all.isEmpty ? l10n.noCustomersYet : l10n.noCustomersFound,
+                              style: TextStyle(color: c.textSecondary),
                             ),
-                            if (_categoryFilter == null) ...[
-                              const SizedBox(height: 24),
+                            if (_all.isEmpty) ...[
+                              const SizedBox(height: 20),
                               ElevatedButton.icon(
                                 onPressed: _showAddCustomer,
                                 icon: const Icon(Icons.person_add_rounded),
@@ -272,10 +407,15 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                     : RefreshIndicator(
                         onRefresh: _load,
                         child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+                          // Bottom padding keeps the last card clear of the
+                          // floating Add button.
+                          padding: const EdgeInsets.fromLTRB(16, 6, 16, 96),
                           itemCount: visible.length,
                           separatorBuilder: (_, __) => const SizedBox(height: 10),
-                          itemBuilder: (_, i) => _CustomerCard(customer: visible[i]),
+                          itemBuilder: (_, i) => _CustomerCard(
+                            customer: visible[i],
+                            onReturn: _load,
+                          ),
                         ),
                       ),
           ),
@@ -285,12 +425,86 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   }
 }
 
+class _MetricCard extends StatelessWidget {
+  final String amount;
+  final String label;
+  final String secondary;
+  final Color color;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _MetricCard({
+    required this.amount,
+    required this.label,
+    required this.secondary,
+    required this.color,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: 0.22)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 16, color: color),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(amount,
+                          style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: color)),
+                    ),
+                    Text(label,
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                    Text(secondary,
+                        style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FilterChip extends StatelessWidget {
   final String label;
-  final int count;
   final bool active;
   final VoidCallback onTap;
-  const _FilterChip({required this.label, required this.count, required this.active, required this.onTap});
+  const _FilterChip({required this.label, required this.active, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -300,28 +514,18 @@ class _FilterChip extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: active ? AppColors.primaryLight : c.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: active ? AppColors.primaryLight : c.inputBorder),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: active ? Colors.white : c.textSecondary),
-            ),
-            const SizedBox(width: 5),
-            Text(
-              '$count',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: active ? Colors.white.withValues(alpha: 0.8) : c.textHint),
-            ),
-          ],
+        child: Text(
+          label,
+          style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: active ? Colors.white : c.textPrimary),
         ),
       ),
     );
@@ -330,120 +534,138 @@ class _FilterChip extends StatelessWidget {
 
 class _CustomerCard extends StatelessWidget {
   final Customer customer;
-  const _CustomerCard({required this.customer});
-
-  (Color, String)? _categoryBadge(BuildContext context) {
-    final c = context.colors;
-    final l10n = context.l10n;
-    switch (_categorize(customer)) {
-      case _CustomerCategory.regular:
-        return (AppColors.primaryLight, l10n.customerFilterRegular);
-      case _CustomerCategory.newCustomer:
-        return (c.success, l10n.customerFilterNew);
-      case _CustomerCategory.inactive:
-        return (c.warning, l10n.customerFilterInactive);
-      case _CustomerCategory.none:
-        return null;
-    }
-  }
-
-  String _lastBillLabel(BuildContext context) {
-    final l10n = context.l10n;
-    if (customer.lastVisit == null) return l10n.noPurchasesYet;
-    return l10n.lastVisit(AppFormatters.formatDate(customer.lastVisit!));
-  }
+  final VoidCallback onReturn;
+  const _CustomerCard({required this.customer, required this.onReturn});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
-    final badge = _categoryBadge(context);
+    final net = netBalance(customer);
+    final recent = customer.lastVisit != null &&
+        DateTime.now().difference(customer.lastVisit!).inDays <= 30;
 
-    return InkWell(
-      onTap: () => context.push('/customers/${customer.id}'),
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(14),
+    // ONE balance per customer, netted — and nothing at all when settled
+    // (Settled exists only as a filter, never as a badge).
+    Widget? balance;
+    if (net != 0) {
+      final isDue = net > 0;
+      final color = isDue ? c.danger : c.success;
+      balance = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: c.surfaceBorder),
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(10),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            CustomerAvatar(customer: customer, size: 46, color: AppColors.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(customer.name,
-                            style: TextStyle(color: c.textPrimary, fontSize: 14.5, fontWeight: FontWeight.w600),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      if (badge != null) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: badge.$1.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(badge.$2,
-                              style: TextStyle(
-                                  color: badge.$1, fontSize: 10, fontWeight: FontWeight.w700)),
+            Text(
+              '${isDue ? '↑' : '↓'} ${AppFormatters.formatCurrency(net.abs())}',
+              style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            Text(isDue ? l10n.due : l10n.advanceLabel,
+                style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w500)),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.surfaceBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.035),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () async {
+            await context.push('/customers/${customer.id}');
+            onReturn();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            child: Row(
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    CustomerAvatar(customer: customer, size: 44, color: AppColors.primary),
+                    Positioned(
+                      right: -1,
+                      bottom: -1,
+                      child: Container(
+                        width: 11,
+                        height: 11,
+                        decoration: BoxDecoration(
+                          color: recent ? c.success : c.textHint,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: c.surface, width: 2),
                         ),
-                      ],
-                    ],
-                  ),
-                  if (customer.phone != null) ...[
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        Icon(Icons.phone_rounded, size: 12, color: c.textSecondary),
-                        const SizedBox(width: 4),
-                        Text(customer.phone!, style: TextStyle(color: c.textSecondary, fontSize: 12)),
-                      ],
+                      ),
                     ),
                   ],
-                  const SizedBox(height: 4),
-                  Text(_lastBillLabel(context),
-                      style: TextStyle(color: c.textHint, fontSize: 11)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  AppFormatters.formatCurrencyCompact(customer.totalPurchases),
-                  style: const TextStyle(color: AppColors.primaryLight, fontWeight: FontWeight.bold, fontSize: 14),
                 ),
-                Text(l10n.billsCountLabel(customer.totalBills),
-                    style: TextStyle(color: c.textSecondary, fontSize: 11)),
-                if (customer.totalOutstanding > 0) ...[
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: c.danger.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '${l10n.outstanding} ${AppFormatters.formatCurrency(customer.totalOutstanding)}',
-                      style: TextStyle(color: c.danger, fontSize: 10, fontWeight: FontWeight.w600),
-                    ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(customer.name,
+                          style: TextStyle(
+                              color: c.textPrimary, fontSize: 14.5, fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      if (customer.phone != null && customer.phone!.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Icon(Icons.phone_rounded, size: 12, color: c.textHint),
+                            const SizedBox(width: 5),
+                            Text(customer.phone!,
+                                style: TextStyle(color: c.textSecondary, fontSize: 12)),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(Icons.calendar_today_rounded, size: 12, color: c.textHint),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              customer.lastVisit != null
+                                  ? AppFormatters.formatDate(customer.lastVisit!)
+                                  : l10n.noPurchasesYet,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(color: c.textSecondary, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
+                ),
+                if (balance != null) ...[
+                  const SizedBox(width: 8),
+                  balance,
                 ],
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right_rounded, size: 22, color: c.textHint),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );

@@ -635,6 +635,76 @@ class AppLocalizationsEn extends AppLocalizations {
   String get customerFilterInactive => 'Inactive';
 
   @override
+  String get customersSubtitle => 'Manage your customer ledger';
+
+  @override
+  String get totalDueLabel => 'Total Due';
+
+  @override
+  String get totalAdvanceLabel => 'Total Advance';
+
+  @override
+  String customersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count customers',
+      one: '1 customer',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get searchNameOrPhoneHint => 'Search by name or phone number...';
+
+  @override
+  String get ledgerFilterWithDue => 'With Due';
+
+  @override
+  String get ledgerFilterWithAdvance => 'With Advance';
+
+  @override
+  String get ledgerFilterSettled => 'Settled';
+
+  @override
+  String get sortRecent => 'Recent';
+
+  @override
+  String get sortOldest => 'Oldest';
+
+  @override
+  String get sortHighestDue => 'Highest Due';
+
+  @override
+  String get sortHighestAdvance => 'Highest Advance';
+
+  @override
+  String get sortLabel => 'Sort';
+
+  @override
+  String allCustomersHeading(int count) {
+    return 'All Customers ($count)';
+  }
+
+  @override
+  String get advanceLabel => 'Advance';
+
+  @override
+  String get addLabel => 'Add';
+
+  @override
+  String get noCustomersFound => 'No customers found';
+
+  @override
+  String get billsSubtitle => 'View and manage your bills';
+
+  @override
+  String get thisMonth => 'This Month';
+
+  @override
+  String get resetFilters => 'Reset filters';
+
+  @override
   String get noPurchasesYet => 'No purchases yet';
 
   @override
@@ -742,9 +812,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchCustomerHint => 'Search customer...';
-
-  @override
-  String get noCustomersFound => 'No customers found';
 
   @override
   String dueAmount(String amount) {

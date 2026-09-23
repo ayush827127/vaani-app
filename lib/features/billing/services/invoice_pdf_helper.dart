@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/models/shop.dart';
+import '../../../shared/widgets/shop_logo_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/di/injector.dart';
 import '../repositories/invoice_repository.dart';
@@ -100,12 +101,10 @@ class InvoicePdfHelper {
     } catch (_) {}
 
     pw.MemoryImage? shopLogoImage;
-    final logoPath = shop?.logoPath;
-    if (logoPath != null && logoPath.isNotEmpty) {
-      final f = File(logoPath);
-      if (await f.exists()) {
-        shopLogoImage = pw.MemoryImage(await f.readAsBytes());
-      }
+    final logoBytes =
+        await fetchShopLogoBytes(logoPath: shop?.logoPath, logoUrl: shop?.logoUrl);
+    if (logoBytes != null) {
+      shopLogoImage = pw.MemoryImage(logoBytes);
     }
 
     pw.MemoryImage? qrImage;

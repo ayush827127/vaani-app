@@ -228,38 +228,54 @@ class _EditCustomerScreenState extends State<EditCustomerScreen> {
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Container(
-                      width: 96,
-                      height: 96,
-                      decoration: BoxDecoration(
-                        color: c.surface,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: _imagePath != null
-                              ? AppColors.primaryLight
-                              : c.surfaceBorder,
-                          width: _imagePath != null ? 2 : 1,
+                    Builder(builder: (context) {
+                      // Falls back to the Cloudinary URL synced from the
+                      // cloud when there's no local file — e.g. right after
+                      // a reinstall, before this customer's photo has been
+                      // re-picked on this device.
+                      final hasLocal = _imagePath != null;
+                      final hasNetwork = !hasLocal &&
+                          !_imageRemoved &&
+                          (widget.customer.imageUrl?.isNotEmpty ?? false);
+                      final placeholder = Icon(Icons.broken_image_rounded, size: 36, color: c.textHint);
+                      return Container(
+                        width: 96,
+                        height: 96,
+                        decoration: BoxDecoration(
+                          color: c.surface,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: hasLocal || hasNetwork ? AppColors.primaryLight : c.surfaceBorder,
+                            width: hasLocal || hasNetwork ? 2 : 1,
+                          ),
                         ),
-                      ),
-                      child: _imagePath != null
-                          ? ClipOval(
-                              child: Image.file(
-                                File(_imagePath!),
-                                fit: BoxFit.cover,
-                                width: 96,
-                                height: 96,
-                                errorBuilder: (_, __, ___) => Icon(
-                                    Icons.broken_image_rounded,
+                        child: hasLocal
+                            ? ClipOval(
+                                child: Image.file(
+                                  File(_imagePath!),
+                                  fit: BoxFit.cover,
+                                  width: 96,
+                                  height: 96,
+                                  errorBuilder: (_, __, ___) => placeholder,
+                                ),
+                              )
+                            : hasNetwork
+                                ? ClipOval(
+                                    child: Image.network(
+                                      widget.customer.imageUrl!,
+                                      fit: BoxFit.cover,
+                                      width: 96,
+                                      height: 96,
+                                      errorBuilder: (_, __, ___) => placeholder,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.add_a_photo_rounded,
                                     size: 36,
-                                    color: c.textHint),
-                              ),
-                            )
-                          : const Icon(
-                              Icons.add_a_photo_rounded,
-                              size: 36,
-                              color: AppColors.primaryLight,
-                            ),
-                    ),
+                                    color: AppColors.primaryLight,
+                                  ),
+                      );
+                    }),
                     Positioned(
                       bottom: -6,
                       right: -6,
@@ -284,7 +300,9 @@ class _EditCustomerScreenState extends State<EditCustomerScreen> {
             const SizedBox(height: 8),
             Center(
               child: Text(
-                _imagePath != null ? l10n.tapToChangeImage : l10n.addCustomerImage,
+                _imagePath != null || (widget.customer.imageUrl?.isNotEmpty ?? false)
+                    ? l10n.tapToChangeImage
+                    : l10n.addCustomerImage,
                 style: TextStyle(color: c.textSecondary, fontSize: 12),
               ),
             ),

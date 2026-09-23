@@ -1274,6 +1274,126 @@ abstract class AppLocalizations {
   /// **'Inactive'**
   String get customerFilterInactive;
 
+  /// No description provided for @customersSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage your customer ledger'**
+  String get customersSubtitle;
+
+  /// No description provided for @totalDueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Due'**
+  String get totalDueLabel;
+
+  /// No description provided for @totalAdvanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Advance'**
+  String get totalAdvanceLabel;
+
+  /// No description provided for @customersCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 customer} other{{count} customers}}'**
+  String customersCount(int count);
+
+  /// No description provided for @searchNameOrPhoneHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search by name or phone number...'**
+  String get searchNameOrPhoneHint;
+
+  /// No description provided for @ledgerFilterWithDue.
+  ///
+  /// In en, this message translates to:
+  /// **'With Due'**
+  String get ledgerFilterWithDue;
+
+  /// No description provided for @ledgerFilterWithAdvance.
+  ///
+  /// In en, this message translates to:
+  /// **'With Advance'**
+  String get ledgerFilterWithAdvance;
+
+  /// No description provided for @ledgerFilterSettled.
+  ///
+  /// In en, this message translates to:
+  /// **'Settled'**
+  String get ledgerFilterSettled;
+
+  /// No description provided for @sortRecent.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get sortRecent;
+
+  /// No description provided for @sortOldest.
+  ///
+  /// In en, this message translates to:
+  /// **'Oldest'**
+  String get sortOldest;
+
+  /// No description provided for @sortHighestDue.
+  ///
+  /// In en, this message translates to:
+  /// **'Highest Due'**
+  String get sortHighestDue;
+
+  /// No description provided for @sortHighestAdvance.
+  ///
+  /// In en, this message translates to:
+  /// **'Highest Advance'**
+  String get sortHighestAdvance;
+
+  /// No description provided for @sortLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort'**
+  String get sortLabel;
+
+  /// No description provided for @allCustomersHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'All Customers ({count})'**
+  String allCustomersHeading(int count);
+
+  /// No description provided for @advanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Advance'**
+  String get advanceLabel;
+
+  /// No description provided for @addLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get addLabel;
+
+  /// No description provided for @noCustomersFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No customers found'**
+  String get noCustomersFound;
+
+  /// No description provided for @billsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'View and manage your bills'**
+  String get billsSubtitle;
+
+  /// No description provided for @thisMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'This Month'**
+  String get thisMonth;
+
+  /// No description provided for @resetFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset filters'**
+  String get resetFilters;
+
   /// No description provided for @noPurchasesYet.
   ///
   /// In en, this message translates to:
@@ -1477,12 +1597,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Search customer...'**
   String get searchCustomerHint;
-
-  /// No description provided for @noCustomersFound.
-  ///
-  /// In en, this message translates to:
-  /// **'No customers found'**
-  String get noCustomersFound;
 
   /// No description provided for @dueAmount.
   ///

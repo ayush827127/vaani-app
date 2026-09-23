@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
@@ -6,6 +5,7 @@ import '../../core/auth/logout_helper.dart';
 import '../../core/di/injector.dart';
 import '../../features/auth/repositories/shop_repository.dart';
 import '../../l10n/l10n_extensions.dart';
+import 'shop_logo_image.dart';
 
 /// Single reusable navigation drawer used by every screen.
 /// Loads its own shop data. Fully theme-aware — works in both Light and Dark.
@@ -20,6 +20,7 @@ class _CommonDrawerState extends State<CommonDrawer> {
   String _shopName = '';
   String _ownerName = '';
   String? _logoPath;
+  String? _logoUrl;
   String? _phone;
 
   @override
@@ -35,6 +36,7 @@ class _CommonDrawerState extends State<CommonDrawer> {
       _shopName = shop?.name ?? '';
       _ownerName = shop?.ownerName ?? '';
       _logoPath = shop?.logoPath;
+      _logoUrl = shop?.logoUrl;
       _phone = shop?.phone;
     });
   }
@@ -104,7 +106,7 @@ class _CommonDrawerState extends State<CommonDrawer> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _Avatar(logoPath: _logoPath, initial: initial, size: 60),
+                _Avatar(logoPath: _logoPath, logoUrl: _logoUrl, initial: initial, size: 60),
                 const SizedBox(height: 12),
                 Text(
                   _shopName.isNotEmpty ? _shopName : l10n.myShopFallback,
@@ -285,16 +287,14 @@ class _NavTile extends StatelessWidget {
 
 class _Avatar extends StatelessWidget {
   final String? logoPath;
+  final String? logoUrl;
   final String initial;
   final double size;
 
-  const _Avatar({required this.logoPath, required this.initial, required this.size});
+  const _Avatar({required this.logoPath, this.logoUrl, required this.initial, required this.size});
 
   @override
   Widget build(BuildContext context) {
-    final hasFile = logoPath != null &&
-        logoPath!.isNotEmpty &&
-        File(logoPath!).existsSync();
     return Container(
       width: size,
       height: size,
@@ -304,13 +304,13 @@ class _Avatar extends StatelessWidget {
         border: Border.all(color: Colors.white54, width: 2),
       ),
       child: ClipOval(
-        child: hasFile
-            ? Image.file(File(logoPath!),
-                fit: BoxFit.cover,
-                width: size,
-                height: size,
-                errorBuilder: (_, __, ___) => _letter())
-            : _letter(),
+        child: resolveShopLogoImage(
+              logoPath: logoPath,
+              logoUrl: logoUrl,
+              size: size,
+              errorBuilder: (_, __, ___) => _letter(),
+            ) ??
+            _letter(),
       ),
     );
   }

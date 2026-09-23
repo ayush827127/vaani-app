@@ -57,7 +57,20 @@ class CustomerRepository {
 
   Future<void> updateCustomer(Customer customer) async {
     final db = await _db.database;
-    await db.update('customers', customer.toMap(), where: 'id = ?', whereArgs: [customer.id]);
+    final existing = await db.query('customers',
+        columns: ['image_path'], where: 'id = ?', whereArgs: [customer.id]);
+    final oldImagePath = existing.isNotEmpty ? existing.first['image_path'] as String? : null;
+
+    final map = customer.toMap();
+    if (oldImagePath != customer.imagePath) {
+      // Photo changed (or was removed) — the previously uploaded Cloudinary
+      // URL, if any, no longer matches. Clear it so the next cloud sync
+      // re-uploads the new photo instead of a stale one still resolving to
+      // the old (or now-deleted) picture — same reasoning as
+      // ShopRepository.updateShop()'s logo_url handling.
+      map['image_url'] = null;
+    }
+    await db.update('customers', map, where: 'id = ?', whereArgs: [customer.id]);
   }
 
   Future<void> updateCustomerStats(int customerId, double purchaseAmount) async {
@@ -128,21 +141,31 @@ class CustomerRepository {
     return rows.map(Customer.fromMap).toList();
   }
 
+  /// Called after a successful Cloudinary upload during cloud sync — the
+  /// only writer of this column besides the change-detection in
+  /// [upsertFromCloud] (mirrors ProductRepository.setImageUrl()).
+  Future<void> setImageUrl(int customerId, String url) async {
+    final db = await _db.database;
+    await db.update('customers', {'image_url': url}, where: 'id = ?', whereArgs: [customerId]);
+  }
+
   /// Writes a cloud-pulled customer straight into the row matching its
   /// exact [customer.id] — see the matching note on
   /// ProductRepository.upsertFromCloud().
+  ///
+  /// image_path is always kept as whatever this device already has for
+  /// this id (a local file path meaningless on any other device); image_url
+  /// is written straight from [customer] since it's the Cloudinary URL that
+  /// is meaningful across devices.
   Future<void> upsertFromCloud(Customer customer) async {
     final db = await _db.database;
-    // image_path is a local file path with no cloud counterpart (unlike
-    // products' image_path/image_url pair) — a cloud-pulled Customer always
-    // has it null, so writing it through as-is would wipe out a locally-set
-    // photo on every pull merge. Preserve whatever's already on this row.
     final existing = await db.query('customers',
         columns: ['image_path'], where: 'id = ?', whereArgs: [customer.id]);
     final localImagePath = existing.isNotEmpty ? existing.first['image_path'] as String? : null;
 
     final map = customer.toMap();
     map['image_path'] = localImagePath;
+    map['image_url'] = customer.imageUrl;
     map['deleted_at'] = customer.deletedAt?.toIso8601String();
     await db.insert('customers', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }

@@ -12,6 +12,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/auth/logout_helper.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/shop.dart';
+import '../../../shared/widgets/shop_logo_image.dart';
 import '../repositories/shop_repository.dart';
 import '../../billing/repositories/invoice_repository.dart';
 import '../../settings/providers/theme_provider.dart';
@@ -690,22 +691,21 @@ class _ShopAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final path = shop.logoPath ?? '';
-    final hasFile = path.isNotEmpty && File(path).existsSync();
+    final logo = resolveShopLogoImage(
+      logoPath: shop.logoPath,
+      logoUrl: shop.logoUrl,
+      size: size,
+      errorBuilder: (_, __, ___) => _initial(),
+    );
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: hasFile ? null : context.colors.heroGradient,
+        gradient: logo != null ? null : context.colors.heroGradient,
         shape: BoxShape.circle,
         border: Border.all(color: AppColors.primaryLight, width: 2),
       ),
-      child: ClipOval(
-        child: hasFile
-            ? Image.file(File(path), fit: BoxFit.cover, width: size, height: size,
-                errorBuilder: (_, __, ___) => _initial())
-            : _initial(),
-      ),
+      child: ClipOval(child: logo ?? _initial()),
     );
   }
 

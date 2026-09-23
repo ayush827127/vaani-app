@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +11,7 @@ import '../../../core/di/injector.dart';
 import '../../../shared/models/invoice.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/widgets/customer_avatar.dart';
+import '../../../shared/widgets/shop_logo_image.dart';
 import '../../reports/repositories/report_repository.dart';
 import '../../inventory/repositories/product_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
@@ -34,6 +34,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _ownerName = '';
   String _shopName = '';
   String? _logoPath;
+  String? _logoUrl;
   bool _isLoading = true;
 
   SalesSummary? _todaySummary;
@@ -81,6 +82,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _ownerName = shop?.ownerName ?? '';
       _shopName = shop?.name ?? '';
       _logoPath = shop?.logoPath;
+      _logoUrl = shop?.logoUrl;
       _todaySummary = today;
       _yesterdaySummary = yesterday;
       _chartData = chart;
@@ -212,13 +214,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 border: Border.all(color: AppColors.primaryLight, width: 1.5),
               ),
               child: ClipOval(
-                child: _logoPath != null && _logoPath!.isNotEmpty && File(_logoPath!).existsSync()
-                    ? Image.file(File(_logoPath!), width: 38, height: 38, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Center(
-                              child: Text(initial,
-                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryLight)),
-                            ))
-                    : Center(
+                child: resolveShopLogoImage(
+                      logoPath: _logoPath,
+                      logoUrl: _logoUrl,
+                      size: 38,
+                      errorBuilder: (_, __, ___) => Center(
+                        child: Text(initial,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryLight)),
+                      ),
+                    ) ??
+                    Center(
                         child: Text(initial,
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryLight)),
                       ),

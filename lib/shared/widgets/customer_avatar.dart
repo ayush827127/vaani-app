@@ -2,9 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/customer.dart';
 
-/// Displays a customer's profile photo (local file) with a letter-initial
-/// fallback — the one place this rendering logic lives, so every screen that
-/// shows a customer (list, details, checkout picker) stays in sync.
+/// Displays a customer's profile photo (local file, falling back to the
+/// Cloudinary URL cloud sync uploaded it to when there's no local file —
+/// e.g. right after a reinstall) with a letter-initial fallback — the one
+/// place this rendering logic lives, so every screen that shows a customer
+/// (list, details, checkout picker) stays in sync.
 class CustomerAvatar extends StatelessWidget {
   final Customer customer;
   final double size;
@@ -21,6 +23,8 @@ class CustomerAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final path = customer.imagePath;
     final hasFile = path != null && path.isNotEmpty && File(path).existsSync();
+    final url = customer.imageUrl;
+    final hasNetwork = !hasFile && url != null && url.isNotEmpty;
     final avatarColor = color ?? Theme.of(context).colorScheme.primary;
 
     return Container(
@@ -40,7 +44,15 @@ class CustomerAvatar extends StatelessWidget {
                 height: size,
                 errorBuilder: (_, __, ___) => _initial(avatarColor),
               )
-            : _initial(avatarColor),
+            : hasNetwork
+                ? Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    width: size,
+                    height: size,
+                    errorBuilder: (_, __, ___) => _initial(avatarColor),
+                  )
+                : _initial(avatarColor),
       ),
     );
   }

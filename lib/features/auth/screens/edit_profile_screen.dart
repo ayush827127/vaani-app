@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/shop.dart';
+import '../../../shared/widgets/shop_logo_image.dart';
 import '../repositories/shop_repository.dart';
 import '../../../l10n/l10n_extensions.dart';
 
@@ -217,31 +218,31 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         child: Stack(
                           clipBehavior: Clip.none,
                           children: [
-                            Container(
-                              width: 88,
-                              height: 88,
-                              decoration: BoxDecoration(
-                                gradient: _logoPath != null ? null : c.heroGradient,
-                                color: _logoPath != null ? Colors.transparent : null,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                    color: _logoPath != null
-                                        ? AppColors.primaryLight
-                                        : AppColors.primaryLight,
-                                    width: 2),
-                              ),
-                              child: ClipOval(
-                                child: _logoPath != null &&
-                                        File(_logoPath!).existsSync()
-                                    ? Image.file(File(_logoPath!),
-                                        fit: BoxFit.cover,
-                                        width: 88,
-                                        height: 88,
-                                        errorBuilder: (_, __, ___) =>
-                                            _logoInitial())
-                                    : _logoInitial(),
-                              ),
-                            ),
+                            Builder(builder: (context) {
+                              // Falls back to the Cloudinary URL synced from
+                              // the cloud when there's no local file — e.g.
+                              // right after a reinstall, before the owner
+                              // has picked a new logo on this device.
+                              final logo = _logoRemoved
+                                  ? null
+                                  : resolveShopLogoImage(
+                                      logoPath: _logoPath,
+                                      logoUrl: _shop?.logoUrl,
+                                      size: 88,
+                                      errorBuilder: (_, __, ___) => _logoInitial(),
+                                    );
+                              return Container(
+                                width: 88,
+                                height: 88,
+                                decoration: BoxDecoration(
+                                  gradient: logo != null ? null : c.heroGradient,
+                                  color: logo != null ? Colors.transparent : null,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: AppColors.primaryLight, width: 2),
+                                ),
+                                child: ClipOval(child: logo ?? _logoInitial()),
+                              );
+                            }),
                             Positioned(
                               bottom: -2,
                               right: -2,
