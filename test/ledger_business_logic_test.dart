@@ -5,11 +5,11 @@ import 'package:vaani/core/db/database_helper.dart';
 import 'package:vaani/features/billing/repositories/invoice_repository.dart';
 import 'package:vaani/features/billing/repositories/payment_transaction_repository.dart';
 import 'package:vaani/features/customers/repositories/customer_repository.dart';
-import 'package:vaani/features/inventory/repositories/product_repository.dart';
+import 'package:vaani/features/inventory/repositories/item_repository.dart';
 import 'package:vaani/shared/models/cart_item.dart';
 import 'package:vaani/shared/models/customer.dart';
 import 'package:vaani/shared/models/invoice.dart';
-import 'package:vaani/shared/models/product.dart';
+import 'package:vaani/shared/models/item.dart';
 import 'package:vaani/shared/models/payment_transaction.dart';
 
 /// Real repository code against a real (in-memory) SQLite database with the
@@ -23,10 +23,10 @@ void main() {
 
   late InvoiceRepository invoices;
   late CustomerRepository customers;
-  late ProductRepository products;
+  late ItemRepository items;
   late PaymentTransactionRepository txns;
   const shopId = 1;
-  late Product water; // ₹100, GST 0 to keep the arithmetic exact
+  late Item water; // ₹100, GST 0 to keep the arithmetic exact
   late int customerId;
 
   Future<Customer> cust() async => (await customers.getCustomerById(customerId))!;
@@ -74,7 +74,7 @@ void main() {
     );
     return invoices.createInvoice(
       invoice: inv,
-      cartItems: [CartItem(product: water, quantity: qty)],
+      cartItems: [CartItem(item: water, quantity: qty)],
       customerId: customerId,
       newOutstanding: newOutstanding,
       newAdvanceBalance: newAdvance,
@@ -138,9 +138,9 @@ void main() {
     });
     invoices = InvoiceRepository();
     customers = CustomerRepository();
-    products = ProductRepository();
+    items = ItemRepository();
     txns = PaymentTransactionRepository();
-    final pid = await products.insertProduct(Product(
+    final pid = await items.insertItem(Item(
       shopId: shopId,
       name: 'Water',
       sellingPrice: 100,
@@ -150,7 +150,7 @@ void main() {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     ));
-    water = (await products.getProductById(pid))!;
+    water = (await items.getItemById(pid))!;
     customerId = await customers.insertCustomer(Customer(
       shopId: shopId,
       name: 'Ramesh',
@@ -187,7 +187,7 @@ void main() {
 
     test('stock is deducted for credit sales too', () async {
       await checkout(total: 500, received: 0, qty: 5);
-      expect((await products.getProductById(water.id!))!.stockQuantity, 995);
+      expect((await items.getItemById(water.id!))!.stockQuantity, 995);
     });
   });
 
@@ -360,7 +360,7 @@ void main() {
       final inv = await checkout(total: 600, received: 0, qty: 6);
       await invoices.voidInvoice(inv.id!);
       await outstandingEquals(0, 'due written off');
-      expect((await products.getProductById(water.id!))!.stockQuantity, 1000,
+      expect((await items.getItemById(water.id!))!.stockQuantity, 1000,
           reason: 'stock restored');
       await ledgerReconciles();
     });

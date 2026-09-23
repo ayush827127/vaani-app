@@ -9,22 +9,22 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/permission_service.dart';
 import '../../../core/di/injector.dart';
-import '../../../shared/models/product.dart';
+import '../../../shared/models/item.dart';
 import '../../../shared/widgets/barcode_scanner_screen.dart';
-import '../repositories/product_repository.dart';
+import '../repositories/item_repository.dart';
 import '../repositories/category_repository.dart';
 import '../widgets/category_picker_sheet.dart';
 import '../../../l10n/l10n_extensions.dart';
 
-class AddProductScreen extends StatefulWidget {
-  final int? productId;
-  const AddProductScreen({super.key, this.productId});
+class AddItemScreen extends StatefulWidget {
+  final int? itemId;
+  const AddItemScreen({super.key, this.itemId});
 
   @override
-  State<AddProductScreen> createState() => _AddProductScreenState();
+  State<AddItemScreen> createState() => _AddItemScreenState();
 }
 
-class _AddProductScreenState extends State<AddProductScreen> {
+class _AddItemScreenState extends State<AddItemScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _skuCtrl = TextEditingController();
@@ -40,7 +40,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   bool _isLoading = false;
   bool _isGeneratingBarcode = false;
   bool _isEditing = false;
-  Product? _existingProduct;
+  Item? _existingItem;
   String? _imagePath;
   bool _imageRemoved = false;
   List<String> _categories = [];
@@ -52,9 +52,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void initState() {
     super.initState();
     _initShopId();
-    if (widget.productId != null) {
+    if (widget.itemId != null) {
       _isEditing = true;
-      _loadProduct();
+      _loadItem();
     }
   }
 
@@ -65,23 +65,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
     if (mounted) setState(() => _categories = cats);
   }
 
-  Future<void> _loadProduct() async {
-    final repo = getIt<ProductRepository>();
-    final product = await repo.getProductById(widget.productId!);
-    if (product != null && mounted) {
+  Future<void> _loadItem() async {
+    final repo = getIt<ItemRepository>();
+    final item = await repo.getItemById(widget.itemId!);
+    if (item != null && mounted) {
       setState(() {
-        _existingProduct = product;
-        _nameCtrl.text = product.name;
-        _skuCtrl.text = product.sku ?? '';
-        _barcodeCtrl.text = product.barcode ?? '';
-        _costCtrl.text = product.costPrice.toString();
-        _priceCtrl.text = product.sellingPrice.toString();
-        _stockCtrl.text = product.stockQuantity.toString();
-        _reorderCtrl.text = product.reorderLevel.toString();
-        _aliasCtrl.text = product.aliases.join(', ');
-        _category = product.category;
-        _gstRate = product.gstRate;
-        _imagePath = product.imagePath;
+        _existingItem = item;
+        _nameCtrl.text = item.name;
+        _skuCtrl.text = item.sku ?? '';
+        _barcodeCtrl.text = item.barcode ?? '';
+        _costCtrl.text = item.costPrice.toString();
+        _priceCtrl.text = item.sellingPrice.toString();
+        _stockCtrl.text = item.stockQuantity.toString();
+        _reorderCtrl.text = item.reorderLevel.toString();
+        _aliasCtrl.text = item.aliases.join(', ');
+        _category = item.category;
+        _gstRate = item.gstRate;
+        _imagePath = item.imagePath;
       });
     }
   }
@@ -98,11 +98,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
       // Copy to app's documents directory for persistence
       final dir = await getApplicationDocumentsDirectory();
-      final imagesDir = Directory(p.join(dir.path, 'product_images'));
+      final imagesDir = Directory(p.join(dir.path, 'item_images'));
       if (!await imagesDir.exists()) await imagesDir.create(recursive: true);
 
       final ext = p.extension(picked.path);
-      final filename = 'product_${DateTime.now().millisecondsSinceEpoch}$ext';
+      final filename = 'item_${DateTime.now().millisecondsSinceEpoch}$ext';
       final dest = p.join(imagesDir.path, filename);
       await File(picked.path).copy(dest);
 
@@ -190,7 +190,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     final prefs = await SharedPreferences.getInstance();
     final shopId = prefs.getInt(AppConstants.keyShopId) ?? 1;
-    final repo = getIt<ProductRepository>();
+    final repo = getIt<ItemRepository>();
 
     final barcodeValue = _barcodeCtrl.text.trim().isEmpty
         ? null
@@ -200,7 +200,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     if (barcodeValue != null) {
       final isUnique = await repo.isBarcodeUnique(
         barcodeValue,
-        excludeProductId: _existingProduct?.id,
+        excludeItemId: _existingItem?.id,
       );
       if (!isUnique) {
         if (!mounted) return;
@@ -221,8 +221,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     final resolvedImagePath = _imageRemoved ? null : _imagePath;
 
-    final product = Product(
-      id: _existingProduct?.id,
+    final item = Item(
+      id: _existingItem?.id,
       shopId: shopId,
       name: _nameCtrl.text.trim(),
       sku: _skuCtrl.text.trim().isEmpty ? null : _skuCtrl.text.trim(),
@@ -235,23 +235,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
       reorderLevel: int.tryParse(_reorderCtrl.text) ?? 10,
       imagePath: resolvedImagePath,
       aliases: aliases,
-      createdAt: _existingProduct?.createdAt ?? DateTime.now(),
+      createdAt: _existingItem?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );
 
     // Previously unguarded — a DatabaseException here (e.g. the barcode
-    // uniqueness race: isBarcodeUnique() above only checks active products,
+    // uniqueness race: isBarcodeUnique() above only checks active items,
     // but the DB's unique index covers every row, so reusing a just-deleted
-    // product's barcode could still throw here) left the form permanently
+    // item's barcode could still throw here) left the form permanently
     // stuck on its loading spinner with no error shown and no way to retry.
     try {
       if (_isEditing) {
-        await repo.updateProduct(product);
+        await repo.updateItem(item);
       } else {
-        await repo.insertProduct(product);
+        await repo.insertItem(item);
       }
 
-      // Persist category in categories table so it's available for other products
+      // Persist category in categories table so it's available for other items
       if (_category != null) {
         await getIt<CategoryRepository>().addCategory(_shopId, _category!);
       }
@@ -272,13 +272,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
     context.pop();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_isEditing ? l10n.productUpdated : l10n.productAdded),
+        content: Text(_isEditing ? l10n.itemUpdated : l10n.itemAdded),
         backgroundColor: successColor,
       ),
     );
   }
 
-  Future<void> _scanBarcodeForProduct() async {
+  Future<void> _scanBarcodeForItem() async {
     final granted = await PermissionService.requestCamera(context);
     if (!granted || !mounted) return;
     final code = await Navigator.push<String>(
@@ -290,9 +290,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
-  Future<void> _generateBarcodeForProduct() async {
+  Future<void> _generateBarcodeForItem() async {
     setState(() => _isGeneratingBarcode = true);
-    final code = await getIt<ProductRepository>().generateUniqueBarcode();
+    final code = await getIt<ItemRepository>().generateUniqueBarcode();
     if (!mounted) return;
     setState(() {
       _barcodeCtrl.text = code;
@@ -305,7 +305,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     final name = _nameCtrl.text.trim();
     context.push('/inventory/barcode-preview', extra: {
       'barcode': barcode,
-      'productName': name.isNotEmpty ? name : barcode,
+      'itemName': name.isNotEmpty ? name : barcode,
     });
   }
 
@@ -328,7 +328,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? l10n.editProduct : l10n.addProduct),
+        title: Text(_isEditing ? l10n.editItem : l10n.addItem),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_rounded),
           onPressed: () => context.pop(),
@@ -339,7 +339,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Product image picker
+            // Item image picker
             Center(
               child: GestureDetector(
                 onTap: _showImageOptions,
@@ -401,13 +401,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
             const SizedBox(height: 8),
             Center(
               child: Text(
-                _imagePath != null ? l10n.tapToChangeImage : l10n.addProductImage,
+                _imagePath != null ? l10n.tapToChangeImage : l10n.addItemImage,
                 style: TextStyle(
                     color: c.textSecondary, fontSize: 12),
               ),
             ),
             const SizedBox(height: 20),
-            _buildField(l10n.productName, _nameCtrl,
+            _buildField(l10n.itemName, _nameCtrl,
                 validator: (v) => v?.trim().isEmpty == true ? l10n.required : null),
             _buildField(l10n.skuPhoneCode, _skuCtrl),
             const SizedBox(height: 16),
@@ -484,7 +484,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2),
                     )
-                  : Text(_isEditing ? l10n.updateProduct : l10n.saveProduct),
+                  : Text(_isEditing ? l10n.updateItem : l10n.saveItem),
             ),
             const SizedBox(height: 40),
           ],
@@ -593,7 +593,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _scanBarcodeForProduct,
+                onPressed: _scanBarcodeForItem,
                 style: buttonStyle,
                 icon: const Icon(Icons.qr_code_scanner_rounded, size: 16),
                 label: Text(l10n.scanBarcode,
@@ -603,7 +603,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _isGeneratingBarcode ? null : _generateBarcodeForProduct,
+                onPressed: _isGeneratingBarcode ? null : _generateBarcodeForItem,
                 style: buttonStyle,
                 icon: _isGeneratingBarcode
                     ? const SizedBox(

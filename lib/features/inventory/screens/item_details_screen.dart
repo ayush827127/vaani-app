@@ -3,21 +3,21 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/di/injector.dart';
-import '../../../shared/models/product.dart';
-import '../repositories/product_repository.dart';
-import '../../../shared/widgets/product_avatar.dart';
+import '../../../shared/models/item.dart';
+import '../repositories/item_repository.dart';
+import '../../../shared/widgets/item_avatar.dart';
 import '../../../l10n/l10n_extensions.dart';
 
-class ProductDetailsScreen extends StatefulWidget {
-  final int productId;
-  const ProductDetailsScreen({super.key, required this.productId});
+class ItemDetailsScreen extends StatefulWidget {
+  final int itemId;
+  const ItemDetailsScreen({super.key, required this.itemId});
 
   @override
-  State<ProductDetailsScreen> createState() => _ProductDetailsScreenState();
+  State<ItemDetailsScreen> createState() => _ItemDetailsScreenState();
 }
 
-class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
-  Product? _product;
+class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
+  Item? _item;
   bool _isLoading = true;
 
   @override
@@ -27,10 +27,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   Future<void> _load() async {
-    final product = await getIt<ProductRepository>().getProductById(widget.productId);
+    final item = await getIt<ItemRepository>().getItemById(widget.itemId);
     if (!mounted) return;
     setState(() {
-      _product = product;
+      _item = item;
       _isLoading = false;
     });
   }
@@ -72,7 +72,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              l10n.currentStock('${_product?.stockQuantity ?? 0}'),
+              l10n.currentStock('${_item?.stockQuantity ?? 0}'),
               style: TextStyle(color: c.textHint, fontSize: 13),
             ),
             const SizedBox(height: 20),
@@ -106,8 +106,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 onPressed: () async {
                   final qty = int.tryParse(ctrl.text) ?? 0;
                   if (qty > 0) {
-                    await getIt<ProductRepository>()
-                        .adjustStock(widget.productId, qty, 'restock', notes: 'Manual restock');
+                    await getIt<ItemRepository>()
+                        .adjustStock(widget.itemId, qty, 'restock', notes: 'Manual restock');
                     if (bsCtx.mounted) Navigator.pop(bsCtx);
                     _load();
                   }
@@ -154,7 +154,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              l10n.currentStock('${_product?.stockQuantity ?? 0}'),
+              l10n.currentStock('${_item?.stockQuantity ?? 0}'),
               style: TextStyle(color: c.textHint, fontSize: 13),
             ),
             const SizedBox(height: 20),
@@ -187,8 +187,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 onPressed: () async {
                   final qty = int.tryParse(ctrl.text) ?? 0;
                   if (qty > 0) {
-                    await getIt<ProductRepository>()
-                        .adjustStock(widget.productId, -qty, 'adjustment', notes: 'Manual adjustment');
+                    await getIt<ItemRepository>()
+                        .adjustStock(widget.itemId, -qty, 'adjustment', notes: 'Manual adjustment');
                     if (bsCtx.mounted) Navigator.pop(bsCtx);
                     _load();
                   }
@@ -208,7 +208,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     );
   }
 
-  Future<void> _deleteProduct() async {
+  Future<void> _deleteItem() async {
     final c = context.colors;
     final l10n = context.l10n;
     final confirm = await showDialog<bool>(
@@ -216,9 +216,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: c.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(l10n.deleteProduct, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold)),
+        title: Text(l10n.deleteItem, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold)),
         content: Text(
-          l10n.removeProductConfirm(_product?.name ?? ''),
+          l10n.removeItemConfirm(_item?.name ?? ''),
           style: TextStyle(color: c.textSecondary),
         ),
         actions: [
@@ -235,10 +235,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       ),
     );
     if (confirm == true && mounted) {
-      await getIt<ProductRepository>().deleteProduct(widget.productId);
+      await getIt<ItemRepository>().deleteItem(widget.itemId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.productDeleted), backgroundColor: c.success),
+        SnackBar(content: Text(l10n.itemDeleted), backgroundColor: c.success),
       );
       context.pop();
     }
@@ -254,20 +254,20 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       );
     }
 
-    if (_product == null) {
+    if (_item == null) {
       return Scaffold(
         appBar: AppBar(
           leading: IconButton(
             icon: Icon(Icons.arrow_back_ios_rounded, color: c.textPrimary),
             onPressed: () => context.pop(),
           ),
-          title: Text(l10n.product, style: TextStyle(color: c.textPrimary)),
+          title: Text(l10n.item, style: TextStyle(color: c.textPrimary)),
         ),
-        body: Center(child: Text(l10n.productNotFound, style: TextStyle(color: c.textHint))),
+        body: Center(child: Text(l10n.itemNotFound, style: TextStyle(color: c.textHint))),
       );
     }
 
-    final p = _product!;
+    final p = _item!;
     final catColor = _categoryColor(p.category);
     final margin = p.sellingPrice > 0
         ? ((p.sellingPrice - p.costPrice) / p.sellingPrice) * 100
@@ -306,7 +306,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               IconButton(
                 icon: const Icon(Icons.delete_outline_rounded, color: Colors.white70),
                 tooltip: l10n.delete,
-                onPressed: _deleteProduct,
+                onPressed: _deleteItem,
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
@@ -323,8 +323,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const SizedBox(height: 32),
-                      ProductAvatar(
-                        product: p,
+                      ItemAvatar(
+                        item: p,
                         size: 72,
                         catColor: Colors.white,
                         borderRadiusValue: 20,
@@ -474,7 +474,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
                 const SizedBox(height: 16),
 
-                // Product details
+                // Item details
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -485,7 +485,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(l10n.productDetails,
+                      Text(l10n.itemDetails,
                           style: TextStyle(color: c.textPrimary, fontSize: 15, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 12),
                       if (p.sku != null) _DetailRow(l10n.skuCode, p.sku!),
@@ -540,9 +540,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 const SizedBox(height: 16),
 
                 OutlinedButton.icon(
-                  onPressed: _deleteProduct,
+                  onPressed: _deleteItem,
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                  label: Text(l10n.deleteProduct),
+                  label: Text(l10n.deleteItem),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: c.danger,
                     side: BorderSide(color: c.danger.withValues(alpha: 0.5)),

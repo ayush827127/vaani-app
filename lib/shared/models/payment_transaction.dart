@@ -45,7 +45,7 @@ class PaymentTransaction {
   });
 
   // deleted_at is deliberately excluded — see the matching note on
-  // Product.toMap(). It's written only by
+  // Item.toMap(). It's written only by
   // PaymentTransactionRepository.upsertFromCloud().
   Map<String, dynamic> toMap() => {
         'id': id,

@@ -15,8 +15,8 @@ import '../../features/billing/screens/bill_detail_screen.dart';
 import '../../features/billing/screens/voice_billing_screen.dart';
 import '../../features/billing/screens/invoice_preview_screen.dart';
 import '../../features/inventory/screens/inventory_screen.dart';
-import '../../features/inventory/screens/add_product_screen.dart';
-import '../../features/inventory/screens/product_details_screen.dart';
+import '../../features/inventory/screens/add_item_screen.dart';
+import '../../features/inventory/screens/item_details_screen.dart';
 import '../../features/inventory/screens/barcode_preview_screen.dart';
 import '../../features/customers/screens/customer_list_screen.dart';
 import '../../features/customers/screens/customer_details_screen.dart';
@@ -121,16 +121,16 @@ GoRouter createRouter() => GoRouter(
                   path: 'add',
                   parentNavigatorKey: _rootKey,
                   builder: (context, state) {
-                    final productId = state.extra as int?;
-                    return AddProductScreen(productId: productId);
+                    final itemId = state.extra as int?;
+                    return AddItemScreen(itemId: itemId);
                   },
                 ),
                 GoRoute(
-                  path: 'product/:id',
+                  path: 'item/:id',
                   parentNavigatorKey: _rootKey,
                   builder: (context, state) {
                     final id = int.parse(state.pathParameters['id']!);
-                    return ProductDetailsScreen(productId: id);
+                    return ItemDetailsScreen(itemId: id);
                   },
                 ),
                 GoRoute(
@@ -140,7 +140,7 @@ GoRouter createRouter() => GoRouter(
                     final args = state.extra as Map<String, String>;
                     return BarcodePreviewScreen(
                       barcode: args['barcode']!,
-                      productName: args['productName']!,
+                      itemName: args['itemName']!,
                     );
                   },
                 ),

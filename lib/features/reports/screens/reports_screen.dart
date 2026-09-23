@@ -22,7 +22,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   bool _isLoading = true;
   String _period = 'This Month';
   SalesSummary? _summary;
-  List<TopProduct> _topProducts = [];
+  List<TopItem> _topItems = [];
   List<DailyData> _chartData = [];
 
   final _periods = ['Today', 'This Week', 'This Month', 'This Year'];
@@ -60,12 +60,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
 
     final summary = await repo.getPeriodSales(_shopId, start, end);
-    final topProducts = await repo.getTopProducts(_shopId, start, end);
+    final topItems = await repo.getTopItems(_shopId, start, end);
     final chart = await repo.getMonthSales(_shopId);
 
     setState(() {
       _summary = summary;
-      _topProducts = topProducts;
+      _topItems = topItems;
       _chartData = chart;
       _isLoading = false;
     });
@@ -166,8 +166,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   // Sales chart
                   if (_chartData.isNotEmpty) _buildChart(),
                   const SizedBox(height: 16),
-                  // Top products
-                  if (_topProducts.isNotEmpty) _buildTopProducts(),
+                  // Top items
+                  if (_topItems.isNotEmpty) _buildTopItems(),
                 ],
               ),
             ),
@@ -236,7 +236,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildTopProducts() {
+  Widget _buildTopItems() {
     final c = context.colors;
     final l10n = context.l10n;
     return Container(
@@ -249,10 +249,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l10n.topProducts, style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary)),
+          Text(l10n.topItems, style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary)),
           const SizedBox(height: 16),
-          ..._topProducts.take(5).toList().asMap().entries.map((e) {
-            final product = e.value;
+          ..._topItems.take(5).toList().asMap().entries.map((e) {
+            final item = e.value;
             final rank = e.key + 1;
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -283,9 +283,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(product.name, style: TextStyle(color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w500)),
+                        Text(item.name, style: TextStyle(color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w500)),
                         Text(
-                          l10n.unitsSoldSummary('${product.totalQty}', AppFormatters.formatCurrency(product.totalRevenue)),
+                          l10n.unitsSoldSummary('${item.totalQty}', AppFormatters.formatCurrency(item.totalRevenue)),
                           style: TextStyle(color: c.textSecondary, fontSize: 12),
                         ),
                       ],
@@ -298,7 +298,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      l10n.pcsCount('${product.totalQty}'),
+                      l10n.pcsCount('${item.totalQty}'),
                       style: TextStyle(color: c.success, fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                   ),

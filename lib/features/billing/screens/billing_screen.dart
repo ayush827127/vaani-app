@@ -12,14 +12,14 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/cart_item.dart';
-import '../../../shared/models/product.dart';
+import '../../../shared/models/item.dart';
 import '../../../shared/models/customer.dart';
-import '../../inventory/repositories/product_repository.dart';
+import '../../inventory/repositories/item_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../providers/billing_providers.dart';
 import '../../../shared/widgets/hamburger_icon.dart';
-import '../../../shared/widgets/product_avatar.dart';
+import '../../../shared/widgets/item_avatar.dart';
 import '../../../shared/widgets/barcode_scanner_screen.dart';
 import '../../../shared/widgets/shell_scaffold_key.dart';
 import '../../../core/utils/permission_service.dart';
@@ -32,8 +32,8 @@ import '../../../l10n/l10n_extensions.dart';
 class CartNotifier extends StateNotifier<List<CartItem>> {
   CartNotifier() : super([]);
 
-  void addProduct(Product product, {int qty = 1}) {
-    final idx = state.indexWhere((c) => c.product.id == product.id);
+  void addItem(Item item, {int qty = 1}) {
+    final idx = state.indexWhere((c) => c.item.id == item.id);
     if (idx >= 0) {
       final updated = List<CartItem>.from(state);
       // copyWith preserves any price override already on this line — a
@@ -41,40 +41,40 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       updated[idx] = updated[idx].copyWith(quantity: updated[idx].quantity + qty);
       state = updated;
     } else {
-      state = [...state, CartItem(product: product, quantity: qty)];
+      state = [...state, CartItem(item: item, quantity: qty)];
     }
   }
 
-  void updateQuantity(int productId, int qty) {
+  void updateQuantity(int itemId, int qty) {
     if (qty <= 0) {
-      removeProduct(productId);
+      removeItem(itemId);
       return;
     }
     state = state
-        .map((c) => c.product.id == productId ? c.copyWith(quantity: qty) : c)
+        .map((c) => c.item.id == itemId ? c.copyWith(quantity: qty) : c)
         .toList();
   }
 
-  void removeProduct(int productId) {
-    state = state.where((c) => c.product.id != productId).toList();
+  void removeItem(int itemId) {
+    state = state.where((c) => c.item.id != itemId).toList();
   }
 
-  void updatePrice(int productId, double price) {
-    debugPrint('[CartNotifier] updatePrice(id=$productId, price=$price) '
+  void updatePrice(int itemId, double price) {
+    debugPrint('[CartNotifier] updatePrice(id=$itemId, price=$price) '
         '— items before: ${state.length}');
     state = state
-        .map((c) => c.product.id == productId
-            ? CartItem(product: c.product, quantity: c.quantity, overridePrice: price)
+        .map((c) => c.item.id == itemId
+            ? CartItem(item: c.item, quantity: c.quantity, overridePrice: price)
             : c)
         .toList();
     debugPrint('[CartNotifier] updatePrice done — items after: ${state.length}');
   }
 
-  void resetPrice(int productId) {
-    debugPrint('[CartNotifier] resetPrice(id=$productId)');
+  void resetPrice(int itemId) {
+    debugPrint('[CartNotifier] resetPrice(id=$itemId)');
     state = state
-        .map((c) => c.product.id == productId
-            ? CartItem(product: c.product, quantity: c.quantity)
+        .map((c) => c.item.id == itemId
+            ? CartItem(item: c.item, quantity: c.quantity)
             : c)
         .toList();
     debugPrint('[CartNotifier] resetPrice done');
@@ -102,8 +102,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   final _searchCtrl = TextEditingController();
   final _tts = FlutterTts();
 
-  List<Product> _allProducts = [];
-  List<Product> _filteredProducts = [];
+  List<Item> _allItems = [];
+  List<Item> _filteredItems = [];
   Customer? _selectedCustomer;
   int _shopId = 1;
 
@@ -127,9 +127,9 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reload the product list whenever this screen becomes active again
-    // (e.g. returning from product edit via a different route).
-    if (_shopId > 0) _loadProducts();
+    // Reload the item list whenever this screen becomes active again
+    // (e.g. returning from item edit via a different route).
+    if (_shopId > 0) _loadItems();
   }
 
   Future<void> _init() async {
@@ -166,25 +166,25 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     if (backendBaseUrl.isNotEmpty && shopToken != null && shopToken.isNotEmpty) {
       _voiceParser = VoiceActionParser(backendBaseUrl, shopToken);
     }
-    await _loadProducts();
+    await _loadItems();
     final customers = await getIt<CustomerRepository>().getAllCustomers(_shopId);
     if (mounted) setState(() => _customers = customers);
   }
 
-  Future<void> _loadProducts() async {
-    final products = await getIt<ProductRepository>().getAllProducts(_shopId);
+  Future<void> _loadItems() async {
+    final items = await getIt<ItemRepository>().getAllItems(_shopId);
     if (mounted) {
       setState(() {
-        _allProducts = products;
-        _filteredProducts = List.from(products);
+        _allItems = items;
+        _filteredItems = List.from(items);
       });
     }
   }
 
-  void _filterProducts() {
+  void _filterItems() {
     final lower = _searchCtrl.text.trim().toLowerCase();
     setState(() {
-      _filteredProducts = _allProducts.where((p) {
+      _filteredItems = _allItems.where((p) {
         final matchSearch = lower.isEmpty ||
             p.name.toLowerCase().contains(lower) ||
             (p.sku?.toLowerCase().contains(lower) ?? false) ||
@@ -205,22 +205,22 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
     );
     if (code == null || !mounted) return;
-    final product = await getIt<ProductRepository>().getProductByBarcode(_shopId, code);
+    final item = await getIt<ItemRepository>().getItemByBarcode(_shopId, code);
     if (!mounted) return;
-    if (product != null) {
+    if (item != null) {
       final currentQty = ref
               .read(cartProvider)
-              .where((c) => c.product.id == product.id)
+              .where((c) => c.item.id == item.id)
               .firstOrNull
               ?.quantity ??
           0;
-      if (currentQty >= product.stockQuantity) {
-        _showStockLimitSnack(product);
+      if (currentQty >= item.stockQuantity) {
+        _showStockLimitSnack(item);
         return;
       }
-      ref.read(cartProvider.notifier).addProduct(product);
+      ref.read(cartProvider.notifier).addItem(item);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${product.name} added to cart'),
+        content: Text('${item.name} added to cart'),
         backgroundColor: context.colors.success,
         duration: const Duration(seconds: 2),
       ));
@@ -232,39 +232,39 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     }
   }
 
-  void _increaseQty(Product product) {
+  void _increaseQty(Item item) {
     final currentQty = ref
             .read(cartProvider)
-            .where((c) => c.product.id == product.id)
+            .where((c) => c.item.id == item.id)
             .firstOrNull
             ?.quantity ??
         0;
-    if (currentQty >= product.stockQuantity) {
-      _showStockLimitSnack(product);
+    if (currentQty >= item.stockQuantity) {
+      _showStockLimitSnack(item);
       return;
     }
-    ref.read(cartProvider.notifier).addProduct(product);
+    ref.read(cartProvider.notifier).addItem(item);
   }
 
-  void _showStockLimitSnack(Product product) {
+  void _showStockLimitSnack(Item item) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(product.stockQuantity <= 0
-          ? '${product.name} is out of stock'
-          : 'Only ${product.stockQuantity} of ${product.name} in stock'),
+      content: Text(item.stockQuantity <= 0
+          ? '${item.name} is out of stock'
+          : 'Only ${item.stockQuantity} of ${item.name} in stock'),
       backgroundColor: context.colors.danger,
       duration: const Duration(seconds: 2),
     ));
   }
 
-  void _decreaseQty(Product product) {
+  void _decreaseQty(Item item) {
     final items =
-        ref.read(cartProvider).where((c) => c.product.id == product.id).toList();
+        ref.read(cartProvider).where((c) => c.item.id == item.id).toList();
     if (items.isEmpty) return;
     final qty = items.first.quantity;
     if (qty <= 1) {
-      ref.read(cartProvider.notifier).removeProduct(product.id!);
+      ref.read(cartProvider.notifier).removeItem(item.id!);
     } else {
-      ref.read(cartProvider.notifier).updateQuantity(product.id!, qty - 1);
+      ref.read(cartProvider.notifier).updateQuantity(item.id!, qty - 1);
     }
   }
 
@@ -294,7 +294,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     if (subtotal <= 0) return 0;
     final discountRatio = discount / subtotal;
     return items.fold<double>(
-        0, (s, c) => s + c.lineTotal * (1 - discountRatio) * c.product.gstRate / 100);
+        0, (s, c) => s + c.lineTotal * (1 - discountRatio) * c.item.gstRate / 100);
   }
 
   void _showCartSheet() {
@@ -316,7 +316,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       backgroundColor: Colors.transparent,
       isDismissible: true,
       builder: (_) => _VoiceSheet(
-        allProducts: _allProducts,
+        allItems: _allItems,
         customers: _customers,
         parser: _voiceParser,
         discountType: _discountType,
@@ -334,14 +334,14 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   }
 
   Future<void> _handleVoiceCommand(String transcript) async {
-    debugPrint('[PTT] _handleVoiceCommand: transcript="$transcript" parser=${_voiceParser != null} products=${_allProducts.length}');
+    debugPrint('[PTT] _handleVoiceCommand: transcript="$transcript" parser=${_voiceParser != null} items=${_allItems.length}');
 
-    if (_voiceParser == null || _allProducts.isEmpty) {
+    if (_voiceParser == null || _allItems.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(_voiceParser == null
               ? 'Voice billing needs an internet connection to set up.'
-              : 'Product catalog is empty. Add products first.'),
+              : 'Item catalog is empty. Add items first.'),
           backgroundColor: context.colors.danger,
         ));
       }
@@ -351,7 +351,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     setState(() => _isPttProcessing = true);
 
     final ctx = BillingContext(
-      products: _allProducts,
+      items: _allItems,
       customers: _customers,
       cartItems: ref.read(cartProvider),
       paymentMode: _paymentMode,
@@ -393,8 +393,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       return;
     }
 
-    final productsById = {for (final p in _allProducts) if (p.id != null) p.id!: p};
-    final executor = ActionExecutor(ref: ref, productsById: productsById);
+    final itemsById = {for (final p in _allItems) if (p.id != null) p.id!: p};
+    final executor = ActionExecutor(ref: ref, itemsById: itemsById);
     final execResult = executor.execute(result.actions);
 
     // Apply non-cart state changes
@@ -428,7 +428,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       ));
     }
 
-    // Show errors (products not found, etc.)
+    // Show errors (items not found, etc.)
     if (execResult.errors.isNotEmpty) {
       await Future.delayed(const Duration(milliseconds: 200));
       if (!mounted) return;
@@ -462,7 +462,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
   String _pttUserMessage(String reason) {
     if (reason.contains('[empty-transcript]')) return "Didn't catch that. Please speak again.";
-    if (reason.contains('[empty-catalog]')) return 'No products in catalog. Add products first.';
+    if (reason.contains('[empty-catalog]')) return 'No items in catalog. Add items first.';
     if (reason.contains('[groq-timeout]') || reason.contains('[gemini-timeout]')) {
       return 'AI took too long. Check internet connection.';
     }
@@ -476,7 +476,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     if (reason.contains('[http-')) return 'AI service error (${_extractHttpCode(reason)}). Check internet.';
     if (reason.contains('[json-')) return 'AI response was malformed. Try again.';
     if (reason.contains('[no-actions]') || reason.contains('[no-valid-actions]')) {
-      return "Couldn't understand the command. Try saying product names clearly.";
+      return "Couldn't understand the command. Try saying item names clearly.";
     }
     return "Voice command failed. Check logcat for [VoiceParser] tags.";
   }
@@ -588,13 +588,13 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     }
   }
 
-  Future<void> _editItemPrice(Product product) async {
-    debugPrint('[PriceEdit] Opening for "${product.name}" (id=${product.id})');
+  Future<void> _editItemPrice(Item catalogItem) async {
+    debugPrint('[PriceEdit] Opening for "${catalogItem.name}" (id=${catalogItem.id})');
 
     final cart = ref.read(cartProvider);
-    final item = cart.where((c) => c.product.id == product.id).firstOrNull;
+    final item = cart.where((c) => c.item.id == catalogItem.id).firstOrNull;
     if (item == null) {
-      debugPrint('[PriceEdit] Product not found in cart — aborting');
+      debugPrint('[PriceEdit] Item not found in cart — aborting');
       return;
     }
 
@@ -609,8 +609,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final result = await showDialog<_PriceEditResult>(
       context: context,
       builder: (_) => _PriceEditDialog(
-        productName: product.name,
-        defaultPrice: product.sellingPrice,
+        itemName: catalogItem.name,
+        defaultPrice: catalogItem.sellingPrice,
         currentPrice: item.effectivePrice,
         hasOverride: item.overridePrice != null,
       ),
@@ -625,11 +625,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     }
 
     if (result.reset) {
-      debugPrint('[PriceEdit] Calling resetPrice(${product.id})');
-      ref.read(cartProvider.notifier).resetPrice(product.id!);
+      debugPrint('[PriceEdit] Calling resetPrice(${catalogItem.id})');
+      ref.read(cartProvider.notifier).resetPrice(catalogItem.id!);
     } else if (result.price != null) {
-      debugPrint('[PriceEdit] Calling updatePrice(${product.id}, ${result.price})');
-      ref.read(cartProvider.notifier).updatePrice(product.id!, result.price!);
+      debugPrint('[PriceEdit] Calling updatePrice(${catalogItem.id}, ${result.price})');
+      ref.read(cartProvider.notifier).updatePrice(catalogItem.id!, result.price!);
     }
 
     debugPrint('[PriceEdit] Done');
@@ -759,7 +759,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   }
 
   List<String> get _uniqueCategories {
-    final cats = _allProducts
+    final cats = _allItems
         .where((p) => p.category?.isNotEmpty == true)
         .map((p) => p.category!)
         .toSet()
@@ -769,7 +769,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   }
 
   int _categoryCount(String cat) =>
-      _allProducts.where((p) => p.category == cat).length;
+      _allItems.where((p) => p.category == cat).length;
 
   Future<void> _toggleView() async {
     final next = !_isGridView;
@@ -823,10 +823,10 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final discount = _calcDiscount(subtotal);
     final gst = _calcGst(cart, subtotal, discount);
     final total = subtotal - discount + gst;
-    final cartQtyMap = {for (final c in cart) c.product.id!: c.quantity};
+    final cartQtyMap = {for (final c in cart) c.item.id!: c.quantity};
     final cartOverrideMap = {
       for (final c in cart)
-        if (c.overridePrice != null) c.product.id!: c.overridePrice!
+        if (c.overridePrice != null) c.item.id!: c.overridePrice!
     };
 
     return Scaffold(
@@ -853,11 +853,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               _buildCategoryChips(),
               const SizedBox(height: 16),
             ],
-            // ── Products count + view toggle ──────────────────────────────────
+            // ── Items count + view toggle ──────────────────────────────────
             _buildViewToggleBar(),
             const SizedBox(height: 8),
-            // ── Product list / grid ───────────────────────────────────────────
-            Expanded(child: _buildProductArea(cartQtyMap, cartOverrideMap)),
+            // ── Item list / grid ───────────────────────────────────────────
+            Expanded(child: _buildItemArea(cartQtyMap, cartOverrideMap)),
             // ── PTT live transcript + AI processing overlay ───────────────────
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
@@ -967,7 +967,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           controller: _searchCtrl,
           style: TextStyle(color: c.textPrimary, fontSize: 15),
           decoration: InputDecoration(
-            hintText: context.l10n.searchProductsByNameHint,
+            hintText: context.l10n.searchItemsByNameHint,
             hintStyle: TextStyle(color: c.textHint, fontSize: 13),
             prefixIcon: Icon(Icons.search_rounded,
                 color: isDark ? c.textHint : AppColors.primaryLight, size: 22),
@@ -980,7 +980,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                         color: c.textHint, size: 20),
                     onPressed: () {
                       _searchCtrl.clear();
-                      _filterProducts();
+                      _filterItems();
                     },
                   ),
                 IconButton(
@@ -995,7 +995,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             focusedBorder: InputBorder.none,
             contentPadding: const EdgeInsets.symmetric(vertical: 16),
           ),
-          onChanged: (_) => _filterProducts(),
+          onChanged: (_) => _filterItems(),
         ),
       ),
     );
@@ -1014,11 +1014,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         children: [
           _CatChip(
             label: l10n.all,
-            count: _allProducts.length,
+            count: _allItems.length,
             selected: _selectedCategory == null,
             onTap: () => setState(() {
               _selectedCategory = null;
-              _filterProducts();
+              _filterItems();
             }),
           ),
           ...cats.map((cat) => Padding(
@@ -1029,7 +1029,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                   selected: _selectedCategory == cat,
                   onTap: () => setState(() {
                     _selectedCategory = _selectedCategory == cat ? null : cat;
-                    _filterProducts();
+                    _filterItems();
                   }),
                 ),
               )),
@@ -1048,7 +1048,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       child: Row(
         children: [
           Text(
-            l10n.productsCount(_filteredProducts.length),
+            l10n.itemsCount(_filteredItems.length),
             style: TextStyle(
                 color: c.textSecondary,
                 fontSize: 13,
@@ -1084,16 +1084,16 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     );
   }
 
-  // ── Product area ────────────────────────────────────────────────────────────
+  // ── Item area ────────────────────────────────────────────────────────────
 
-  Widget _buildProductArea(
+  Widget _buildItemArea(
       Map<int, int> cartQtyMap, Map<int, double> cartOverrideMap) {
-    if (_allProducts.isEmpty) {
+    if (_allItems.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(color: AppColors.primaryLight),
       );
     }
-    if (_filteredProducts.isEmpty) {
+    if (_filteredItems.isEmpty) {
       final c = context.colors;
       return Center(
         child: Column(
@@ -1103,7 +1103,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                 size: 48, color: c.textSecondary),
             const SizedBox(height: 12),
             Text(
-              context.l10n.noProductsMatch(_searchCtrl.text),
+              context.l10n.noItemsMatch(_searchCtrl.text),
               style: TextStyle(color: c.textHint, fontSize: 14),
             ),
           ],
@@ -1120,11 +1120,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           mainAxisSpacing: 10,
           childAspectRatio: 1.55,
         ),
-        itemCount: _filteredProducts.length,
+        itemCount: _filteredItems.length,
         itemBuilder: (_, i) {
-          final p = _filteredProducts[i];
-          return _ProductGridCard(
-            product: p,
+          final p = _filteredItems[i];
+          return _ItemGridCard(
+            item: p,
             cartQty: cartQtyMap[p.id] ?? 0,
             overridePrice: cartOverrideMap[p.id],
             onIncrease: () => _increaseQty(p),
@@ -1137,11 +1137,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      itemCount: _filteredProducts.length,
+      itemCount: _filteredItems.length,
       itemBuilder: (_, i) {
-        final p = _filteredProducts[i];
-        return _ProductListTile(
-          product: p,
+        final p = _filteredItems[i];
+        return _ItemListTile(
+          item: p,
           cartQty: cartQtyMap[p.id] ?? 0,
           overridePrice: cartOverrideMap[p.id],
           onIncrease: () => _increaseQty(p),
@@ -1474,18 +1474,18 @@ class _ViewToggleBtn extends StatelessWidget {
   }
 }
 
-// ── Product Grid Card ──────────────────────────────────────────────────────────
+// ── Item Grid Card ──────────────────────────────────────────────────────────
 
-class _ProductGridCard extends StatelessWidget {
-  final Product product;
+class _ItemGridCard extends StatelessWidget {
+  final Item item;
   final int cartQty;
   final double? overridePrice;
   final VoidCallback onIncrease;
   final VoidCallback onDecrease;
   final VoidCallback onEditPrice;
 
-  const _ProductGridCard({
-    required this.product,
+  const _ItemGridCard({
+    required this.item,
     required this.cartQty,
     required this.onIncrease,
     required this.onDecrease,
@@ -1500,11 +1500,11 @@ class _ProductGridCard extends StatelessWidget {
   ];
 
   Color get _catColor =>
-      _palette[(product.category ?? '').hashCode.abs() % _palette.length];
+      _palette[(item.category ?? '').hashCode.abs() % _palette.length];
 
   @override
   Widget build(BuildContext context) {
-    final inStock = product.stockQuantity > 0;
+    final inStock = item.stockQuantity > 0;
     final inCart = cartQty > 0;
     final catColor = _catColor;
 
@@ -1562,8 +1562,8 @@ class _ProductGridCard extends StatelessWidget {
                 SizedBox(
                   width: leftW,
                   child: Center(
-                    child: ProductAvatar(
-                      product: product,
+                    child: ItemAvatar(
+                      item: item,
                       size: avatarSz,
                       catColor: catColor,
                       borderRadiusValue: (avatarSz * 0.23).clamp(8.0, 12.0),
@@ -1579,7 +1579,7 @@ class _ProductGridCard extends StatelessWidget {
                     children: [
                       // Name
                       Text(
-                        product.name,
+                        item.name,
                         style: TextStyle(
                             color: c.textPrimary,
                             fontSize: nameFontSz,
@@ -1609,7 +1609,7 @@ class _ProductGridCard extends StatelessWidget {
                             children: [
                               Text(
                                 AppFormatters.formatCurrency(
-                                    overridePrice ?? product.sellingPrice),
+                                    overridePrice ?? item.sellingPrice),
                                 style: TextStyle(
                                     color: priceAccent,
                                     fontSize: prFontSz,
@@ -1637,7 +1637,7 @@ class _ProductGridCard extends StatelessWidget {
                         ),
                         child: Text(
                           inStock
-                              ? l10n.qtyColon('${product.stockQuantity}')
+                              ? l10n.qtyColon('${item.stockQuantity}')
                               : l10n.outOfStockBadge,
                           style: TextStyle(
                               fontSize: stFontSz,
@@ -1685,18 +1685,18 @@ class _ProductGridCard extends StatelessWidget {
   }
 }
 
-// ── Product List Tile ──────────────────────────────────────────────────────────
+// ── Item List Tile ──────────────────────────────────────────────────────────
 
-class _ProductListTile extends StatelessWidget {
-  final Product product;
+class _ItemListTile extends StatelessWidget {
+  final Item item;
   final int cartQty;
   final double? overridePrice;
   final VoidCallback onIncrease;
   final VoidCallback onDecrease;
   final VoidCallback onEditPrice;
 
-  const _ProductListTile({
-    required this.product,
+  const _ItemListTile({
+    required this.item,
     required this.cartQty,
     required this.onIncrease,
     required this.onDecrease,
@@ -1711,13 +1711,13 @@ class _ProductListTile extends StatelessWidget {
   ];
 
   Color get _catColor =>
-      _palette[(product.category ?? '').hashCode.abs() % _palette.length];
+      _palette[(item.category ?? '').hashCode.abs() % _palette.length];
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
-    final inStock = product.stockQuantity > 0;
+    final inStock = item.stockQuantity > 0;
     final inCart = cartQty > 0;
     final catColor = _catColor;
 
@@ -1738,9 +1738,9 @@ class _ProductListTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Product image / initial avatar
-          ProductAvatar(
-            product: product,
+          // Item image / initial avatar
+          ItemAvatar(
+            item: item,
             size: 44,
             catColor: catColor,
             borderRadiusValue: 10,
@@ -1752,7 +1752,7 @@ class _ProductListTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  product.name,
+                  item.name,
                   style: TextStyle(
                       color: c.textPrimary,
                       fontSize: 14,
@@ -1789,7 +1789,7 @@ class _ProductListTile extends StatelessWidget {
                           children: [
                             Text(
                               AppFormatters.formatCurrency(
-                                  overridePrice ?? product.sellingPrice),
+                                  overridePrice ?? item.sellingPrice),
                               style: TextStyle(
                                   color: overridePrice != null
                                       ? const Color(0xFFE67E22)
@@ -1821,7 +1821,7 @@ class _ProductListTile extends StatelessWidget {
                       ),
                       child: Text(
                         inStock
-                            ? l10n.inStockQty('${product.stockQuantity}')
+                            ? l10n.inStockQty('${item.stockQuantity}')
                             : l10n.outLabel,
                         style: TextStyle(
                             fontSize: 9,
@@ -1926,7 +1926,7 @@ class _CartSheetState extends ConsumerState<_CartSheet> {
 
   TextEditingController _ctrlFor(CartItem item) {
     return _ctrls.putIfAbsent(
-      item.product.id!,
+      item.item.id!,
       () => TextEditingController(
           text: item.effectivePrice.toStringAsFixed(0)),
     );
@@ -2004,21 +2004,21 @@ class _CartSheetState extends ConsumerState<_CartSheet> {
                   final item = cart[i];
                   final ctrl = _ctrlFor(item);
                   final isOverridden = item.overridePrice != null &&
-                      item.overridePrice != item.product.sellingPrice;
+                      item.overridePrice != item.item.sellingPrice;
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // Product name
+                        // Item name
                         Expanded(
                           flex: 3,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                item.product.name,
+                                item.item.name,
                                 style: TextStyle(
                                   color: c.textPrimary,
                                   fontSize: 13,
@@ -2040,10 +2040,10 @@ class _CartSheetState extends ConsumerState<_CartSheet> {
                               icon: Icons.remove_rounded,
                               onTap: () {
                                 if (item.quantity <= 1) {
-                                  notifier.removeProduct(item.product.id!);
+                                  notifier.removeItem(item.item.id!);
                                 } else {
                                   notifier.updateQuantity(
-                                      item.product.id!, item.quantity - 1);
+                                      item.item.id!, item.quantity - 1);
                                 }
                               },
                             ),
@@ -2062,17 +2062,17 @@ class _CartSheetState extends ConsumerState<_CartSheet> {
                             _CartItemQtyBtn(
                               icon: Icons.add_rounded,
                               onTap: () {
-                                if (item.quantity >= item.product.stockQuantity) {
+                                if (item.quantity >= item.item.stockQuantity) {
                                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                     content: Text(
-                                        'Only ${item.product.stockQuantity} of ${item.product.name} in stock'),
+                                        'Only ${item.item.stockQuantity} of ${item.item.name} in stock'),
                                     backgroundColor: c.danger,
                                     duration: const Duration(seconds: 2),
                                   ));
                                   return;
                                 }
                                 notifier.updateQuantity(
-                                    item.product.id!, item.quantity + 1);
+                                    item.item.id!, item.quantity + 1);
                               },
                             ),
                           ],
@@ -2132,7 +2132,7 @@ class _CartSheetState extends ConsumerState<_CartSheet> {
                             onChanged: (val) {
                               final price = double.tryParse(val);
                               if (price != null && price > 0) {
-                                notifier.updatePrice(item.product.id!, price);
+                                notifier.updatePrice(item.item.id!, price);
                               }
                             },
                           ),
@@ -2216,7 +2216,7 @@ class _CartItemQtyBtn extends StatelessWidget {
 // ── Inline Voice Sheet ────────────────────────────────────────────────────────
 
 class _VoiceSheet extends ConsumerStatefulWidget {
-  final List<Product> allProducts;
+  final List<Item> allItems;
   final List<Customer> customers;
   final VoiceActionParser? parser;
   final String discountType;
@@ -2229,7 +2229,7 @@ class _VoiceSheet extends ConsumerStatefulWidget {
   final void Function(String name, String? phone) onCustomerNotFound;
 
   const _VoiceSheet({
-    required this.allProducts,
+    required this.allItems,
     required this.customers,
     this.parser,
     required this.discountType,
@@ -2333,7 +2333,7 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
 
     final cart = ref.read(cartProvider);
     final ctx = BillingContext(
-      products: widget.allProducts,
+      items: widget.allItems,
       customers: widget.customers,
       cartItems: cart,
       paymentMode: widget.paymentMode,
@@ -2374,10 +2374,10 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
     if (_isApplying) return;
     setState(() => _isApplying = true);
 
-    final productsById = {
-      for (final p in widget.allProducts) if (p.id != null) p.id!: p
+    final itemsById = {
+      for (final p in widget.allItems) if (p.id != null) p.id!: p
     };
-    final executor = ActionExecutor(ref: ref, productsById: productsById);
+    final executor = ActionExecutor(ref: ref, itemsById: itemsById);
     final execResult = executor.execute(_parsedActions);
 
     // Trigger parent callbacks for non-cart state changes
@@ -2450,7 +2450,7 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
       PaymentModeAction() => Icons.payment_rounded,
       SelectCustomerAction() => Icons.person_rounded,
       CustomerNotFoundAction() => Icons.person_add_rounded,
-      UnknownProductAction() => Icons.cancel_rounded,
+      UnknownItemAction() => Icons.cancel_rounded,
       UnknownAction() => Icons.help_outline_rounded,
     };
   }
@@ -2458,27 +2458,27 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
   String _actionLabel(VoiceAction action) {
     return switch (action) {
       SetQuantityAction() =>
-        '${action.productName} × ${action.quantity}${action.inventoryWarning ? " ⚠ low stock" : ""}',
+        '${action.itemName} × ${action.quantity}${action.inventoryWarning ? " ⚠ low stock" : ""}',
       IncreaseQuantityAction() =>
-        '+${action.delta} more ${action.productName}',
+        '+${action.delta} more ${action.itemName}',
       DecreaseQuantityAction() =>
-        '−${action.delta} from ${action.productName}',
-      RemoveItemAction() => 'Remove ${action.productName}',
+        '−${action.delta} from ${action.itemName}',
+      RemoveItemAction() => 'Remove ${action.itemName}',
       ClearCartAction() => 'Clear entire cart',
       UpdatePriceAction() =>
-        '${action.productName} → ${AppFormatters.formatCurrency(action.price)}',
+        '${action.itemName} → ${AppFormatters.formatCurrency(action.price)}',
       DiscountAction() =>
         'Discount: ${action.discountType == "percent" ? "${action.value.toStringAsFixed(0)}%" : AppFormatters.formatCurrency(action.value)}',
       PaymentModeAction() => 'Payment: ${action.mode.toUpperCase()}',
       SelectCustomerAction() => 'Customer: ${action.customerName}',
       CustomerNotFoundAction() => 'Add customer: ${action.name}',
-      UnknownProductAction() => 'Not found: "${action.rawName}"',
+      UnknownItemAction() => 'Not found: "${action.rawName}"',
       UnknownAction() => 'Unknown: ${action.message}',
     };
   }
 
   bool _isErrorAction(VoiceAction action) =>
-      action is UnknownProductAction || action is UnknownAction;
+      action is UnknownItemAction || action is UnknownAction;
 
   @override
   Widget build(BuildContext context) {
@@ -2700,13 +2700,13 @@ class _PriceEditResult {
 // attached.
 
 class _PriceEditDialog extends StatefulWidget {
-  final String productName;
+  final String itemName;
   final double defaultPrice;
   final double currentPrice;
   final bool hasOverride;
 
   const _PriceEditDialog({
-    required this.productName,
+    required this.itemName,
     required this.defaultPrice,
     required this.currentPrice,
     required this.hasOverride,
@@ -2757,7 +2757,7 @@ class _PriceEditDialogState extends State<_PriceEditDialog> {
       backgroundColor: c.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(
-        widget.productName,
+        widget.itemName,
         style: TextStyle(
             color: c.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
       ),

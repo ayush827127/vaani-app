@@ -16,15 +16,15 @@ class SalesSummary {
   });
 }
 
-class TopProduct {
-  final int productId;
+class TopItem {
+  final int itemId;
   final String name;
   final String? imagePath;
   final int totalQty;
   final double totalRevenue;
 
-  const TopProduct({
-    required this.productId,
+  const TopItem({
+    required this.itemId,
     required this.name,
     this.imagePath,
     required this.totalQty,
@@ -96,14 +96,14 @@ class ReportRepository {
     return getPeriodSales(shopId, yesterday, yesterday);
   }
 
-  Future<List<TopProduct>> getTopProducts(int shopId, String startDate, String endDate, {int limit = 10}) async {
+  Future<List<TopItem>> getTopItems(int shopId, String startDate, String endDate, {int limit = 10}) async {
     final db = await _db.database;
     final rows = await db.rawQuery('''
-      SELECT p.id as product_id, p.name, p.image_path,
+      SELECT p.id as item_id, p.name, p.image_path,
              SUM(ii.quantity) as total_qty,
              SUM(ii.line_total) as total_revenue
       FROM invoice_items ii
-      JOIN products p ON p.id = ii.product_id
+      JOIN items p ON p.id = ii.item_id
       JOIN invoices i ON i.id = ii.invoice_id
       WHERE i.shop_id = ? AND $_liveInvoiceFilter
         AND DATE(i.created_at) BETWEEN ? AND ?
@@ -113,8 +113,8 @@ class ReportRepository {
     ''', [shopId, startDate, endDate, limit]);
 
     return rows
-        .map((r) => TopProduct(
-              productId: r['product_id'] as int,
+        .map((r) => TopItem(
+              itemId: r['item_id'] as int,
               name: r['name'] as String,
               imagePath: r['image_path'] as String?,
               totalQty: r['total_qty'] as int? ?? 0,

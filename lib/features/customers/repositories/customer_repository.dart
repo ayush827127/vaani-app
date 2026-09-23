@@ -32,7 +32,7 @@ class CustomerRepository {
   }
 
   /// Returns the active customer already using [phone] in [shopId], if any
-  /// — there's no DB-level uniqueness constraint on phone (unlike products'
+  /// — there's no DB-level uniqueness constraint on phone (unlike items'
   /// barcode), so this is the only thing that can catch a duplicate before
   /// it's saved. `null`/empty phones are never checked — many customers
   /// legitimately have no phone on file.
@@ -143,7 +143,7 @@ class CustomerRepository {
 
   /// Called after a successful Cloudinary upload during cloud sync — the
   /// only writer of this column besides the change-detection in
-  /// [upsertFromCloud] (mirrors ProductRepository.setImageUrl()).
+  /// [upsertFromCloud] (mirrors ItemRepository.setImageUrl()).
   Future<void> setImageUrl(int customerId, String url) async {
     final db = await _db.database;
     await db.update('customers', {'image_url': url}, where: 'id = ?', whereArgs: [customerId]);
@@ -151,7 +151,7 @@ class CustomerRepository {
 
   /// Writes a cloud-pulled customer straight into the row matching its
   /// exact [customer.id] — see the matching note on
-  /// ProductRepository.upsertFromCloud().
+  /// ItemRepository.upsertFromCloud().
   ///
   /// image_path is always kept as whatever this device already has for
   /// this id (a local file path meaningless on any other device); image_url

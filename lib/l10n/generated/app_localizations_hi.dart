@@ -21,7 +21,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get home => 'होम';
 
   @override
-  String get products => 'उत्पाद';
+  String get items => 'आइटम';
 
   @override
   String get billing => 'बिलिंग';
@@ -132,7 +132,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get mixed => 'मिश्रित';
 
   @override
-  String get product => 'उत्पाद';
+  String get item => 'आइटम';
 
   @override
   String get quantity => 'मात्रा';
@@ -261,7 +261,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get voiceBill => 'वॉइस बिल';
 
   @override
-  String get addProduct => 'उत्पाद जोड़ें';
+  String get addItem => 'आइटम जोड़ें';
 
   @override
   String get sevenDayRevenue => '7-दिन का राजस्व';
@@ -275,7 +275,7 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get searchProductsHint => 'उत्पाद, SKU, बारकोड खोजें...';
+  String get searchItemsHint => 'आइटम, SKU, बारकोड खोजें...';
 
   @override
   String get sortNameAZ => 'नाम A–Z';
@@ -293,11 +293,11 @@ class AppLocalizationsHi extends AppLocalizations {
   String get sortRecentlyAdded => 'हाल ही में जोड़े गए';
 
   @override
-  String productsCount(int count) {
+  String itemsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count उत्पाद',
+      other: '$count आइटम',
     );
     return '$_temp0';
   }
@@ -306,7 +306,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get filterByStock => 'स्टॉक के अनुसार फ़िल्टर करें';
 
   @override
-  String get allProducts => 'सभी उत्पाद';
+  String get allItems => 'सभी आइटम';
 
   @override
   String get lowStock => 'कम स्टॉक';
@@ -315,23 +315,23 @@ class AppLocalizationsHi extends AppLocalizations {
   String get outOfStock => 'स्टॉक ख़त्म';
 
   @override
-  String get deleteProduct => 'उत्पाद हटाएं';
+  String get deleteItem => 'आइटम हटाएं';
 
   @override
-  String deleteProductConfirm(String name) {
+  String deleteItemConfirm(String name) {
     return '\"$name\" हटाएं? यह वापस नहीं किया जा सकता।';
   }
 
   @override
-  String noProductsMatch(String query) {
-    return '\"$query\" से कोई उत्पाद मेल नहीं खाता';
+  String noItemsMatch(String query) {
+    return '\"$query\" से कोई आइटम मेल नहीं खाता';
   }
 
   @override
-  String get noProductsYet => 'अभी तक कोई उत्पाद नहीं';
+  String get noItemsYet => 'अभी तक कोई आइटम नहीं';
 
   @override
-  String get addFirstProductHint => 'शुरू करने के लिए अपना पहला उत्पाद जोड़ें';
+  String get addFirstItemHint => 'शुरू करने के लिए अपना पहला आइटम जोड़ें';
 
   @override
   String get inStock => 'स्टॉक में';
@@ -371,12 +371,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get confirmAdjustment => 'समायोजन की पुष्टि करें';
 
   @override
-  String removeProductConfirm(String name) {
+  String removeItemConfirm(String name) {
     return 'इन्वेंटरी से \"$name\" हटाएं? यह वापस नहीं किया जा सकता।';
   }
 
   @override
-  String get productNotFound => 'उत्पाद नहीं मिला।';
+  String get itemNotFound => 'आइटम नहीं मिला।';
 
   @override
   String get sellingPrice => 'बिक्री मूल्य';
@@ -407,7 +407,7 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get productDetails => 'उत्पाद विवरण';
+  String get itemDetails => 'आइटम विवरण';
 
   @override
   String get skuCode => 'SKU / कोड';
@@ -428,7 +428,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get adjust => 'समायोजित करें';
 
   @override
-  String get editProduct => 'उत्पाद संपादित करें';
+  String get editItem => 'आइटम संपादित करें';
 
   @override
   String get chooseFromGallery => 'गैलरी से चुनें';
@@ -443,10 +443,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get tapToChangeImage => 'छवि बदलने के लिए टैप करें';
 
   @override
-  String get addProductImage => 'उत्पाद की छवि जोड़ें';
+  String get addItemImage => 'आइटम की छवि जोड़ें';
 
   @override
-  String get productName => 'उत्पाद का नाम *';
+  String get itemName => 'आइटम का नाम *';
 
   @override
   String get skuPhoneCode => 'SKU / फ़ोन कोड';
@@ -467,16 +467,16 @@ class AppLocalizationsHi extends AppLocalizations {
   String get aliasesLabel => 'उपनाम (कॉमा से अलग करें)';
 
   @override
-  String get updateProduct => 'उत्पाद अपडेट करें';
+  String get updateItem => 'आइटम अपडेट करें';
 
   @override
-  String get saveProduct => 'उत्पाद सहेजें';
+  String get saveItem => 'आइटम सहेजें';
 
   @override
-  String get productUpdated => 'उत्पाद अपडेट हो गया';
+  String get itemUpdated => 'आइटम अपडेट हो गया';
 
   @override
-  String get productAdded => 'उत्पाद जोड़ा गया';
+  String get itemAdded => 'आइटम जोड़ा गया';
 
   @override
   String get barcode => 'बारकोड';
@@ -512,8 +512,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get duplicateBarcodeError => 'बारकोड पहले से उपयोग में है।';
 
   @override
-  String get searchProductsByNameHint =>
-      'नाम, SKU या बारकोड से उत्पाद खोजें...';
+  String get searchItemsByNameHint => 'नाम, SKU या बारकोड से आइटम खोजें...';
 
   @override
   String get gridView => 'ग्रिड';
@@ -581,13 +580,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get recognizedText => 'पहचाना गया टेक्स्ट';
 
   @override
-  String productsFoundCount(String count) {
-    return 'मिले उत्पाद ($count)';
+  String itemsFoundCount(String count) {
+    return 'मिले आइटम ($count)';
   }
 
   @override
   String addedToCartCount(String count) {
-    return '$count उत्पाद कार्ट में जोड़े गए';
+    return '$count आइटम कार्ट में जोड़े गए';
   }
 
   @override
@@ -811,6 +810,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get searchCustomerHint => 'ग्राहक खोजें...';
 
   @override
+  String get noCustomersFoundInSearch => 'कोई ग्राहक नहीं मिला';
+
+  @override
   String dueAmount(String amount) {
     return '$amount बाकी';
   }
@@ -858,12 +860,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get billDetail => 'बिल विवरण';
-
-  @override
-  String get items => 'आइटम';
-
-  @override
-  String get noItemDetails => 'कोई आइटम विवरण नहीं';
 
   @override
   String get summary => 'सारांश';
@@ -944,7 +940,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get salesOverview => 'बिक्री अवलोकन';
 
   @override
-  String get topProducts => 'शीर्ष उत्पाद';
+  String get topItems => 'शीर्ष आइटम';
 
   @override
   String get categoryNotFound => 'श्रेणी नहीं मिली';
@@ -1402,7 +1398,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onboardSubtitle1 =>
-      'उत्पादों को कार्ट में तुरंत जोड़ने के लिए बस नाम बोलें। 10 गुना तेज़ बिल बनाएं।';
+      'आइटमों को कार्ट में तुरंत जोड़ने के लिए बस नाम बोलें। 10 गुना तेज़ बिल बनाएं।';
 
   @override
   String get onboardTitle2 => 'स्मार्ट इन्वेंटरी';
@@ -1416,7 +1412,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onboardSubtitle3 =>
-      'एक नज़र में अपना दैनिक मुनाफ़ा, शीर्ष उत्पाद और सबसे अच्छे ग्राहक जानें।';
+      'एक नज़र में अपना दैनिक मुनाफ़ा, शीर्ष आइटम और सबसे अच्छे ग्राहक जानें।';
 
   @override
   String get onboardTitle4 => 'ऑफ़लाइन काम करता है';
@@ -1504,7 +1500,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get categoryStationery => 'स्टेशनरी';
 
   @override
-  String get categoryCleaningProducts => 'सफ़ाई उत्पाद';
+  String get categoryCleaningItems => 'सफ़ाई आइटम';
 
   @override
   String get categoryGrocery => 'किराना';
@@ -1521,7 +1517,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get uncategorized => 'बिना श्रेणी';
 
   @override
-  String get productDeleted => 'उत्पाद हटाया गया';
+  String get itemDeleted => 'आइटम हटाया गया';
 
   @override
   String itemCountLabel(int count) {

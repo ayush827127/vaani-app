@@ -51,7 +51,7 @@ class InvoicePdfHelper {
       status: invoice.status,
       items: invoice.items
           .map((it) => (
-                name: it.productName,
+                name: it.itemName,
                 qty: it.quantity,
                 price: it.sellingPrice,
                 total: it.lineTotal,

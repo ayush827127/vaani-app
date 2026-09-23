@@ -1,8 +1,15 @@
+import 'item.dart';
+
 class InvoiceItem {
   final int? id;
   final int invoiceId;
-  final int productId;
-  final String productName;
+  final int itemId;
+  final String itemName;
+  // Snapshotted at sale time, same reasoning as costPrice below — a bill
+  // stays historically accurate even if the item is later retyped (e.g.
+  // product → service) or deleted. Defaults to product: every line ever
+  // created before this field existed really was a physical product.
+  final ItemType itemType;
   final int quantity;
   final double sellingPrice;
   final double gstRate;
@@ -10,16 +17,17 @@ class InvoiceItem {
   final double lineTotal;
   // How many of [quantity] have already been reversed via a return or void.
   final int returnedQuantity;
-  // Product cost at the time of sale — snapshotted so profit reports and
-  // later void/return reversals stay accurate even if the product's cost is
+  // Item cost at the time of sale — snapshotted so profit reports and
+  // later void/return reversals stay accurate even if the item's cost is
   // edited afterwards.
   final double costPrice;
 
   const InvoiceItem({
     this.id,
     required this.invoiceId,
-    required this.productId,
-    required this.productName,
+    required this.itemId,
+    required this.itemName,
+    this.itemType = ItemType.product,
     required this.quantity,
     required this.sellingPrice,
     this.gstRate = 0,
@@ -34,8 +42,9 @@ class InvoiceItem {
   Map<String, dynamic> toMap() => {
         'id': id,
         'invoice_id': invoiceId,
-        'product_id': productId,
-        'product_name': productName,
+        'item_id': itemId,
+        'item_name': itemName,
+        'item_type': itemType.dbValue,
         'quantity': quantity,
         'selling_price': sellingPrice,
         'gst_rate': gstRate,
@@ -48,8 +57,9 @@ class InvoiceItem {
   factory InvoiceItem.fromMap(Map<String, dynamic> map) => InvoiceItem(
         id: map['id'] as int?,
         invoiceId: map['invoice_id'] as int,
-        productId: map['product_id'] as int,
-        productName: map['product_name'] as String,
+        itemId: map['item_id'] as int,
+        itemName: map['item_name'] as String,
+        itemType: ItemType.fromDbValue(map['item_type'] as String?),
         quantity: map['quantity'] as int,
         sellingPrice: (map['selling_price'] as num).toDouble(),
         gstRate: (map['gst_rate'] as num?)?.toDouble() ?? 0,
@@ -120,7 +130,7 @@ class Invoice {
   });
 
   // deleted_at is deliberately excluded — see the matching note on
-  // Product.toMap(). It's written only by InvoiceRepository.upsertFromCloud().
+  // Item.toMap(). It's written only by InvoiceRepository.upsertFromCloud().
   Map<String, dynamic> toMap() => {
         'id': id,
         'invoice_number': invoiceNumber,

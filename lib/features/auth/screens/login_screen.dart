@@ -254,7 +254,7 @@ class _LoginScreenState extends State<LoginScreen> {
         await prefs.setInt(AppConstants.keyShopId, shopId);
 
         // Await (don't fire-and-forget) this first sync — it's what actually
-        // pulls the shop's products/customers/invoices down onto this
+        // pulls the shop's items/customers/invoices down onto this
         // device, so the user shouldn't land on an empty dashboard while it
         // happens invisibly in the background.
         final syncResult = await getIt<DataSyncRepository>().syncNow();

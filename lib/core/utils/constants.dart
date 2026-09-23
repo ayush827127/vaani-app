@@ -1,7 +1,7 @@
 class AppConstants {
   static const String appName = 'Vaani';
   static const String dbName = 'vaani.db';
-  static const int dbVersion = 13;
+  static const int dbVersion = 14;
 
   // Must match BASIC_VOICE_INVOICE_LIMIT in the backend's
   // src/utils/voiceQuota.js — this is only the *local, offline* gate for
@@ -64,7 +64,7 @@ class AppConstants {
   static const String statusPending = 'pending';
   static const String statusCancelled = 'cancelled';
 
-  // Product categories
+  // Item categories
   static const List<String> categories = [
     'Soft Drinks',
     'Snacks',
@@ -75,7 +75,7 @@ class AppConstants {
     'Chips',
     'Personal Care',
     'Stationery',
-    'Cleaning Products',
+    'Cleaning Items',
     'Grocery',
     'Others',
   ];

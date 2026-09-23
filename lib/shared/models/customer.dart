@@ -11,7 +11,7 @@ class Customer {
   final double advanceBalance;
   final DateTime? lastVisit;
   final String? imagePath;
-  // Cloudinary URL cloud sync uploads imagePath to, mirroring Product's
+  // Cloudinary URL cloud sync uploads imagePath to, mirroring Item's
   // imagePath/imageUrl pair — what makes a customer's photo survive a
   // reinstall (imagePath is a local file path only, wiped along with the
   // app's storage) instead of being lost with no way back.
@@ -40,7 +40,7 @@ class Customer {
   });
 
   // deleted_at and image_url are deliberately excluded — see the matching
-  // note on Product.toMap(). image_url is written only by
+  // note on Item.toMap(). image_url is written only by
   // CustomerRepository.setImageUrl()/upsertFromCloud(); deleted_at only by
   // upsertFromCloud().
   Map<String, dynamic> toMap() => {

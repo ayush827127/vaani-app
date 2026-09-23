@@ -32,7 +32,7 @@ class Shop {
   });
 
   /// logo_url is deliberately excluded — see the matching note on
-  /// Product.toMap(). It's written only by ShopRepository.setLogoUrl()/the
+  /// Item.toMap(). It's written only by ShopRepository.setLogoUrl()/the
   /// logo-change-detection in updateShop().
   Map<String, dynamic> toMap() => {
         'id': id,

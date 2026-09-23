@@ -13,7 +13,7 @@ import '../../../shared/models/customer.dart';
 import '../../../shared/widgets/customer_avatar.dart';
 import '../../../shared/widgets/shop_logo_image.dart';
 import '../../reports/repositories/report_repository.dart';
-import '../../inventory/repositories/product_repository.dart';
+import '../../inventory/repositories/item_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
 import '../../billing/repositories/invoice_repository.dart';
 import '../../auth/repositories/shop_repository.dart';
@@ -64,7 +64,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final shop = await getIt<ShopRepository>().getShop();
 
     final reportRepo = getIt<ReportRepository>();
-    final productRepo = getIt<ProductRepository>();
+    final itemRepo = getIt<ItemRepository>();
     final customerRepo = getIt<CustomerRepository>();
     final invoiceRepo = getIt<InvoiceRepository>();
 
@@ -73,7 +73,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final chart = await reportRepo.getLast7DaysSales(_shopId);
     final bills = await invoiceRepo.getTodayBillCount(_shopId);
     final newCustomers = await customerRepo.getNewCustomersThisMonth(_shopId);
-    final lowStock = await productRepo.getLowStockProducts(_shopId);
+    final lowStock = await itemRepo.getLowStockItems(_shopId);
     final recentBills = await invoiceRepo.getInvoicesByShopWithItemCounts(_shopId, limit: 3);
     final customers = await customerRepo.getAllCustomers(_shopId);
 
@@ -421,9 +421,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           children: [
             gated(moduleKey: 'billing',    icon: Icons.receipt_long_rounded, label: l10n.newBill,   onTap: () => context.go('/billing')),
-            gated(moduleKey: 'inventory',  icon: Icons.inventory_2_rounded,  label: l10n.products,  onTap: () => context.go('/inventory')),
+            gated(moduleKey: 'inventory',  icon: Icons.inventory_2_rounded,  label: l10n.items,  onTap: () => context.go('/inventory')),
             gated(moduleKey: 'customers',  icon: Icons.people_rounded,       label: l10n.customers, onTap: () => context.go('/customers')),
-            gated(moduleKey: 'inventory',  icon: Icons.add_box_rounded,      label: l10n.addProduct, onTap: () => context.push('/inventory/add')),
+            gated(moduleKey: 'inventory',  icon: Icons.add_box_rounded,      label: l10n.addItem, onTap: () => context.push('/inventory/add')),
             gated(moduleKey: 'reports',    icon: Icons.bar_chart_rounded,    label: l10n.reports,    onTap: () => context.go('/reports')),
             gated(moduleKey: 'ai_manager', icon: Icons.smart_toy_rounded,    label: l10n.aiManager,  color: AppColors.primaryLight, onTap: () => context.go('/ai-manager')),
           ],

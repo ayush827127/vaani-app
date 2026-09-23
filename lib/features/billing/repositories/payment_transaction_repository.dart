@@ -60,7 +60,7 @@ class PaymentTransactionRepository {
 
   /// Writes a cloud-pulled payment straight into the row matching its exact
   /// [payment.id] — see the matching note on
-  /// ProductRepository.upsertFromCloud().
+  /// ItemRepository.upsertFromCloud().
   ///
   /// Note (pre-existing, now newly visible under two-way sync): an admin
   /// edit/delete to a payment does not recompute the linked invoice's

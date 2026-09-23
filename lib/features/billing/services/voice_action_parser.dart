@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../../../shared/models/product.dart';
+import '../../../shared/models/item.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/models/cart_item.dart';
 
@@ -13,44 +13,44 @@ sealed class VoiceAction {
 }
 
 final class SetQuantityAction extends VoiceAction {
-  final int productId;
-  final String productName;
+  final int itemId;
+  final String itemName;
   final int quantity;
   final bool inventoryWarning;
   const SetQuantityAction({
-    required this.productId,
-    required this.productName,
+    required this.itemId,
+    required this.itemName,
     required this.quantity,
     this.inventoryWarning = false,
   });
 }
 
 final class IncreaseQuantityAction extends VoiceAction {
-  final int productId;
-  final String productName;
+  final int itemId;
+  final String itemName;
   final int delta;
   const IncreaseQuantityAction({
-    required this.productId,
-    required this.productName,
+    required this.itemId,
+    required this.itemName,
     required this.delta,
   });
 }
 
 final class DecreaseQuantityAction extends VoiceAction {
-  final int productId;
-  final String productName;
+  final int itemId;
+  final String itemName;
   final int delta;
   const DecreaseQuantityAction({
-    required this.productId,
-    required this.productName,
+    required this.itemId,
+    required this.itemName,
     required this.delta,
   });
 }
 
 final class RemoveItemAction extends VoiceAction {
-  final int productId;
-  final String productName;
-  const RemoveItemAction({required this.productId, required this.productName});
+  final int itemId;
+  final String itemName;
+  const RemoveItemAction({required this.itemId, required this.itemName});
 }
 
 final class ClearCartAction extends VoiceAction {
@@ -58,12 +58,12 @@ final class ClearCartAction extends VoiceAction {
 }
 
 final class UpdatePriceAction extends VoiceAction {
-  final int productId;
-  final String productName;
+  final int itemId;
+  final String itemName;
   final double price;
   const UpdatePriceAction({
-    required this.productId,
-    required this.productName,
+    required this.itemId,
+    required this.itemName,
     required this.price,
   });
 }
@@ -94,9 +94,9 @@ final class CustomerNotFoundAction extends VoiceAction {
   const CustomerNotFoundAction({required this.name, this.phone});
 }
 
-final class UnknownProductAction extends VoiceAction {
+final class UnknownItemAction extends VoiceAction {
   final String rawName;
-  const UnknownProductAction({required this.rawName});
+  const UnknownItemAction({required this.rawName});
 }
 
 final class UnknownAction extends VoiceAction {
@@ -107,7 +107,7 @@ final class UnknownAction extends VoiceAction {
 // ── BillingContext ─────────────────────────────────────────────────────────────
 
 class BillingContext {
-  final List<Product> products;
+  final List<Item> items;
   final List<Customer> customers;
   final List<CartItem> cartItems;
   final String paymentMode;
@@ -116,7 +116,7 @@ class BillingContext {
   final String? customerName;
 
   const BillingContext({
-    required this.products,
+    required this.items,
     required this.customers,
     required this.cartItems,
     required this.paymentMode,
@@ -223,7 +223,7 @@ class VoiceActionParser {
   ) async {
     debugPrint('$_tag ═══ parse() ════════════════════════════════════════');
     debugPrint('$_tag transcript (${transcript.length} chars): "$transcript"');
-    debugPrint('$_tag catalog: ${context.products.length} products, cart: ${context.cartItems.length} items');
+    debugPrint('$_tag catalog: ${context.items.length} items, cart: ${context.cartItems.length} items');
 
     if (transcript.trim().isEmpty) {
       debugPrint('$_tag FAIL [empty-transcript]');
@@ -232,10 +232,10 @@ class VoiceActionParser {
         failureReason: '[empty-transcript] STT returned no text.',
       );
     }
-    if (context.products.isEmpty) {
+    if (context.items.isEmpty) {
       return const VoiceParseResult(
         actions: [],
-        failureReason: '[empty-catalog] No products in catalog — add products first.',
+        failureReason: '[empty-catalog] No items in catalog — add items first.',
       );
     }
 
@@ -351,37 +351,37 @@ class VoiceActionParser {
       case 'increase_quantity':
       case 'decrease_quantity':
       case 'remove_item':
-        final productName = item['product']?.toString() ?? '';
-        final product = _findProduct(productName, ctx.products);
-        if (product == null) {
-          debugPrint('$_tag   product not found: "$productName"');
-          return UnknownProductAction(rawName: productName);
+        final itemName = item['item']?.toString() ?? '';
+        final matchedItem = _findItem(itemName, ctx.items);
+        if (matchedItem == null) {
+          debugPrint('$_tag   item not found: "$itemName"');
+          return UnknownItemAction(rawName: itemName);
         }
         if (type == 'remove_item') {
-          return RemoveItemAction(productId: product.id!, productName: product.name);
+          return RemoveItemAction(itemId: matchedItem.id!, itemName: matchedItem.name);
         }
         final qty = _parseInt(item['quantity'] ?? item['delta']);
         if (type == 'set_quantity') {
           final hasWarning =
-              product.stockQuantity > 0 && qty > product.stockQuantity;
+              matchedItem.stockQuantity > 0 && qty > matchedItem.stockQuantity;
           return SetQuantityAction(
-            productId: product.id!,
-            productName: product.name,
+            itemId: matchedItem.id!,
+            itemName: matchedItem.name,
             quantity: qty.clamp(1, 9999),
             inventoryWarning: hasWarning,
           );
         }
         if (type == 'increase_quantity') {
           return IncreaseQuantityAction(
-            productId: product.id!,
-            productName: product.name,
+            itemId: matchedItem.id!,
+            itemName: matchedItem.name,
             delta: qty.clamp(1, 9999),
           );
         }
         // decrease_quantity
         return DecreaseQuantityAction(
-          productId: product.id!,
-          productName: product.name,
+          itemId: matchedItem.id!,
+          itemName: matchedItem.name,
           delta: qty.clamp(1, 9999),
         );
 
@@ -389,14 +389,14 @@ class VoiceActionParser {
         return const ClearCartAction();
 
       case 'update_price':
-        final productName = item['product']?.toString() ?? '';
-        final product = _findProduct(productName, ctx.products);
-        if (product == null) return UnknownProductAction(rawName: productName);
+        final itemName = item['item']?.toString() ?? '';
+        final matchedItem = _findItem(itemName, ctx.items);
+        if (matchedItem == null) return UnknownItemAction(rawName: itemName);
         final price = _parseDouble(item['price']);
         if (price <= 0) return null;
         return UpdatePriceAction(
-          productId: product.id!,
-          productName: product.name,
+          itemId: matchedItem.id!,
+          itemName: matchedItem.name,
           price: price,
         );
 
@@ -436,9 +436,9 @@ class VoiceActionParser {
           phone: phone.isNotEmpty ? phone : null,
         );
 
-      case 'unknown_product':
-        return UnknownProductAction(
-            rawName: item['product']?.toString() ?? '');
+      case 'unknown_item':
+        return UnknownItemAction(
+            rawName: item['item']?.toString() ?? '');
 
       default:
         debugPrint('$_tag   unknown action type: "$type"');
@@ -449,7 +449,7 @@ class VoiceActionParser {
   }
 
   String _buildPrompt(String transcript, BillingContext ctx) {
-    final productCatalog = ctx.products.map((p) {
+    final itemCatalog = ctx.items.map((p) {
       final aliases = p.aliases.isNotEmpty ? p.aliases.join(', ') : '-';
       final stock =
           p.stockQuantity > 0 ? 'stock=${p.stockQuantity}' : 'stock=unlimited';
@@ -460,7 +460,7 @@ class VoiceActionParser {
         ? '  (empty)'
         : ctx.cartItems
             .map((c) =>
-                '  id=${c.product.id} name="${c.product.name}" qty=${c.quantity} price=${c.effectivePrice}')
+                '  id=${c.item.id} name="${c.item.name}" qty=${c.quantity} price=${c.effectivePrice}')
             .join('\n');
 
     final customerStr = ctx.customers.isEmpty
@@ -482,7 +482,7 @@ DISCOUNT: ${ctx.discountType == 'none' ? 'none' : '${ctx.discountValue} ${ctx.di
 CUSTOMER: ${ctx.customerName ?? '(none)'}
 
 PRODUCT CATALOG:
-$productCatalog
+$itemCatalog
 
 CUSTOMERS:
 $customerStr
@@ -496,12 +496,12 @@ CRITICAL RULES:
 1. "2 Pepsi" or "दो Pepsi" → set_quantity qty=2 (ABSOLUTE SET, even if already in cart — last qty wins)
 2. "2 aur Pepsi" or "2 more Pepsi" or "2 और Pepsi" → increase_quantity delta=2 (add to existing)
 3. Multiple items → multiple actions in the array
-4. Product not in catalog → unknown_product
+4. Item not in catalog → unknown_item
 5. Payment: "cash"/"nakad"/"नकद" → cash, "gpay"/"paytm"/"phonepe"/"upi" → upi, "card"/"swipe" → card, "udhar"/"credit"/"उधार" → credit
 6. "sab hatao"/"clear karo"/"saaf karo"/"सब हटाओ" → clear_cart
 7. Price update: "Pepsi 20 rupay" or "20 ka Pepsi" → update_price (price only, no quantity)
-   COMBINED quantity + price: when the command mentions BOTH a quantity AND a price for the same product,
-   emit TWO separate actions — set_quantity first, then update_price — for that product.
+   COMBINED quantity + price: when the command mentions BOTH a quantity AND a price for the same item,
+   emit TWO separate actions — set_quantity first, then update_price — for that item.
    Price markers: rupay / rupaye / rs / rupees / ₹ and connectors se / mein / ka / wala signal a price.
    Example: "do Pepsi 40 rupay mein" → set_quantity(Pepsi,2) + update_price(Pepsi,40)
    Example: "Pepsi 40rs se do pcs" → set_quantity(Pepsi,2) + update_price(Pepsi,40)
@@ -511,45 +511,45 @@ CRITICAL RULES:
 10. Only include actions with high confidence (>0.6)
 
 AVAILABLE ACTION TYPES:
-set_quantity: {"action":"set_quantity","product":"<EXACT name from catalog>","quantity":<int>}
-increase_quantity: {"action":"increase_quantity","product":"<EXACT name from catalog>","delta":<int>}
-decrease_quantity: {"action":"decrease_quantity","product":"<EXACT name from catalog>","delta":<int>}
-remove_item: {"action":"remove_item","product":"<EXACT name from catalog>"}
+set_quantity: {"action":"set_quantity","item":"<EXACT name from catalog>","quantity":<int>}
+increase_quantity: {"action":"increase_quantity","item":"<EXACT name from catalog>","delta":<int>}
+decrease_quantity: {"action":"decrease_quantity","item":"<EXACT name from catalog>","delta":<int>}
+remove_item: {"action":"remove_item","item":"<EXACT name from catalog>"}
 clear_cart: {"action":"clear_cart"}
-update_price: {"action":"update_price","product":"<EXACT name from catalog>","price":<float>}
+update_price: {"action":"update_price","item":"<EXACT name from catalog>","price":<float>}
 discount: {"action":"discount","discount_type":"percent"|"flat","value":<float>}
 payment_mode: {"action":"payment_mode","mode":"cash"|"upi"|"card"|"credit"}
 select_customer: {"action":"select_customer","name":"<spoken name>","phone":"<spoken phone or empty string>"}
 customer_not_found: {"action":"customer_not_found","name":"<name>","phone":"<phone or empty string>"}
-unknown_product: {"action":"unknown_product","product":"<spoken name>"}
+unknown_item: {"action":"unknown_item","item":"<spoken name>"}
 unknown: {"action":"unknown","message":"<what was unclear>"}
 
 COMBINED COMMAND EXAMPLES (quantity + price in one utterance — always two actions):
-"do Pepsi 40 rupay mein"  → [{"action":"set_quantity","product":"Pepsi","quantity":2},{"action":"update_price","product":"Pepsi","price":40}]
-"Pepsi 40rs se do pcs"    → [{"action":"set_quantity","product":"Pepsi","quantity":2},{"action":"update_price","product":"Pepsi","price":40}]
-"teen Coke 30 ka"         → [{"action":"set_quantity","product":"Coke","quantity":3},{"action":"update_price","product":"Coke","price":30}]
-"ek namak 18 rupay"       → [{"action":"set_quantity","product":"Namak","quantity":1},{"action":"update_price","product":"Namak","price":18}]
+"do Pepsi 40 rupay mein"  → [{"action":"set_quantity","item":"Pepsi","quantity":2},{"action":"update_price","item":"Pepsi","price":40}]
+"Pepsi 40rs se do pcs"    → [{"action":"set_quantity","item":"Pepsi","quantity":2},{"action":"update_price","item":"Pepsi","price":40}]
+"teen Coke 30 ka"         → [{"action":"set_quantity","item":"Coke","quantity":3},{"action":"update_price","item":"Coke","price":30}]
+"ek namak 18 rupay"       → [{"action":"set_quantity","item":"Namak","quantity":1},{"action":"update_price","item":"Namak","price":18}]
 
-IMPORTANT: Product field must contain the EXACT name from the catalog above (copy verbatim). Do NOT invent product names.
+IMPORTANT: Item field must contain the EXACT name from the catalog above (copy verbatim). Do NOT invent item names.
 
 Return ONLY a JSON array, no markdown, no backticks, no explanation:
-[{"action":"...","product":"...","quantity":...}]''';
+[{"action":"...","item":"...","quantity":...}]''';
   }
 
-  Product? _findProduct(String name, List<Product> products) {
+  Item? _findItem(String name, List<Item> items) {
     final lower = name.toLowerCase().trim();
     if (lower.isEmpty) return null;
-    for (final p in products) {
+    for (final p in items) {
       if (p.name.toLowerCase() == lower) return p;
     }
-    for (final p in products) {
+    for (final p in items) {
       if (p.aliases.any((a) => a.toLowerCase() == lower)) return p;
     }
-    for (final p in products) {
+    for (final p in items) {
       final pn = p.name.toLowerCase();
       if (pn.contains(lower) || lower.contains(pn)) return p;
     }
-    for (final p in products) {
+    for (final p in items) {
       if (p.aliases.any((a) {
         final al = a.toLowerCase();
         return al.contains(lower) || lower.contains(al);

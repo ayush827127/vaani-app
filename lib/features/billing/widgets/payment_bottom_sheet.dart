@@ -396,7 +396,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
     } on InsufficientStockException catch (e) {
       if (mounted) {
         setState(() => _isProcessing = false);
-        _snack('${e.productName}: only ${e.available} in stock, ${e.requested} requested');
+        _snack('${e.itemName}: only ${e.available} in stock, ${e.requested} requested');
       }
       return;
     } catch (e) {
@@ -721,10 +721,10 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
               ]),
               ...widget.cartItems.map(
                 (item) => pw.TableRow(children: [
-                  cell(item.product.name),
+                  cell(item.item.name),
                   cell('${item.quantity}', align: pw.TextAlign.center),
                   cell(
-                    'Rs.${item.product.sellingPrice.toStringAsFixed(2)}',
+                    'Rs.${item.item.sellingPrice.toStringAsFixed(2)}',
                     align: pw.TextAlign.right,
                   ),
                   cell(
@@ -1566,7 +1566,7 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
           Expanded(
             child: _filtered.isEmpty
                 ? Center(
-                    child: Text(l10n.noCustomersFound,
+                    child: Text(l10n.noCustomersFoundInSearch,
                         style: TextStyle(color: c.textHint)))
                 : ListView.builder(
                     controller: ctrl,

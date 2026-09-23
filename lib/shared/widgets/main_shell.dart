@@ -104,7 +104,7 @@ class _MainShellState extends ConsumerState<MainShell>
             child: Row(
               children: [
                 _NavItem(icon: Icons.home_rounded,         label: l10n.home,     index: 0, current: currentIndex, onTap: onTap, cs: cs),
-                _NavItem(icon: Icons.inventory_2_rounded,  label: l10n.products, index: 1, current: currentIndex, onTap: onTap, cs: cs),
+                _NavItem(icon: Icons.inventory_2_rounded,  label: l10n.items, index: 1, current: currentIndex, onTap: onTap, cs: cs),
                 const _VoiceFAB(),
                 _NavItem(icon: Icons.receipt_long_rounded, label: l10n.billing,  index: 3, current: currentIndex, onTap: onTap, cs: cs),
                 _NavItem(icon: Icons.person_rounded,       label: l10n.profile,  index: 4, current: currentIndex, onTap: onTap, cs: cs),

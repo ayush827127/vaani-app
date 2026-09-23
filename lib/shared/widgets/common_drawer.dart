@@ -153,7 +153,7 @@ class _CommonDrawerState extends State<CommonDrawer> {
                 ),
                 _NavTile(
                   icon: Icons.inventory_2_rounded,
-                  label: l10n.products,
+                  label: l10n.items,
                   route: '/inventory',
                   current: currentPath,
                   onTap: () { Navigator.pop(context); context.go('/inventory'); },

@@ -52,11 +52,11 @@ class _InvoicePreviewScreenState extends ConsumerState<InvoicePreviewScreen> {
     final saved = _invoiceItems;
     if (saved != null) {
       return saved
-          .map((it) => (name: it.productName, qty: it.quantity, price: it.sellingPrice, total: it.lineTotal))
+          .map((it) => (name: it.itemName, qty: it.quantity, price: it.sellingPrice, total: it.lineTotal))
           .toList();
     }
     return _cart
-        .map((c) => (name: c.product.name, qty: c.quantity, price: c.effectivePrice, total: c.lineTotal))
+        .map((c) => (name: c.item.name, qty: c.quantity, price: c.effectivePrice, total: c.lineTotal))
         .toList();
   }
 
@@ -123,7 +123,7 @@ class _InvoicePreviewScreenState extends ConsumerState<InvoicePreviewScreen> {
       items: _cart.isNotEmpty
           ? _cart
               .map((c) => PrintLineItem(
-                    name: c.product.name,
+                    name: c.item.name,
                     quantity: c.quantity,
                     price: c.effectivePrice,
                     total: c.lineTotal,
@@ -131,7 +131,7 @@ class _InvoicePreviewScreenState extends ConsumerState<InvoicePreviewScreen> {
               .toList()
           : (_invoiceItems ?? [])
               .map((it) => PrintLineItem(
-                    name: it.productName,
+                    name: it.itemName,
                     quantity: it.quantity,
                     price: it.sellingPrice,
                     total: it.lineTotal,

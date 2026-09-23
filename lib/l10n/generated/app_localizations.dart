@@ -122,11 +122,11 @@ abstract class AppLocalizations {
   /// **'Home'**
   String get home;
 
-  /// No description provided for @products.
+  /// No description provided for @items.
   ///
   /// In en, this message translates to:
-  /// **'Products'**
-  String get products;
+  /// **'Items'**
+  String get items;
 
   /// No description provided for @billing.
   ///
@@ -344,11 +344,11 @@ abstract class AppLocalizations {
   /// **'Mixed'**
   String get mixed;
 
-  /// No description provided for @product.
+  /// No description provided for @item.
   ///
   /// In en, this message translates to:
-  /// **'Product'**
-  String get product;
+  /// **'Item'**
+  String get item;
 
   /// No description provided for @quantity.
   ///
@@ -602,11 +602,11 @@ abstract class AppLocalizations {
   /// **'Voice Bill'**
   String get voiceBill;
 
-  /// No description provided for @addProduct.
+  /// No description provided for @addItem.
   ///
   /// In en, this message translates to:
-  /// **'Add Product'**
-  String get addProduct;
+  /// **'Add Item'**
+  String get addItem;
 
   /// No description provided for @sevenDayRevenue.
   ///
@@ -626,11 +626,11 @@ abstract class AppLocalizations {
   /// **'{count} low'**
   String lowStockBadge(String count);
 
-  /// No description provided for @searchProductsHint.
+  /// No description provided for @searchItemsHint.
   ///
   /// In en, this message translates to:
-  /// **'Search products, SKU, barcode...'**
-  String get searchProductsHint;
+  /// **'Search items, SKU, barcode...'**
+  String get searchItemsHint;
 
   /// No description provided for @sortNameAZ.
   ///
@@ -662,11 +662,11 @@ abstract class AppLocalizations {
   /// **'Recently Added'**
   String get sortRecentlyAdded;
 
-  /// No description provided for @productsCount.
+  /// No description provided for @itemsCount.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{{count} Product} other{{count} Products}}'**
-  String productsCount(int count);
+  /// **'{count, plural, =1{{count} Item} other{{count} Items}}'**
+  String itemsCount(int count);
 
   /// No description provided for @filterByStock.
   ///
@@ -674,11 +674,11 @@ abstract class AppLocalizations {
   /// **'Filter by Stock'**
   String get filterByStock;
 
-  /// No description provided for @allProducts.
+  /// No description provided for @allItems.
   ///
   /// In en, this message translates to:
-  /// **'All Products'**
-  String get allProducts;
+  /// **'All Items'**
+  String get allItems;
 
   /// No description provided for @lowStock.
   ///
@@ -692,35 +692,35 @@ abstract class AppLocalizations {
   /// **'Out of Stock'**
   String get outOfStock;
 
-  /// No description provided for @deleteProduct.
+  /// No description provided for @deleteItem.
   ///
   /// In en, this message translates to:
-  /// **'Delete Product'**
-  String get deleteProduct;
+  /// **'Delete Item'**
+  String get deleteItem;
 
-  /// No description provided for @deleteProductConfirm.
+  /// No description provided for @deleteItemConfirm.
   ///
   /// In en, this message translates to:
   /// **'Delete \"{name}\"? This cannot be undone.'**
-  String deleteProductConfirm(String name);
+  String deleteItemConfirm(String name);
 
-  /// No description provided for @noProductsMatch.
+  /// No description provided for @noItemsMatch.
   ///
   /// In en, this message translates to:
-  /// **'No products match \"{query}\"'**
-  String noProductsMatch(String query);
+  /// **'No items match \"{query}\"'**
+  String noItemsMatch(String query);
 
-  /// No description provided for @noProductsYet.
+  /// No description provided for @noItemsYet.
   ///
   /// In en, this message translates to:
-  /// **'No products yet'**
-  String get noProductsYet;
+  /// **'No items yet'**
+  String get noItemsYet;
 
-  /// No description provided for @addFirstProductHint.
+  /// No description provided for @addFirstItemHint.
   ///
   /// In en, this message translates to:
-  /// **'Add your first product to get started'**
-  String get addFirstProductHint;
+  /// **'Add your first item to get started'**
+  String get addFirstItemHint;
 
   /// No description provided for @inStock.
   ///
@@ -788,17 +788,17 @@ abstract class AppLocalizations {
   /// **'Confirm Adjustment'**
   String get confirmAdjustment;
 
-  /// No description provided for @removeProductConfirm.
+  /// No description provided for @removeItemConfirm.
   ///
   /// In en, this message translates to:
   /// **'Remove \"{name}\" from inventory? This cannot be undone.'**
-  String removeProductConfirm(String name);
+  String removeItemConfirm(String name);
 
-  /// No description provided for @productNotFound.
+  /// No description provided for @itemNotFound.
   ///
   /// In en, this message translates to:
-  /// **'Product not found.'**
-  String get productNotFound;
+  /// **'Item not found.'**
+  String get itemNotFound;
 
   /// No description provided for @sellingPrice.
   ///
@@ -848,11 +848,11 @@ abstract class AppLocalizations {
   /// **'Stock value: {value}'**
   String stockValue(String value);
 
-  /// No description provided for @productDetails.
+  /// No description provided for @itemDetails.
   ///
   /// In en, this message translates to:
-  /// **'Product Details'**
-  String get productDetails;
+  /// **'Item Details'**
+  String get itemDetails;
 
   /// No description provided for @skuCode.
   ///
@@ -890,11 +890,11 @@ abstract class AppLocalizations {
   /// **'Adjust'**
   String get adjust;
 
-  /// No description provided for @editProduct.
+  /// No description provided for @editItem.
   ///
   /// In en, this message translates to:
-  /// **'Edit Product'**
-  String get editProduct;
+  /// **'Edit Item'**
+  String get editItem;
 
   /// No description provided for @chooseFromGallery.
   ///
@@ -920,17 +920,17 @@ abstract class AppLocalizations {
   /// **'Tap to change image'**
   String get tapToChangeImage;
 
-  /// No description provided for @addProductImage.
+  /// No description provided for @addItemImage.
   ///
   /// In en, this message translates to:
-  /// **'Add product image'**
-  String get addProductImage;
+  /// **'Add item image'**
+  String get addItemImage;
 
-  /// No description provided for @productName.
+  /// No description provided for @itemName.
   ///
   /// In en, this message translates to:
-  /// **'Product Name *'**
-  String get productName;
+  /// **'Item Name *'**
+  String get itemName;
 
   /// No description provided for @skuPhoneCode.
   ///
@@ -968,29 +968,29 @@ abstract class AppLocalizations {
   /// **'Aliases (comma-separated)'**
   String get aliasesLabel;
 
-  /// No description provided for @updateProduct.
+  /// No description provided for @updateItem.
   ///
   /// In en, this message translates to:
-  /// **'Update Product'**
-  String get updateProduct;
+  /// **'Update Item'**
+  String get updateItem;
 
-  /// No description provided for @saveProduct.
+  /// No description provided for @saveItem.
   ///
   /// In en, this message translates to:
-  /// **'Save Product'**
-  String get saveProduct;
+  /// **'Save Item'**
+  String get saveItem;
 
-  /// No description provided for @productUpdated.
+  /// No description provided for @itemUpdated.
   ///
   /// In en, this message translates to:
-  /// **'Product updated'**
-  String get productUpdated;
+  /// **'Item updated'**
+  String get itemUpdated;
 
-  /// No description provided for @productAdded.
+  /// No description provided for @itemAdded.
   ///
   /// In en, this message translates to:
-  /// **'Product added'**
-  String get productAdded;
+  /// **'Item added'**
+  String get itemAdded;
 
   /// No description provided for @barcode.
   ///
@@ -1058,11 +1058,11 @@ abstract class AppLocalizations {
   /// **'Barcode already in use. Please use a unique barcode.'**
   String get duplicateBarcodeError;
 
-  /// No description provided for @searchProductsByNameHint.
+  /// No description provided for @searchItemsByNameHint.
   ///
   /// In en, this message translates to:
-  /// **'Search products by name, SKU or barcode...'**
-  String get searchProductsByNameHint;
+  /// **'Search items by name, SKU or barcode...'**
+  String get searchItemsByNameHint;
 
   /// No description provided for @gridView.
   ///
@@ -1178,16 +1178,16 @@ abstract class AppLocalizations {
   /// **'Recognized Text'**
   String get recognizedText;
 
-  /// No description provided for @productsFoundCount.
+  /// No description provided for @itemsFoundCount.
   ///
   /// In en, this message translates to:
-  /// **'Products Found ({count})'**
-  String productsFoundCount(String count);
+  /// **'Items Found ({count})'**
+  String itemsFoundCount(String count);
 
   /// No description provided for @addedToCartCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} products added to cart'**
+  /// **'{count} items added to cart'**
   String addedToCartCount(String count);
 
   /// No description provided for @notFoundSuffix.
@@ -1598,6 +1598,12 @@ abstract class AppLocalizations {
   /// **'Search customer...'**
   String get searchCustomerHint;
 
+  /// No description provided for @noCustomersFoundInSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'No customers found'**
+  String get noCustomersFoundInSearch;
+
   /// No description provided for @dueAmount.
   ///
   /// In en, this message translates to:
@@ -1669,18 +1675,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Bill Detail'**
   String get billDetail;
-
-  /// No description provided for @items.
-  ///
-  /// In en, this message translates to:
-  /// **'Items'**
-  String get items;
-
-  /// No description provided for @noItemDetails.
-  ///
-  /// In en, this message translates to:
-  /// **'No item details'**
-  String get noItemDetails;
 
   /// No description provided for @summary.
   ///
@@ -1832,11 +1826,11 @@ abstract class AppLocalizations {
   /// **'Sales Overview'**
   String get salesOverview;
 
-  /// No description provided for @topProducts.
+  /// No description provided for @topItems.
   ///
   /// In en, this message translates to:
-  /// **'Top Products'**
-  String get topProducts;
+  /// **'Top Items'**
+  String get topItems;
 
   /// No description provided for @categoryNotFound.
   ///
@@ -2675,7 +2669,7 @@ abstract class AppLocalizations {
   /// No description provided for @onboardSubtitle1.
   ///
   /// In en, this message translates to:
-  /// **'Just speak product names to add them to cart instantly. Bill 10x faster.'**
+  /// **'Just speak item names to add them to cart instantly. Bill 10x faster.'**
   String get onboardSubtitle1;
 
   /// No description provided for @onboardTitle2.
@@ -2699,7 +2693,7 @@ abstract class AppLocalizations {
   /// No description provided for @onboardSubtitle3.
   ///
   /// In en, this message translates to:
-  /// **'Know your daily profit, top products, and best customers at a glance.'**
+  /// **'Know your daily profit, top items, and best customers at a glance.'**
   String get onboardSubtitle3;
 
   /// No description provided for @onboardTitle4.
@@ -2870,11 +2864,11 @@ abstract class AppLocalizations {
   /// **'Stationery'**
   String get categoryStationery;
 
-  /// No description provided for @categoryCleaningProducts.
+  /// No description provided for @categoryCleaningItems.
   ///
   /// In en, this message translates to:
-  /// **'Cleaning Products'**
-  String get categoryCleaningProducts;
+  /// **'Cleaning Items'**
+  String get categoryCleaningItems;
 
   /// No description provided for @categoryGrocery.
   ///
@@ -2900,11 +2894,11 @@ abstract class AppLocalizations {
   /// **'Uncategorized'**
   String get uncategorized;
 
-  /// No description provided for @productDeleted.
+  /// No description provided for @itemDeleted.
   ///
   /// In en, this message translates to:
-  /// **'Product deleted'**
-  String get productDeleted;
+  /// **'Item deleted'**
+  String get itemDeleted;
 
   /// No description provided for @itemCountLabel.
   ///

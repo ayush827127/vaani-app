@@ -6,24 +6,24 @@ import '../../../shared/models/invoice.dart';
 import '../../../shared/models/cart_item.dart';
 
 /// Thrown by [InvoiceRepository.createInvoice] when a cart item would drive
-/// a product's stock below zero — the transaction is rolled back (sqflite
+/// a item's stock below zero — the transaction is rolled back (sqflite
 /// rolls back automatically on any thrown error inside `db.transaction`), so
 /// nothing about the sale is partially committed. Every earlier stock check
 /// (manual +/- buttons, voice quantity actions) is UI-level and can go stale
 /// between being shown and checkout actually running; this is the last line
 /// of defense that always sees the real row at the moment of the write.
 class InsufficientStockException implements Exception {
-  final String productName;
+  final String itemName;
   final int available;
   final int requested;
   const InsufficientStockException({
-    required this.productName,
+    required this.itemName,
     required this.available,
     required this.requested,
   });
   @override
   String toString() =>
-      'Insufficient stock for $productName: only $available available, $requested requested';
+      'Insufficient stock for $itemName: only $available available, $requested requested';
 }
 
 /// A payment ledger row to record alongside the invoice it belongs to — see
@@ -116,27 +116,27 @@ class InvoiceRepository {
       for (final item in cartItems) {
         final lineTotal = item.quantity * item.effectivePrice;
         final taxableValue = lineTotal * (1 - discountRatio);
-        final gstAmt = taxableValue * item.product.gstRate / 100;
+        final gstAmt = taxableValue * item.item.gstRate / 100;
 
         await txn.insert('invoice_items', {
           'invoice_id': invoiceId,
-          'product_id': item.product.id,
-          'product_name': item.product.name,
+          'item_id': item.item.id,
+          'item_name': item.item.name,
           'quantity': item.quantity,
           'selling_price': item.effectivePrice,
-          'gst_rate': item.product.gstRate,
+          'gst_rate': item.item.gstRate,
           'gst_amount': gstAmt,
           'line_total': lineTotal,
           'returned_quantity': 0,
-          'cost_price': item.product.costPrice,
+          'cost_price': item.item.costPrice,
         });
 
         // Get current stock
-        final stockRows = await txn.query('products',
-            columns: ['stock_quantity'], where: 'id = ?', whereArgs: [item.product.id]);
+        final stockRows = await txn.query('items',
+            columns: ['stock_quantity'], where: 'id = ?', whereArgs: [item.item.id]);
         if (stockRows.isEmpty) {
           throw InsufficientStockException(
-            productName: item.product.name,
+            itemName: item.item.name,
             available: 0,
             requested: item.quantity,
           );
@@ -149,7 +149,7 @@ class InvoiceRepository {
           // the one point that always sees the real row, so it's the one
           // that must actually refuse rather than just warn.
           throw InsufficientStockException(
-            productName: item.product.name,
+            itemName: item.item.name,
             available: stockBefore,
             requested: item.quantity,
           );
@@ -157,15 +157,15 @@ class InvoiceRepository {
 
         // Deduct stock
         await txn.update(
-          'products',
+          'items',
           {'stock_quantity': stockAfter, 'updated_at': DateTime.now().toIso8601String()},
           where: 'id = ?',
-          whereArgs: [item.product.id],
+          whereArgs: [item.item.id],
         );
 
         // Inventory transaction
         await txn.insert('inventory_transactions', {
-          'product_id': item.product.id,
+          'item_id': item.item.id,
           'invoice_id': invoiceId,
           'type': 'sale',
           'quantity_change': -item.quantity,
@@ -174,7 +174,7 @@ class InvoiceRepository {
           'created_at': DateTime.now().toIso8601String(),
         });
 
-        totalCost += item.quantity * item.product.costPrice;
+        totalCost += item.quantity * item.item.costPrice;
         totalItems += item.quantity;
       }
 
@@ -630,7 +630,7 @@ class InvoiceRepository {
 
   /// Writes a cloud-pulled invoice straight into the row matching its exact
   /// [invoice.id] — see the matching note on
-  /// ProductRepository.upsertFromCloud(). Items are wholesale-replaced
+  /// ItemRepository.upsertFromCloud(). Items are wholesale-replaced
   /// (delete-then-plain-insert): nothing else references invoice_items.id,
   /// so there's no need to preserve or match the cloud's own item ids —
   /// letting SQLite assign fresh ones locally is simpler and just as correct.
@@ -645,8 +645,8 @@ class InvoiceRepository {
       for (final item in invoice.items) {
         await txn.insert('invoice_items', {
           'invoice_id': invoice.id,
-          'product_id': item.productId,
-          'product_name': item.productName,
+          'item_id': item.itemId,
+          'item_name': item.itemName,
           'quantity': item.quantity,
           'selling_price': item.sellingPrice,
           'gst_rate': item.gstRate,
@@ -804,11 +804,11 @@ class InvoiceRepository {
     int reversedQtyTotal = 0;
 
     for (final row in itemRows) {
-      final itemId = row['id'] as int;
-      final qtyToReverse = reversals[itemId];
+      final invoiceItemId = row['id'] as int;
+      final qtyToReverse = reversals[invoiceItemId];
       if (qtyToReverse == null || qtyToReverse <= 0) continue;
 
-      final productId = row['product_id'] as int;
+      final itemId = row['item_id'] as int;
       final unitPrice = (row['selling_price'] as num).toDouble();
       final gstRate = (row['gst_rate'] as num?)?.toDouble() ?? 0;
       final costPrice = (row['cost_price'] as num?)?.toDouble() ?? 0;
@@ -824,18 +824,18 @@ class InvoiceRepository {
       reversedQtyTotal += qtyToReverse;
 
       // Put stock back.
-      final stockRows = await txn.query('products', columns: ['stock_quantity'], where: 'id = ?', whereArgs: [productId]);
+      final stockRows = await txn.query('items', columns: ['stock_quantity'], where: 'id = ?', whereArgs: [itemId]);
       if (stockRows.isNotEmpty) {
         final stockBefore = stockRows.first['stock_quantity'] as int;
         final stockAfter = stockBefore + qtyToReverse;
         await txn.update(
-          'products',
+          'items',
           {'stock_quantity': stockAfter, 'updated_at': now},
           where: 'id = ?',
-          whereArgs: [productId],
+          whereArgs: [itemId],
         );
         await txn.insert('inventory_transactions', {
-          'product_id': productId,
+          'item_id': itemId,
           'invoice_id': invoice.id,
           'type': reason,
           'quantity_change': qtyToReverse,

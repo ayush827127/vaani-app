@@ -1,18 +1,18 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../models/product.dart';
+import '../models/item.dart';
 
-/// Displays a product image (file or network) with a letter-initial fallback.
+/// Displays a item image (file or network) with a letter-initial fallback.
 /// Drop-in replacement for the colored letter-avatar used across all screens.
-class ProductAvatar extends StatelessWidget {
-  final Product product;
+class ItemAvatar extends StatelessWidget {
+  final Item item;
   final double size;
   final Color catColor;
   final double borderRadiusValue;
 
-  const ProductAvatar({
+  const ItemAvatar({
     super.key,
-    required this.product,
+    required this.item,
     required this.size,
     required this.catColor,
     this.borderRadiusValue = 10,
@@ -20,19 +20,19 @@ class ProductAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final path = product.imagePath;
+    final path = item.imagePath;
     final hasImage = path != null && path.isNotEmpty;
     final isNetwork = hasImage && (path.startsWith('http://') || path.startsWith('https://'));
     final isFile = hasImage && !isNetwork;
     final fileExists = isFile && File(path).existsSync();
-    // product.imageUrl is the Cloudinary URL cloud sync uploads to
+    // item.imageUrl is the Cloudinary URL cloud sync uploads to
     // specifically so a photo taken on one device shows up on others (see
     // the v8 migration in database_helper.dart) — falling back to it here
     // when there's no local file is what actually makes that work. Without
     // this, every device other than the one the photo was taken on shows
     // just the letter-avatar forever, even though the image exists in sync.
-    final networkFallback = !fileExists && (product.imageUrl?.isNotEmpty ?? false)
-        ? product.imageUrl
+    final networkFallback = !fileExists && (item.imageUrl?.isNotEmpty ?? false)
+        ? item.imageUrl
         : (isNetwork ? path : null);
 
     Widget imageChild;
@@ -77,7 +77,7 @@ class ProductAvatar extends StatelessWidget {
   Widget _initial() {
     return Center(
       child: Text(
-        product.name.isNotEmpty ? product.name[0].toUpperCase() : 'P',
+        item.name.isNotEmpty ? item.name[0].toUpperCase() : 'P',
         style: TextStyle(
           color: catColor,
           fontSize: size * 0.44,

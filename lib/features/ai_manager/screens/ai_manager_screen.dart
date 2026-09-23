@@ -83,10 +83,10 @@ class _AIManagerScreenState extends State<AIManagerScreen> {
     final thisMonth = '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}';
 
     // TOP_PRODUCT_TODAY
-    if (_matchesIntent(query, ['what sold most', 'best product', 'top item', 'best seller', 'top product'])) {
+    if (_matchesIntent(query, ['what sold most', 'best item', 'top item', 'best seller', 'top item'])) {
       final result = await db.rawQuery('''
         SELECT p.name, SUM(ii.quantity) as qty FROM invoice_items ii
-        JOIN products p ON p.id = ii.product_id
+        JOIN items p ON p.id = ii.item_id
         JOIN invoices i ON i.id = ii.invoice_id
         WHERE i.shop_id = ? AND DATE(i.created_at) = ? AND i.deleted_at IS NULL AND i.status != 'cancelled'
         GROUP BY p.id ORDER BY qty DESC LIMIT 1
@@ -145,11 +145,11 @@ class _AIManagerScreenState extends State<AIManagerScreen> {
     // RESTOCK_NEEDED
     if (_matchesIntent(query, ['restock', 'kya mangaana', 'low stock', 'order what', 'what to order', 'refill'])) {
       final result = await db.rawQuery('''
-        SELECT name, stock_quantity, reorder_level FROM products
+        SELECT name, stock_quantity, reorder_level FROM items
         WHERE shop_id = ? AND is_active = 1 AND stock_quantity <= reorder_level
         ORDER BY stock_quantity ASC LIMIT 5
       ''', [_shopId]);
-      if (result.isEmpty) return '✅ Great news! All products are sufficiently stocked.';
+      if (result.isEmpty) return '✅ Great news! All items are sufficiently stocked.';
       final list = result.map((r) => '• ${r['name']} (${r['stock_quantity']} left)').join('\n');
       return '🔁 Time to restock these items:\n$list\n\nOrder these before you run out!';
     }
@@ -175,17 +175,17 @@ class _AIManagerScreenState extends State<AIManagerScreen> {
     }
 
     // INVENTORY_STATUS
-    if (_matchesIntent(query, ['inventory', 'stock status', 'products', 'how many products', 'total products'])) {
+    if (_matchesIntent(query, ['inventory', 'stock status', 'items', 'how many items', 'total items'])) {
       final result = await db.rawQuery('''
         SELECT COUNT(*) as total,
           SUM(CASE WHEN stock_quantity > reorder_level THEN 1 ELSE 0 END) as in_stock,
           SUM(CASE WHEN stock_quantity <= reorder_level AND stock_quantity > 0 THEN 1 ELSE 0 END) as low,
           SUM(CASE WHEN stock_quantity = 0 THEN 1 ELSE 0 END) as out
-        FROM products WHERE shop_id = ? AND is_active = 1
+        FROM items WHERE shop_id = ? AND is_active = 1
       ''', [_shopId]);
-      if (result.isEmpty) return '📦 No products yet. Add your first product to get started!';
+      if (result.isEmpty) return '📦 No items yet. Add your first item to get started!';
       final r = result.first;
-      return '📦 Inventory status:\n✅ In stock: ${r['in_stock']}\n⚠️ Low stock: ${r['low']}\n❌ Out of stock: ${r['out']}\n📊 Total products: ${r['total']}';
+      return '📦 Inventory status:\n✅ In stock: ${r['in_stock']}\n⚠️ Low stock: ${r['low']}\n❌ Out of stock: ${r['out']}\n📊 Total items: ${r['total']}';
     }
 
     return '🤔 I didn\'t quite understand that. Try asking:\n• "What sold most today?"\n• "What should I restock?"\n• "What\'s my profit today?"\n• "Best customer this month?"';

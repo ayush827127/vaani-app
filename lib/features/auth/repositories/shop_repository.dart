@@ -27,7 +27,7 @@ class ShopRepository {
   /// Creates the device's shop. A device only ever holds one shop's data at
   /// a time, but nothing previously enforced that — logging out and setting
   /// up (or cloud-restoring) a *different* shop on the same device could
-  /// leave a second `shops` row behind with the old shop's products,
+  /// leave a second `shops` row behind with the old shop's items,
   /// customers, and invoices still in their tables underneath it. Wiping
   /// first guarantees a clean slate for the new shop; it's a no-op on a
   /// genuinely fresh install since there's nothing to wipe.
@@ -64,7 +64,7 @@ class ShopRepository {
 
   /// Direct field writer for a cloud-pulled shop profile — bypasses
   /// [updateShop]'s logo-path-diff side effect (same reasoning as
-  /// ProductRepository.upsertFromCloud() and image_url). Always an UPDATE of
+  /// ItemRepository.upsertFromCloud() and image_url). Always an UPDATE of
   /// the single existing local shop row, never an insert (a device only
   /// ever has one shop). Categories live in a separate table — see
   /// CategoryRepository.replaceCategories().

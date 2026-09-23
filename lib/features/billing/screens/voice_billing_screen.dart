@@ -10,8 +10,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/services/voice_recognition_service.dart';
 import '../../../core/di/injector.dart';
-import '../../../shared/models/product.dart';
-import '../../inventory/repositories/product_repository.dart';
+import '../../../shared/models/item.dart';
+import '../../inventory/repositories/item_repository.dart';
 import '../services/voice_action_parser.dart';
 import '../services/action_executor.dart';
 import 'billing_screen.dart';
@@ -31,7 +31,7 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
   bool _speechAvailable = false;
   String _recognizedText = '';
   int _shopId = 1;
-  List<Product> _allProducts = [];
+  List<Item> _allItems = [];
   VoiceActionParser? _voiceParser;
   List<VoiceAction> _parsedActions = [];
   late AnimationController _pulseCtrl;
@@ -59,9 +59,9 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
       _voiceParser = VoiceActionParser(backendBaseUrl, shopToken);
     }
 
-    // Load the full product catalog for the parser to match against
-    final products = await getIt<ProductRepository>().getAllProducts(_shopId);
-    if (mounted) setState(() => _allProducts = products);
+    // Load the full item catalog for the parser to match against
+    final items = await getIt<ItemRepository>().getAllItems(_shopId);
+    if (mounted) setState(() => _allItems = items);
 
     if (!mounted) return;
     // Permission + STT init happen at most once per app session — see
@@ -99,12 +99,12 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
   }
 
   Future<void> _parseVoiceInput(String input) async {
-    if (_voiceParser == null || _allProducts.isEmpty) {
+    if (_voiceParser == null || _allItems.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(_voiceParser == null
               ? 'Voice billing needs an internet connection to set up.'
-              : 'Product catalog is empty. Add products first.'),
+              : 'Item catalog is empty. Add items first.'),
           backgroundColor: context.colors.danger,
         ));
       }
@@ -112,7 +112,7 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
     }
 
     final ctx = BillingContext(
-      products: _allProducts,
+      items: _allItems,
       customers: const [],
       cartItems: ref.read(cartProvider),
       paymentMode: 'upi',
@@ -152,10 +152,10 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
   }
 
   void _applyActions() {
-    final productsById = {
-      for (final p in _allProducts) if (p.id != null) p.id!: p
+    final itemsById = {
+      for (final p in _allItems) if (p.id != null) p.id!: p
     };
-    final executor = ActionExecutor(ref: ref, productsById: productsById);
+    final executor = ActionExecutor(ref: ref, itemsById: itemsById);
     final execResult = executor.execute(_parsedActions);
 
     final cartActions = execResult.messages.length;
@@ -311,7 +311,7 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${_parsedActions.where((a) => a is! UnknownProductAction && a is! UnknownAction).length} action(s) ready',
+                    '${_parsedActions.where((a) => a is! UnknownItemAction && a is! UnknownAction).length} action(s) ready',
                     style: TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 16,
@@ -321,19 +321,19 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
                   const SizedBox(height: 12),
                   ..._parsedActions.map(
                     (action) {
-                      final isError = action is UnknownProductAction ||
+                      final isError = action is UnknownItemAction ||
                           action is UnknownAction;
                       final label = switch (action) {
                         SetQuantityAction() =>
-                          '${action.productName} × ${action.quantity}',
+                          '${action.itemName} × ${action.quantity}',
                         IncreaseQuantityAction() =>
-                          '+${action.delta} ${action.productName}',
+                          '+${action.delta} ${action.itemName}',
                         DecreaseQuantityAction() =>
-                          '−${action.delta} ${action.productName}',
-                        RemoveItemAction() => 'Remove ${action.productName}',
+                          '−${action.delta} ${action.itemName}',
+                        RemoveItemAction() => 'Remove ${action.itemName}',
                         ClearCartAction() => 'Clear cart',
                         UpdatePriceAction() =>
-                          '${action.productName} → ${AppFormatters.formatCurrency(action.price)}',
+                          '${action.itemName} → ${AppFormatters.formatCurrency(action.price)}',
                         DiscountAction() =>
                           'Discount: ${action.discountType == "percent" ? "${action.value}%" : "₹${action.value}"}',
                         PaymentModeAction() =>
@@ -342,7 +342,7 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
                           'Customer: ${action.customerName}',
                         CustomerNotFoundAction() =>
                           'Add customer: ${action.name}',
-                        UnknownProductAction() =>
+                        UnknownItemAction() =>
                           'Not found: "${action.rawName}"',
                         UnknownAction() => 'Unknown: ${action.message}',
                       };
@@ -373,7 +373,7 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
                   const SizedBox(height: 12),
                   ElevatedButton(
                     onPressed: _parsedActions.any((a) =>
-                            a is! UnknownProductAction && a is! UnknownAction)
+                            a is! UnknownItemAction && a is! UnknownAction)
                         ? _applyActions
                         : null,
                     child: const Text('Apply to Cart'),

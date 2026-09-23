@@ -6,16 +6,16 @@ class CategoryRepository {
   Future<List<String>> getCategories(int shopId) async {
     final db = await _db.database;
 
-    // The billing screen builds its category chips from products' own
-    // `category` values, while this table is what the Products screen and
+    // The billing screen builds its category chips from items' own
+    // `category` values, while this table is what the Items screen and
     // the category picker read — nothing kept the two in step, so a shop
-    // could have products tagged "Drinks"/"Soft Drinks" (visible in
+    // could have items tagged "Drinks"/"Soft Drinks" (visible in
     // billing) and an empty categories table ("Category not found" in
-    // Products). Any category an active product already uses is by
+    // Items). Any category an active item already uses is by
     // definition a real category, so fold those in (idempotent, and it
     // also means the list pushed to the cloud is complete).
     final used = await db.rawQuery(
-      "SELECT DISTINCT TRIM(category) AS name FROM products "
+      "SELECT DISTINCT TRIM(category) AS name FROM items "
       "WHERE shop_id = ? AND is_active = 1 AND category IS NOT NULL AND TRIM(category) != ''",
       [shopId],
     );
@@ -54,12 +54,12 @@ class CategoryRepository {
         where: 'shop_id = ? AND name = ?',
         whereArgs: [shopId, name],
       );
-      // Without this, a product still holding this category name is
+      // Without this, a item still holding this category name is
       // orphaned — permanently invisible in every category filter chip
       // (which only lists categories that still exist) while still counted
-      // under "All", since nothing else ever clears product.category.
+      // under "All", since nothing else ever clears item.category.
       await txn.update(
-        'products',
+        'items',
         {'category': null, 'updated_at': DateTime.now().toIso8601String()},
         where: 'shop_id = ? AND category = ?',
         whereArgs: [shopId, name],
@@ -78,7 +78,7 @@ class CategoryRepository {
     // An empty snapshot means the cloud simply has no category list yet (a
     // shop that never pushed one), not that an admin deleted every
     // category — treating it as authoritative would wipe the local list
-    // and null every product's category.
+    // and null every item's category.
     if (incoming.isEmpty) return;
     await db.transaction((txn) async {
       final existingRows =
@@ -97,11 +97,11 @@ class CategoryRepository {
 
       // Same reasoning as deleteCategory() — an admin removing a category
       // via the web panel drove this same code path (cloud pull → replace)
-      // with no product-side cleanup, orphaning any product still holding
+      // with no item-side cleanup, orphaning any item still holding
       // that category name.
       for (final removedName in removed) {
         await txn.update(
-          'products',
+          'items',
           {'category': null, 'updated_at': now},
           where: 'shop_id = ? AND category = ?',
           whereArgs: [shopId, removedName],

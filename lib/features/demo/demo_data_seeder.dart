@@ -4,7 +4,7 @@ import '../../core/db/database_helper.dart';
 class DemoDataSeeder {
   static final _random = Random();
 
-  static final _products = [
+  static final _items = [
     {'name': 'Coca Cola 600ml', 'category': 'Soft Drinks', 'cost': 18.0, 'price': 20.0, 'gst': 5.0, 'stock': 48, 'aliases': 'coke,cola,cold drink'},
     {'name': 'Pepsi 600ml', 'category': 'Soft Drinks', 'cost': 18.0, 'price': 20.0, 'gst': 5.0, 'stock': 32, 'aliases': 'pepsi'},
     {'name': 'Sprite 600ml', 'category': 'Soft Drinks', 'cost': 18.0, 'price': 20.0, 'gst': 5.0, 'stock': 25, 'aliases': 'sprite,lemon soda'},
@@ -45,11 +45,11 @@ class DemoDataSeeder {
     {'name': 'Act II Popcorn', 'category': 'Snacks', 'cost': 15.0, 'price': 20.0, 'gst': 12.0, 'stock': 20, 'aliases': 'popcorn,act ii'},
     {'name': 'Parle G Milk', 'category': 'Biscuits', 'cost': 12.0, 'price': 15.0, 'gst': 0.0, 'stock': 50, 'aliases': 'parle milk'},
     {'name': 'Sunfeast Dark Fantasy', 'category': 'Biscuits', 'cost': 28.0, 'price': 35.0, 'gst': 0.0, 'stock': 20, 'aliases': 'dark fantasy'},
-    {'name': 'Surf Excel 500g', 'category': 'Cleaning Products', 'cost': 80.0, 'price': 95.0, 'gst': 18.0, 'stock': 15, 'aliases': 'surf excel,surf'},
-    {'name': 'Vim Bar 300g', 'category': 'Cleaning Products', 'cost': 22.0, 'price': 28.0, 'gst': 18.0, 'stock': 20, 'aliases': 'vim'},
-    {'name': 'Lizol 500ml', 'category': 'Cleaning Products', 'cost': 70.0, 'price': 85.0, 'gst': 18.0, 'stock': 10, 'aliases': 'lizol,floor cleaner'},
-    {'name': 'Harpic 500ml', 'category': 'Cleaning Products', 'cost': 60.0, 'price': 75.0, 'gst': 18.0, 'stock': 12, 'aliases': 'harpic,toilet cleaner'},
-    {'name': 'Colin 500ml', 'category': 'Cleaning Products', 'cost': 80.0, 'price': 95.0, 'gst': 18.0, 'stock': 8, 'aliases': 'colin,glass cleaner'},
+    {'name': 'Surf Excel 500g', 'category': 'Cleaning Items', 'cost': 80.0, 'price': 95.0, 'gst': 18.0, 'stock': 15, 'aliases': 'surf excel,surf'},
+    {'name': 'Vim Bar 300g', 'category': 'Cleaning Items', 'cost': 22.0, 'price': 28.0, 'gst': 18.0, 'stock': 20, 'aliases': 'vim'},
+    {'name': 'Lizol 500ml', 'category': 'Cleaning Items', 'cost': 70.0, 'price': 85.0, 'gst': 18.0, 'stock': 10, 'aliases': 'lizol,floor cleaner'},
+    {'name': 'Harpic 500ml', 'category': 'Cleaning Items', 'cost': 60.0, 'price': 75.0, 'gst': 18.0, 'stock': 12, 'aliases': 'harpic,toilet cleaner'},
+    {'name': 'Colin 500ml', 'category': 'Cleaning Items', 'cost': 80.0, 'price': 95.0, 'gst': 18.0, 'stock': 8, 'aliases': 'colin,glass cleaner'},
     {'name': 'Colgate 200g', 'category': 'Personal Care', 'cost': 80.0, 'price': 95.0, 'gst': 18.0, 'stock': 20, 'aliases': 'colgate,toothpaste'},
     {'name': 'Pepsodent 200g', 'category': 'Personal Care', 'cost': 75.0, 'price': 90.0, 'gst': 18.0, 'stock': 15, 'aliases': 'pepsodent'},
     {'name': 'Lux Soap 100g', 'category': 'Personal Care', 'cost': 40.0, 'price': 50.0, 'gst': 18.0, 'stock': 25, 'aliases': 'lux,soap'},
@@ -149,8 +149,8 @@ class DemoDataSeeder {
         'updated_at': now,
       });
 
-      // Seed categories from demo products
-      final uniqueCategories = _products
+      // Seed categories from demo items
+      final uniqueCategories = _items
           .map((p) => p['category'] as String)
           .toSet()
           .toList()
@@ -162,10 +162,10 @@ class DemoDataSeeder {
         );
       }
 
-      // Insert products
-      final productIds = <int>[];
-      for (final p in _products) {
-        final id = await txn.insert('products', {
+      // Insert items
+      final itemIds = <int>[];
+      for (final p in _items) {
+        final id = await txn.insert('items', {
           'shop_id': shopId,
           'name': p['name'],
           'category': p['category'],
@@ -178,11 +178,11 @@ class DemoDataSeeder {
           'created_at': now,
           'updated_at': now,
         });
-        productIds.add(id);
+        itemIds.add(id);
         // Insert aliases
         for (final alias in (p['aliases'] as String).split(',')) {
-          await txn.insert('product_aliases', {
-            'product_id': id,
+          await txn.insert('item_aliases', {
+            'item_id': id,
             'alias': alias.trim(),
           });
         }
@@ -221,20 +221,20 @@ class DemoDataSeeder {
         double subtotal = 0, gstAmount = 0, totalCost = 0;
         final cartItems = <Map<String, dynamic>>[];
         for (int j = 0; j < itemCount; j++) {
-          final pIdx = _random.nextInt(productIds.length);
-          final product = _products[pIdx];
+          final pIdx = _random.nextInt(itemIds.length);
+          final item = _items[pIdx];
           final qty = _random.nextInt(4) + 1;
-          final price = (product['price'] as double);
-          final cost = (product['cost'] as double);
-          final gstRate = (product['gst'] as double);
+          final price = (item['price'] as double);
+          final cost = (item['cost'] as double);
+          final gstRate = (item['gst'] as double);
           final lineTotal = qty * price;
           final lineGst = lineTotal * gstRate / 100;
           subtotal += lineTotal;
           gstAmount += lineGst;
           totalCost += qty * cost;
           cartItems.add({
-            'product_id': productIds[pIdx],
-            'product_name': product['name'],
+            'item_id': itemIds[pIdx],
+            'item_name': item['name'],
             'quantity': qty,
             'selling_price': price,
             'gst_rate': gstRate,

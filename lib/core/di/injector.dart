@@ -1,7 +1,7 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get_it/get_it.dart';
 import '../../features/auth/repositories/shop_repository.dart';
-import '../../features/inventory/repositories/product_repository.dart';
+import '../../features/inventory/repositories/item_repository.dart';
 import '../../features/inventory/repositories/category_repository.dart';
 import '../../features/customers/repositories/customer_repository.dart';
 import '../../features/billing/repositories/invoice_repository.dart';
@@ -18,7 +18,7 @@ final GetIt getIt = GetIt.instance;
 
 void setupDI() {
   getIt.registerLazySingleton<ShopRepository>(() => ShopRepository());
-  getIt.registerLazySingleton<ProductRepository>(() => ProductRepository());
+  getIt.registerLazySingleton<ItemRepository>(() => ItemRepository());
   getIt.registerLazySingleton<CategoryRepository>(() => CategoryRepository());
   getIt.registerLazySingleton<CustomerRepository>(() => CustomerRepository());
   getIt.registerLazySingleton<InvoiceRepository>(() => InvoiceRepository());
@@ -39,7 +39,7 @@ void setupDI() {
   getIt.registerLazySingleton<DataSyncRepository>(() => DataSyncRepository(
         getIt<SyncApiClient>(),
         getIt<ShopRepository>(),
-        getIt<ProductRepository>(),
+        getIt<ItemRepository>(),
         getIt<CustomerRepository>(),
         getIt<InvoiceRepository>(),
         getIt<PaymentTransactionRepository>(),

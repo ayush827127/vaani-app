@@ -9,12 +9,12 @@ import '../../../l10n/l10n_extensions.dart';
 
 class BarcodePreviewScreen extends StatefulWidget {
   final String barcode;
-  final String productName;
+  final String itemName;
 
   const BarcodePreviewScreen({
     super.key,
     required this.barcode,
-    required this.productName,
+    required this.itemName,
   });
 
   @override
@@ -65,7 +65,7 @@ class _BarcodePreviewScreenState extends State<BarcodePreviewScreen> {
                   mainAxisSize: pw.MainAxisSize.min,
                   children: [
                     pw.Text(
-                      widget.productName,
+                      widget.itemName,
                       style: pw.TextStyle(
                         fontSize: 18,
                         fontWeight: pw.FontWeight.bold,
@@ -119,7 +119,7 @@ class _BarcodePreviewScreenState extends State<BarcodePreviewScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                widget.productName,
+                widget.itemName,
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,

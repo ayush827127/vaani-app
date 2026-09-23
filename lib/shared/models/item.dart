@@ -1,4 +1,18 @@
-class Product {
+/// PRODUCT: a physical good — inventory-tracked by default.
+/// SERVICE: labour/work with nothing to stock — never inventory-tracked by
+/// default. [Item.inventoryEnabled] (not this type) is what billing actually
+/// gates stock validation/deduction on — see the note on that field.
+enum ItemType {
+  product,
+  service;
+
+  String get dbValue => this == ItemType.service ? 'SERVICE' : 'PRODUCT';
+
+  static ItemType fromDbValue(String? value) =>
+      value == 'SERVICE' ? ItemType.service : ItemType.product;
+}
+
+class Item {
   final int? id;
   final int shopId;
   final String name;
@@ -12,12 +26,20 @@ class Product {
   final int reorderLevel;
   final String? imagePath;
   final String? imageUrl;
+  final ItemType itemType;
+  // The actual authority billing checks before touching stock — independent
+  // of [itemType] so a shop can, e.g., sell a physical item without tracking
+  // its stock, or (less commonly) track stock for something typed as a
+  // service. New items default this from their type (product→true,
+  // service→false) but it's a real, separately-stored field, never inferred
+  // from itemType at read time.
+  final bool inventoryEnabled;
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<String> aliases;
 
-  const Product({
+  const Item({
     this.id,
     required this.shopId,
     required this.name,
@@ -31,6 +53,8 @@ class Product {
     this.reorderLevel = 10,
     this.imagePath,
     this.imageUrl,
+    this.itemType = ItemType.product,
+    this.inventoryEnabled = true,
     this.isActive = true,
     required this.createdAt,
     required this.updatedAt,
@@ -42,8 +66,8 @@ class Product {
   bool get isInStock => stockQuantity > reorderLevel;
 
   /// image_url is deliberately excluded — it's a sync-managed field written
-  /// only by ProductRepository.setImageUrl()/the image-change-detection in
-  /// updateProduct(), never by this general write path. Including it here
+  /// only by ItemRepository.setImageUrl()/the image-change-detection in
+  /// updateItem(), never by this general write path. Including it here
   /// would wipe the already-uploaded Cloudinary URL on every unrelated edit
   /// (e.g. changing the price), since callers never carry it forward.
   Map<String, dynamic> toMap() => {
@@ -59,12 +83,14 @@ class Product {
         'stock_quantity': stockQuantity,
         'reorder_level': reorderLevel,
         'image_path': imagePath,
+        'item_type': itemType.dbValue,
+        'inventory_enabled': inventoryEnabled ? 1 : 0,
         'is_active': isActive ? 1 : 0,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };
 
-  factory Product.fromMap(Map<String, dynamic> map, {List<String> aliases = const []}) => Product(
+  factory Item.fromMap(Map<String, dynamic> map, {List<String> aliases = const []}) => Item(
         id: map['id'] as int?,
         shopId: map['shop_id'] as int,
         name: map['name'] as String,
@@ -78,13 +104,15 @@ class Product {
         reorderLevel: map['reorder_level'] as int? ?? 10,
         imagePath: map['image_path'] as String?,
         imageUrl: map['image_url'] as String?,
+        itemType: ItemType.fromDbValue(map['item_type'] as String?),
+        inventoryEnabled: (map['inventory_enabled'] as int? ?? 1) == 1,
         isActive: (map['is_active'] as int? ?? 1) == 1,
         createdAt: DateTime.parse(map['created_at'] as String),
         updatedAt: DateTime.parse(map['updated_at'] as String),
         aliases: aliases,
       );
 
-  Product copyWith({
+  Item copyWith({
     int? id,
     String? name,
     String? sku,
@@ -97,10 +125,12 @@ class Product {
     int? reorderLevel,
     String? imagePath,
     String? imageUrl,
+    ItemType? itemType,
+    bool? inventoryEnabled,
     bool? isActive,
     List<String>? aliases,
   }) =>
-      Product(
+      Item(
         id: id ?? this.id,
         shopId: shopId,
         name: name ?? this.name,
@@ -114,6 +144,8 @@ class Product {
         reorderLevel: reorderLevel ?? this.reorderLevel,
         imagePath: imagePath ?? this.imagePath,
         imageUrl: imageUrl ?? this.imageUrl,
+        itemType: itemType ?? this.itemType,
+        inventoryEnabled: inventoryEnabled ?? this.inventoryEnabled,
         isActive: isActive ?? this.isActive,
         createdAt: createdAt,
         updatedAt: DateTime.now(),

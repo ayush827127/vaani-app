@@ -21,7 +21,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get home => 'Home';
 
   @override
-  String get products => 'Products';
+  String get items => 'Items';
 
   @override
   String get billing => 'Billing';
@@ -132,7 +132,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mixed => 'Mixed';
 
   @override
-  String get product => 'Product';
+  String get item => 'Item';
 
   @override
   String get quantity => 'Quantity';
@@ -261,7 +261,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get voiceBill => 'Voice Bill';
 
   @override
-  String get addProduct => 'Add Product';
+  String get addItem => 'Add Item';
 
   @override
   String get sevenDayRevenue => '7-Day Revenue';
@@ -275,7 +275,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get searchProductsHint => 'Search products, SKU, barcode...';
+  String get searchItemsHint => 'Search items, SKU, barcode...';
 
   @override
   String get sortNameAZ => 'Name A–Z';
@@ -293,12 +293,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sortRecentlyAdded => 'Recently Added';
 
   @override
-  String productsCount(int count) {
+  String itemsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count Products',
-      one: '$count Product',
+      other: '$count Items',
+      one: '$count Item',
     );
     return '$_temp0';
   }
@@ -307,7 +307,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get filterByStock => 'Filter by Stock';
 
   @override
-  String get allProducts => 'All Products';
+  String get allItems => 'All Items';
 
   @override
   String get lowStock => 'Low Stock';
@@ -316,23 +316,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get outOfStock => 'Out of Stock';
 
   @override
-  String get deleteProduct => 'Delete Product';
+  String get deleteItem => 'Delete Item';
 
   @override
-  String deleteProductConfirm(String name) {
+  String deleteItemConfirm(String name) {
     return 'Delete \"$name\"? This cannot be undone.';
   }
 
   @override
-  String noProductsMatch(String query) {
-    return 'No products match \"$query\"';
+  String noItemsMatch(String query) {
+    return 'No items match \"$query\"';
   }
 
   @override
-  String get noProductsYet => 'No products yet';
+  String get noItemsYet => 'No items yet';
 
   @override
-  String get addFirstProductHint => 'Add your first product to get started';
+  String get addFirstItemHint => 'Add your first item to get started';
 
   @override
   String get inStock => 'In Stock';
@@ -372,12 +372,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get confirmAdjustment => 'Confirm Adjustment';
 
   @override
-  String removeProductConfirm(String name) {
+  String removeItemConfirm(String name) {
     return 'Remove \"$name\" from inventory? This cannot be undone.';
   }
 
   @override
-  String get productNotFound => 'Product not found.';
+  String get itemNotFound => 'Item not found.';
 
   @override
   String get sellingPrice => 'Selling Price';
@@ -408,7 +408,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get productDetails => 'Product Details';
+  String get itemDetails => 'Item Details';
 
   @override
   String get skuCode => 'SKU / Code';
@@ -429,7 +429,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adjust => 'Adjust';
 
   @override
-  String get editProduct => 'Edit Product';
+  String get editItem => 'Edit Item';
 
   @override
   String get chooseFromGallery => 'Choose from Gallery';
@@ -444,10 +444,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tapToChangeImage => 'Tap to change image';
 
   @override
-  String get addProductImage => 'Add product image';
+  String get addItemImage => 'Add item image';
 
   @override
-  String get productName => 'Product Name *';
+  String get itemName => 'Item Name *';
 
   @override
   String get skuPhoneCode => 'SKU / Phone Code';
@@ -468,16 +468,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aliasesLabel => 'Aliases (comma-separated)';
 
   @override
-  String get updateProduct => 'Update Product';
+  String get updateItem => 'Update Item';
 
   @override
-  String get saveProduct => 'Save Product';
+  String get saveItem => 'Save Item';
 
   @override
-  String get productUpdated => 'Product updated';
+  String get itemUpdated => 'Item updated';
 
   @override
-  String get productAdded => 'Product added';
+  String get itemAdded => 'Item added';
 
   @override
   String get barcode => 'Barcode';
@@ -514,8 +514,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Barcode already in use. Please use a unique barcode.';
 
   @override
-  String get searchProductsByNameHint =>
-      'Search products by name, SKU or barcode...';
+  String get searchItemsByNameHint => 'Search items by name, SKU or barcode...';
 
   @override
   String get gridView => 'Grid';
@@ -583,13 +582,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recognizedText => 'Recognized Text';
 
   @override
-  String productsFoundCount(String count) {
-    return 'Products Found ($count)';
+  String itemsFoundCount(String count) {
+    return 'Items Found ($count)';
   }
 
   @override
   String addedToCartCount(String count) {
-    return '$count products added to cart';
+    return '$count items added to cart';
   }
 
   @override
@@ -814,6 +813,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchCustomerHint => 'Search customer...';
 
   @override
+  String get noCustomersFoundInSearch => 'No customers found';
+
+  @override
   String dueAmount(String amount) {
     return 'Due $amount';
   }
@@ -862,12 +864,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get billDetail => 'Bill Detail';
-
-  @override
-  String get items => 'Items';
-
-  @override
-  String get noItemDetails => 'No item details';
 
   @override
   String get summary => 'Summary';
@@ -948,7 +944,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get salesOverview => 'Sales Overview';
 
   @override
-  String get topProducts => 'Top Products';
+  String get topItems => 'Top Items';
 
   @override
   String get categoryNotFound => 'Category not found';
@@ -1403,7 +1399,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardSubtitle1 =>
-      'Just speak product names to add them to cart instantly. Bill 10x faster.';
+      'Just speak item names to add them to cart instantly. Bill 10x faster.';
 
   @override
   String get onboardTitle2 => 'Smart Inventory';
@@ -1417,7 +1413,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardSubtitle3 =>
-      'Know your daily profit, top products, and best customers at a glance.';
+      'Know your daily profit, top items, and best customers at a glance.';
 
   @override
   String get onboardTitle4 => 'Works Offline';
@@ -1505,7 +1501,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get categoryStationery => 'Stationery';
 
   @override
-  String get categoryCleaningProducts => 'Cleaning Products';
+  String get categoryCleaningItems => 'Cleaning Items';
 
   @override
   String get categoryGrocery => 'Grocery';
@@ -1522,7 +1518,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uncategorized => 'Uncategorized';
 
   @override
-  String get productDeleted => 'Product deleted';
+  String get itemDeleted => 'Item deleted';
 
   @override
   String itemCountLabel(int count) {

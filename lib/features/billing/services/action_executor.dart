@@ -1,6 +1,6 @@
 import '../../../core/utils/formatters.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../shared/models/product.dart';
+import '../../../shared/models/item.dart';
 import '../providers/billing_providers.dart';
 import '../screens/billing_screen.dart';
 import 'voice_action_parser.dart';
@@ -39,9 +39,9 @@ class ActionExecutionResult {
 
 class ActionExecutor {
   final WidgetRef ref;
-  final Map<int, Product> productsById;
+  final Map<int, Item> itemsById;
 
-  const ActionExecutor({required this.ref, required this.productsById});
+  const ActionExecutor({required this.ref, required this.itemsById});
 
   ActionExecutionResult execute(List<VoiceAction> actions) {
     final messages = <String>[];
@@ -79,9 +79,9 @@ class ActionExecutor {
     for (final action in actions) {
       switch (action) {
         case SetQuantityAction():
-          final product = productsById[action.productId];
-          if (product == null) {
-            errors.add('Product not found: ${action.productName}');
+          final item = itemsById[action.itemId];
+          if (item == null) {
+            errors.add('Item not found: ${action.itemName}');
             break;
           }
           // Manual +/- tapping in the cart hard-clamps to available stock
@@ -93,76 +93,76 @@ class ActionExecutor {
           // the stock snapshot can be a moment stale) closes that gap.
           final requestedQty = action.quantity;
           final clampedQty =
-              product.stockQuantity > 0 ? requestedQty.clamp(1, product.stockQuantity) : 0;
+              item.stockQuantity > 0 ? requestedQty.clamp(1, item.stockQuantity) : 0;
           if (clampedQty == 0) {
-            errors.add('${action.productName} is out of stock');
+            errors.add('${action.itemName} is out of stock');
             break;
           }
           final currentCart = ref.read(cartProvider);
           final inCart =
-              currentCart.any((c) => c.product.id == action.productId);
+              currentCart.any((c) => c.item.id == action.itemId);
           if (inCart) {
-            cartNotifier.updateQuantity(action.productId, clampedQty);
+            cartNotifier.updateQuantity(action.itemId, clampedQty);
           } else {
-            cartNotifier.addProduct(product, qty: clampedQty);
+            cartNotifier.addItem(item, qty: clampedQty);
           }
-          messages.add('${action.productName} × $clampedQty');
+          messages.add('${action.itemName} × $clampedQty');
           if (clampedQty < requestedQty) {
             warnings.add(
-                '${action.productName}: only ${product.stockQuantity} in stock, set to $clampedQty');
+                '${action.itemName}: only ${item.stockQuantity} in stock, set to $clampedQty');
           }
 
         case IncreaseQuantityAction():
-          final product = productsById[action.productId];
-          if (product == null) {
-            errors.add('${action.productName} not found');
+          final item = itemsById[action.itemId];
+          if (item == null) {
+            errors.add('${action.itemName} not found');
             break;
           }
           final cart = ref.read(cartProvider);
           final existing =
-              cart.where((c) => c.product.id == action.productId).firstOrNull;
+              cart.where((c) => c.item.id == action.itemId).firstOrNull;
           final currentQty = existing?.quantity ?? 0;
           final requestedQty = currentQty + action.delta;
           // Same stock clamp as SetQuantityAction above — this path had no
           // inventory check at all before, soft or otherwise.
           final clampedQty =
-              product.stockQuantity > 0 ? requestedQty.clamp(1, product.stockQuantity) : 0;
+              item.stockQuantity > 0 ? requestedQty.clamp(1, item.stockQuantity) : 0;
           if (clampedQty == 0) {
-            errors.add('${action.productName} is out of stock');
+            errors.add('${action.itemName} is out of stock');
             break;
           }
           if (existing == null) {
-            cartNotifier.addProduct(product, qty: clampedQty);
-            messages.add('${action.productName} × $clampedQty added');
+            cartNotifier.addItem(item, qty: clampedQty);
+            messages.add('${action.itemName} × $clampedQty added');
           } else {
-            cartNotifier.updateQuantity(action.productId, clampedQty);
-            messages.add('${action.productName}: $currentQty → $clampedQty');
+            cartNotifier.updateQuantity(action.itemId, clampedQty);
+            messages.add('${action.itemName}: $currentQty → $clampedQty');
           }
           if (clampedQty < requestedQty) {
             warnings.add(
-                '${action.productName}: capped at available stock (${product.stockQuantity})');
+                '${action.itemName}: capped at available stock (${item.stockQuantity})');
           }
 
         case DecreaseQuantityAction():
           final cart = ref.read(cartProvider);
           final existing =
-              cart.where((c) => c.product.id == action.productId).firstOrNull;
+              cart.where((c) => c.item.id == action.itemId).firstOrNull;
           if (existing == null) {
-            errors.add('${action.productName} is not in cart');
+            errors.add('${action.itemName} is not in cart');
           } else {
             final newQty = existing.quantity - action.delta;
-            cartNotifier.updateQuantity(action.productId, newQty);
+            cartNotifier.updateQuantity(action.itemId, newQty);
             if (newQty <= 0) {
-              messages.add('${action.productName} removed');
+              messages.add('${action.itemName} removed');
             } else {
               messages.add(
-                  '${action.productName}: ${existing.quantity} → $newQty');
+                  '${action.itemName}: ${existing.quantity} → $newQty');
             }
           }
 
         case RemoveItemAction():
-          cartNotifier.removeProduct(action.productId);
-          messages.add('${action.productName} removed');
+          cartNotifier.removeItem(action.itemId);
+          messages.add('${action.itemName} removed');
 
         case ClearCartAction():
           cartNotifier.clear();
@@ -171,13 +171,13 @@ class ActionExecutor {
         case UpdatePriceAction():
           final cart = ref.read(cartProvider);
           final inCart =
-              cart.any((c) => c.product.id == action.productId);
+              cart.any((c) => c.item.id == action.itemId);
           if (!inCart) {
-            errors.add('${action.productName} is not in cart (add it first)');
+            errors.add('${action.itemName} is not in cart (add it first)');
           } else {
-            cartNotifier.updatePrice(action.productId, action.price);
+            cartNotifier.updatePrice(action.itemId, action.price);
             messages.add(
-                '${action.productName} price → ${AppFormatters.formatCurrency(action.price)}');
+                '${action.itemName} price → ${AppFormatters.formatCurrency(action.price)}');
           }
 
         case DiscountAction():
@@ -204,8 +204,8 @@ class ActionExecutor {
           shouldShowCustomerDialog = true;
           customerNotFoundAction = action;
 
-        case UnknownProductAction():
-          errors.add('Product not found: "${action.rawName}"');
+        case UnknownItemAction():
+          errors.add('Item not found: "${action.rawName}"');
 
         case UnknownAction():
           errors.add('Not understood: ${action.message}');

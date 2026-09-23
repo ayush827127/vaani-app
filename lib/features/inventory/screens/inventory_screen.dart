@@ -5,11 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/di/injector.dart';
-import '../../../shared/models/product.dart';
-import '../repositories/product_repository.dart';
+import '../../../shared/models/item.dart';
+import '../repositories/item_repository.dart';
 import '../repositories/category_repository.dart';
 import '../widgets/category_picker_sheet.dart';
-import '../../../shared/widgets/product_avatar.dart';
+import '../../../shared/widgets/item_avatar.dart';
 import '../../../shared/widgets/barcode_scanner_screen.dart';
 import '../../../core/utils/permission_service.dart';
 import '../../../l10n/l10n_extensions.dart';
@@ -22,8 +22,8 @@ class InventoryScreen extends StatefulWidget {
 }
 
 class _InventoryScreenState extends State<InventoryScreen> {
-  List<Product> _all = [];
-  List<Product> _filtered = [];
+  List<Item> _all = [];
+  List<Item> _filtered = [];
   List<String> _categories = [];
   bool _isLoading = true;
   int _shopId = 1;
@@ -37,20 +37,20 @@ class _InventoryScreenState extends State<InventoryScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProducts();
+    _loadItems();
   }
 
-  Future<void> _loadProducts() async {
+  Future<void> _loadItems() async {
     setState(() => _isLoading = true);
     final prefs = await SharedPreferences.getInstance();
     _shopId = prefs.getInt(AppConstants.keyShopId) ?? 1;
     final results = await Future.wait([
-      getIt<ProductRepository>().getAllProducts(_shopId),
+      getIt<ItemRepository>().getAllItems(_shopId),
       getIt<CategoryRepository>().getCategories(_shopId),
     ]);
     if (!mounted) return;
     setState(() {
-      _all = results[0] as List<Product>;
+      _all = results[0] as List<Item>;
       _categories = results[1] as List<String>;
       _isLoading = false;
     });
@@ -127,13 +127,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
     );
     if (code == null || !mounted) return;
-    final product = await getIt<ProductRepository>().getProductByBarcode(_shopId, code.trim());
+    final item = await getIt<ItemRepository>().getItemByBarcode(_shopId, code.trim());
     if (!mounted) return;
-    if (product != null && product.id != null) {
-      context.push('/inventory/product/${product.id}').then((_) => _loadProducts());
+    if (item != null && item.id != null) {
+      context.push('/inventory/item/${item.id}').then((_) => _loadItems());
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(context.l10n.productNotFound),
+        content: Text(context.l10n.itemNotFound),
         backgroundColor: context.colors.danger,
       ));
     }
@@ -150,7 +150,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         onPressed: () =>
-            context.push('/inventory/add').then((_) => _loadProducts()),
+            context.push('/inventory/add').then((_) => _loadItems()),
         backgroundColor: AppColors.primaryLight,
         shape: const CircleBorder(),
         child: const Icon(Icons.add_rounded, size: 28, color: Colors.white),
@@ -170,17 +170,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   : _filtered.isEmpty
                       ? _buildEmptyState()
                       : RefreshIndicator(
-                          onRefresh: _loadProducts,
+                          onRefresh: _loadItems,
                           child: ListView.builder(
                             padding:
                                 const EdgeInsets.fromLTRB(16, 4, 16, 100),
                             itemCount: _filtered.length,
-                            itemBuilder: (_, i) => _ProductCard(
-                              product: _filtered[i],
+                            itemBuilder: (_, i) => _ItemCard(
+                              item: _filtered[i],
                               onTap: () => context
                                   .push(
-                                      '/inventory/product/${_filtered[i].id}')
-                                  .then((_) => _loadProducts()),
+                                      '/inventory/item/${_filtered[i].id}')
+                                  .then((_) => _loadItems()),
                               onDelete: () => _confirmDelete(_filtered[i]),
                             ),
                           ),
@@ -204,7 +204,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           ),
           Expanded(
             child: Text(
-              context.l10n.products,
+              context.l10n.items,
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 22,
@@ -243,7 +243,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           controller: _searchCtrl,
           style: TextStyle(color: c.textPrimary, fontSize: 15),
           decoration: InputDecoration(
-            hintText: context.l10n.searchProductsHint,
+            hintText: context.l10n.searchItemsHint,
             hintStyle: TextStyle(color: c.textHint),
             prefixIcon: Icon(Icons.search_rounded,
                 color: isDark ? c.textHint : AppColors.primaryLight, size: 22),
@@ -380,7 +380,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       child: Row(
         children: [
           Text(
-            l10n.productsCount(_filtered.length),
+            l10n.itemsCount(_filtered.length),
             style: TextStyle(
               color: c.textSecondary,
               fontSize: 13,
@@ -453,7 +453,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     fontSize: 16,
                     fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            _FilterOption(l10n.allProducts, _stockFilter == 'all', () {
+            _FilterOption(l10n.allItems, _stockFilter == 'all', () {
               setState(() {
                 _stockFilter = 'all';
                 _applyFilters();
@@ -481,7 +481,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  Future<void> _confirmDelete(Product product) async {
+  Future<void> _confirmDelete(Item item) async {
     final c = context.colors;
     final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
@@ -490,10 +490,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
         backgroundColor: c.surface,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(l10n.deleteProduct,
+        title: Text(l10n.deleteItem,
             style: TextStyle(color: c.textPrimary, fontFamily: 'Poppins')),
         content: Text(
-          l10n.deleteProductConfirm(product.name),
+          l10n.deleteItemConfirm(item.name),
           style: TextStyle(color: c.textSecondary),
         ),
         actions: [
@@ -510,9 +510,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ],
       ),
     );
-    if (confirmed == true && product.id != null) {
-      await getIt<ProductRepository>().deleteProduct(product.id!);
-      _loadProducts();
+    if (confirmed == true && item.id != null) {
+      await getIt<ItemRepository>().deleteItem(item.id!);
+      _loadItems();
     }
   }
 
@@ -536,8 +536,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
           const SizedBox(height: 16),
           Text(
             _searchQuery.isNotEmpty
-                ? l10n.noProductsMatch(_searchQuery)
-                : l10n.noProductsYet,
+                ? l10n.noItemsMatch(_searchQuery)
+                : l10n.noItemsYet,
             style: TextStyle(
                 color: c.textSecondary,
                 fontSize: 16,
@@ -545,15 +545,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            l10n.addFirstProductHint,
+            l10n.addFirstItemHint,
             style: TextStyle(color: c.textHint, fontSize: 13),
           ),
           const SizedBox(height: 28),
           ElevatedButton.icon(
             onPressed: () =>
-                context.push('/inventory/add').then((_) => _loadProducts()),
+                context.push('/inventory/add').then((_) => _loadItems()),
             icon: const Icon(Icons.add_rounded),
-            label: Text(l10n.addProduct),
+            label: Text(l10n.addItem),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryLight,
               shape: RoundedRectangleBorder(
@@ -672,27 +672,27 @@ class _CategoryChip extends StatelessWidget {
   }
 }
 
-// ─── Product Card ────────────────────────────────────────────────────────────
+// ─── Item Card ────────────────────────────────────────────────────────────
 
-class _ProductCard extends StatelessWidget {
-  final Product product;
+class _ItemCard extends StatelessWidget {
+  final Item item;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
-  const _ProductCard(
-      {required this.product,
+  const _ItemCard(
+      {required this.item,
       required this.onTap,
       required this.onDelete});
 
   Color _stockColor(AppSemanticColors c) {
-    if (product.stockQuantity == 0) return c.danger;
-    if (product.stockQuantity <= product.reorderLevel) return c.warning;
+    if (item.stockQuantity == 0) return c.danger;
+    if (item.stockQuantity <= item.reorderLevel) return c.warning;
     return c.success;
   }
 
   String _stockLabel(AppLocalizations l10n) {
-    if (product.stockQuantity == 0) return l10n.outLabel;
-    if (product.stockQuantity <= product.reorderLevel) return l10n.lowLabel;
+    if (item.stockQuantity == 0) return l10n.outLabel;
+    if (item.stockQuantity <= item.reorderLevel) return l10n.lowLabel;
     return l10n.inStock;
   }
 
@@ -707,9 +707,9 @@ class _ProductCard extends StatelessWidget {
   }
 
   double get _margin {
-    if (product.sellingPrice <= 0 || product.costPrice <= 0) return 0;
-    return ((product.sellingPrice - product.costPrice) /
-            product.sellingPrice) *
+    if (item.sellingPrice <= 0 || item.costPrice <= 0) return 0;
+    return ((item.sellingPrice - item.costPrice) /
+            item.sellingPrice) *
         100;
   }
 
@@ -717,7 +717,7 @@ class _ProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
-    final catColor = _categoryColor(product.category);
+    final catColor = _categoryColor(item.category);
     final stockColor = _stockColor(c);
     return GestureDetector(
       onTap: onTap,
@@ -731,9 +731,9 @@ class _ProductCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Left: product image / initial avatar
-            ProductAvatar(
-              product: product,
+            // Left: item image / initial avatar
+            ItemAvatar(
+              item: item,
               size: 50,
               catColor: catColor,
               borderRadiusValue: 12,
@@ -745,7 +745,7 @@ class _ProductCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    product.name,
+                    item.name,
                     style: TextStyle(
                       color: c.textPrimary,
                       fontSize: 14,
@@ -757,7 +757,7 @@ class _ProductCard extends StatelessWidget {
                   const SizedBox(height: 5),
                   Row(
                     children: [
-                      if (product.category != null) ...[
+                      if (item.category != null) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 7, vertical: 2),
@@ -766,7 +766,7 @@ class _ProductCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            localizedCategory(l10n, product.category!),
+                            localizedCategory(l10n, item.category!),
                             style: TextStyle(
                                 fontSize: 10,
                                 color: catColor,
@@ -776,14 +776,14 @@ class _ProductCard extends StatelessWidget {
                         const SizedBox(width: 6),
                       ],
                       Text(
-                        AppFormatters.formatCurrency(product.sellingPrice),
+                        AppFormatters.formatCurrency(item.sellingPrice),
                         style: const TextStyle(
                           color: AppColors.primaryLight,
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (product.costPrice > 0) ...[
+                      if (item.costPrice > 0) ...[
                         const SizedBox(width: 6),
                         Text(
                           l10n.marginPercent(_margin.toStringAsFixed(0)),
@@ -822,7 +822,7 @@ class _ProductCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  l10n.qtyLabel('${product.stockQuantity}'),
+                  l10n.qtyLabel('${item.stockQuantity}'),
                   style: TextStyle(
                       color: c.textHint, fontSize: 12),
                 ),

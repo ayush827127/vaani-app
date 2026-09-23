@@ -73,7 +73,7 @@ class _BillDetailScreenState extends State<BillDetailScreen> {
         status: _invoice!.status,
         items: _invoice!.items
             .map((it) => (
-                  name: it.productName,
+                  name: it.itemName,
                   qty: it.quantity,
                   price: it.sellingPrice,
                   total: it.lineTotal,
@@ -353,7 +353,7 @@ class _ReturnItemsSheetState extends State<_ReturnItemsSheet> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(it.productName,
+                                Text(it.itemName,
                                     style: TextStyle(color: c.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
                                 Text('${it.remainingQuantity} available to return',
                                     style: TextStyle(color: c.textSecondary, fontSize: 11)),

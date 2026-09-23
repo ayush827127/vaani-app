@@ -7,7 +7,7 @@ extension AppLocalizationsX on BuildContext {
   AppLocalizations get l10n => AppLocalizations.of(this);
 }
 
-/// Maps a stored category value (as saved on Product records, e.g. "Soft Drinks")
+/// Maps a stored category value (as saved on Item records, e.g. "Soft Drinks")
 /// to its localized display label. The underlying stored/filtered value is
 /// never changed — only what's shown on screen.
 String localizedCategory(AppLocalizations l10n, String category) {
@@ -30,8 +30,8 @@ String localizedCategory(AppLocalizations l10n, String category) {
       return l10n.categoryPersonalCare;
     case 'Stationery':
       return l10n.categoryStationery;
-    case 'Cleaning Products':
-      return l10n.categoryCleaningProducts;
+    case 'Cleaning Items':
+      return l10n.categoryCleaningItems;
     case 'Grocery':
       return l10n.categoryGrocery;
     case 'Others':

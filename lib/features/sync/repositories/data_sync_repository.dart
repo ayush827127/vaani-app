@@ -3,13 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/constants.dart';
 import '../../auth/repositories/shop_repository.dart';
-import '../../inventory/repositories/product_repository.dart';
+import '../../inventory/repositories/item_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
 import '../../billing/repositories/invoice_repository.dart';
 import '../../billing/repositories/payment_transaction_repository.dart';
 import '../../inventory/repositories/category_repository.dart';
 import '../../subscription/repositories/subscription_repository.dart';
-import '../../../shared/models/product.dart';
+import '../../../shared/models/item.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/models/invoice.dart';
 import '../../../shared/models/payment_transaction.dart';
@@ -38,7 +38,7 @@ class SyncResult {
   // which model's fromJson threw a null-cast. Cheap enough to always keep;
   // only matters when error is non-null.
   final String? errorDetail;
-  final int products;
+  final int items;
   final int customers;
   final int invoices;
   final int inventoryTransactions;
@@ -49,7 +49,7 @@ class SyncResult {
     this.sessionExpired = false,
     this.error,
     this.errorDetail,
-    this.products = 0,
+    this.items = 0,
     this.customers = 0,
     this.invoices = 0,
     this.inventoryTransactions = 0,
@@ -57,25 +57,25 @@ class SyncResult {
   });
 
   int get totalRecords =>
-      products + customers + invoices + inventoryTransactions + paymentTransactions;
+      items + customers + invoices + inventoryTransactions + paymentTransactions;
 }
 
 /// Local ids touched by a pull-merge this cycle, per entity — used to
 /// exclude them from the push gathered right after, so nothing pulled this
 /// same cycle gets redundantly re-sent back up immediately.
 class _PullTouched {
-  final Set<int> products;
+  final Set<int> items;
   final Set<int> customers;
   final Set<int> invoices;
   final Set<int> payments;
 
-  const _PullTouched(this.products, this.customers, this.invoices, this.payments);
+  const _PullTouched(this.items, this.customers, this.invoices, this.payments);
 }
 
 class DataSyncRepository {
   final SyncApiClient _api;
   final ShopRepository _shopRepo;
-  final ProductRepository _productRepo;
+  final ItemRepository _itemRepo;
   final CustomerRepository _customerRepo;
   final InvoiceRepository _invoiceRepo;
   final PaymentTransactionRepository _paymentRepo;
@@ -96,7 +96,7 @@ class DataSyncRepository {
   DataSyncRepository(
     this._api,
     this._shopRepo,
-    this._productRepo,
+    this._itemRepo,
     this._customerRepo,
     this._invoiceRepo,
     this._paymentRepo,
@@ -161,8 +161,8 @@ class DataSyncRepository {
       // picked up by the next sync, rather than silently skipped.
       final syncStartedAt = DateTime.now();
 
-      final products = (await _productRepo.getProductsUpdatedSince(shopId, since))
-          .where((p) => !touched.products.contains(p.id))
+      final items = (await _itemRepo.getItemsUpdatedSince(shopId, since))
+          .where((p) => !touched.items.contains(p.id))
           .toList();
       final customers = (await _customerRepo.getCustomersUpdatedSince(shopId, since))
           .where((c) => !touched.customers.contains(c.id))
@@ -170,7 +170,7 @@ class DataSyncRepository {
       final invoices = (await _invoiceRepo.getInvoicesUpdatedSince(shopId, since))
           .where((inv) => !touched.invoices.contains(inv.id))
           .toList();
-      final inventoryTx = await _productRepo.getInventoryTransactionsSince(shopId, since);
+      final inventoryTx = await _itemRepo.getInventoryTransactionsSince(shopId, since);
       final paymentTx = (await _paymentRepo.getPaymentTransactionsUpdatedSince(shopId, since))
           .where((p) => !touched.payments.contains(p.id))
           .toList();
@@ -180,7 +180,7 @@ class DataSyncRepository {
       // Best-effort — a Cloudinary hiccup should never fail the rest of the
       // sync. Only uploads images that haven't been uploaded yet (imageUrl
       // null); already-uploaded ones are skipped.
-      final productsWithImages = await _withUploadedProductImages(products);
+      final itemsWithImages = await _withUploadedItemImages(items);
       final customersWithImages = await _withUploadedCustomerImages(customers);
       final logoUrl = await _withUploadedShopLogo(refreshedShop);
 
@@ -205,7 +205,7 @@ class DataSyncRepository {
           // logging back in — this was a real, confirmed data-loss bug.
           if (logoUrl != null) 'logoUrl': logoUrl,
         },
-        'products': productsWithImages.map(_productJson).toList(),
+        'items': itemsWithImages.map(_itemJson).toList(),
         'customers': customersWithImages.map(_customerJson).toList(),
         'invoices': invoices.map(_invoiceJson).toList(),
         'inventoryTransactions': inventoryTx.map(_inventoryTransactionJson).toList(),
@@ -223,7 +223,7 @@ class DataSyncRepository {
       final received = result['received'] as Map<String, dynamic>? ?? {};
       return SyncResult(
         success: true,
-        products: received['products'] as int? ?? 0,
+        items: received['items'] as int? ?? 0,
         customers: received['customers'] as int? ?? 0,
         invoices: received['invoices'] as int? ?? 0,
         inventoryTransactions: received['inventoryTransactions'] as int? ?? 0,
@@ -246,14 +246,14 @@ class DataSyncRepository {
     }
   }
 
-  /// Uploads any product image that hasn't made it to Cloudinary yet
+  /// Uploads any item image that hasn't made it to Cloudinary yet
   /// (imageUrl still null locally) and persists the result, so future syncs
-  /// skip it. Products whose upload fails (offline, misconfigured) are sent
+  /// skip it. Items whose upload fails (offline, misconfigured) are sent
   /// as-is — image sync is best-effort and never blocks the rest of the sync.
-  Future<List<Product>> _withUploadedProductImages(List<Product> products) async {
-    if (!_cloudinary.isConfigured) return products;
-    final result = <Product>[];
-    for (final p in products) {
+  Future<List<Item>> _withUploadedItemImages(List<Item> items) async {
+    if (!_cloudinary.isConfigured) return items;
+    final result = <Item>[];
+    for (final p in items) {
       if (p.imageUrl == null &&
           p.imagePath != null &&
           p.imagePath!.isNotEmpty &&
@@ -261,7 +261,7 @@ class DataSyncRepository {
           await File(p.imagePath!).exists()) {
         final url = await _cloudinary.uploadImage(p.imagePath!);
         if (url != null) {
-          await _productRepo.setImageUrl(p.id!, url);
+          await _itemRepo.setImageUrl(p.id!, url);
           result.add(p.copyWith(imageUrl: url));
           continue;
         }
@@ -273,7 +273,7 @@ class DataSyncRepository {
 
   /// Uploads any customer photo that hasn't made it to Cloudinary yet
   /// (imageUrl still null locally) and persists the result, so future syncs
-  /// skip it — the counterpart of [_withUploadedProductImages] that this
+  /// skip it — the counterpart of [_withUploadedItemImages] that this
   /// customer photo previously had none of, which is why a customer's photo
   /// never survived a reinstall (it only ever lived in local file storage).
   Future<List<Customer>> _withUploadedCustomerImages(List<Customer> customers) async {
@@ -313,13 +313,13 @@ class DataSyncRepository {
   // ── Pull (cloud → phone) ──────────────────────────────────────────────
   //
   // Conflict rule: most-recent-edit-wins by comparing timestamps — EXCEPT a
-  // tombstone (deletedAt set, or a product's isActive going false) always
+  // tombstone (deletedAt set, or a item's isActive going false) always
   // wins unconditionally, regardless of timestamps. That's deliberate, not
   // a shortcut: the phone has no local delete/deactivate action for any of
   // these entities, so a delete never competes with a legitimate local
   // delete — only with unrelated field bumps on the same row (a sale bumps
-  // a customer's updated_at, a stock adjustment bumps a product's). Under
-  // literal timestamp comparison, a product still selling or a customer
+  // a customer's updated_at, a stock adjustment bumps a item's). Under
+  // literal timestamp comparison, a item still selling or a customer
   // still buying would permanently out-race and silently swallow an
   // admin's delete, forever. See the two-way-sync plan for the full
   // reasoning.
@@ -334,7 +334,7 @@ class DataSyncRepository {
     return cloudUpdatedAt.isAfter(existingUpdatedAt);
   }
 
-  Future<Set<int>> _mergeProducts(List<dynamic> items, int shopId) async {
+  Future<Set<int>> _mergeItems(List<dynamic> items, int shopId) async {
     final touched = <int>{};
     for (final raw in items) {
       final json = raw as Map<String, dynamic>;
@@ -346,14 +346,14 @@ class DataSyncRepository {
       // push in DataSyncRepository.syncNow).
       final cloudUpdatedAt =
           DateTime.parse((json['updatedAt'] ?? json['createdAt']) as String);
-      final existing = await _productRepo.getProductById(localId);
+      final existing = await _itemRepo.getItemById(localId);
       if (!_shouldApplyCloudRecord(
           existingUpdatedAt: existing?.updatedAt,
           isTombstone: isDeleted,
           cloudUpdatedAt: cloudUpdatedAt)) {
         continue;
       }
-      await _productRepo.upsertFromCloud(_productFromCloudJson(json, shopId, isDeleted: isDeleted));
+      await _itemRepo.upsertFromCloud(_itemFromCloudJson(json, shopId, isDeleted: isDeleted));
       touched.add(localId);
     }
     return touched;
@@ -365,7 +365,7 @@ class DataSyncRepository {
       final json = raw as Map<String, dynamic>;
       final localId = json['localId'] as int;
       final isDeleted = json['deletedAt'] != null;
-      // See the matching comment in _mergeProducts.
+      // See the matching comment in _mergeItems.
       final cloudUpdatedAt =
           DateTime.parse((json['updatedAt'] ?? json['createdAt']) as String);
       final existing = await _customerRepo.getCustomerById(localId);
@@ -387,7 +387,7 @@ class DataSyncRepository {
       final json = raw as Map<String, dynamic>;
       final localId = json['localId'] as int;
       final isDeleted = json['deletedAt'] != null;
-      // See the matching comment in _mergeProducts.
+      // See the matching comment in _mergeItems.
       final cloudUpdatedAt =
           DateTime.parse((json['updatedAt'] ?? json['createdAt']) as String);
       final existing = await _invoiceRepo.getInvoiceById(localId);
@@ -440,7 +440,7 @@ class DataSyncRepository {
 
     final response = await _api.pull(token, since);
 
-    final products = await _mergeProducts(response['products'] as List? ?? const [], shopId);
+    final items = await _mergeItems(response['items'] as List? ?? const [], shopId);
     final customers = await _mergeCustomers(response['customers'] as List? ?? const [], shopId);
     final invoices = await _mergeInvoices(response['invoices'] as List? ?? const [], shopId);
     final payments = await _mergePayments(response['payments'] as List? ?? const [], shopId);
@@ -487,11 +487,11 @@ class DataSyncRepository {
       await prefs.setString(AppConstants.keyLastPullSyncAt, serverTime);
     }
 
-    return _PullTouched(products, customers, invoices, payments);
+    return _PullTouched(items, customers, invoices, payments);
   }
 
-  Product _productFromCloudJson(Map<String, dynamic> json, int shopId, {required bool isDeleted}) {
-    return Product(
+  Item _itemFromCloudJson(Map<String, dynamic> json, int shopId, {required bool isDeleted}) {
+    return Item(
       id: json['localId'] as int,
       shopId: shopId,
       name: json['name'] as String,
@@ -504,9 +504,11 @@ class DataSyncRepository {
       stockQuantity: json['stockQuantity'] as int,
       reorderLevel: json['reorderLevel'] as int,
       imageUrl: json['imageUrl'] as String?,
+      itemType: ItemType.fromDbValue(json['itemType'] as String?),
+      inventoryEnabled: json['inventoryEnabled'] as bool? ?? true,
       aliases: (json['aliases'] as List?)?.cast<String>() ?? const [],
       // A tombstone always forces inactive, regardless of the isActive value
-      // the cloud row happened to carry (deleting a product shouldn't
+      // the cloud row happened to carry (deleting a item shouldn't
       // depend on its unrelated status field ever having been toggled).
       isActive: isDeleted ? false : (json['isActive'] as bool? ?? true),
       createdAt: DateTime.parse(json['createdAt'] as String),
@@ -541,8 +543,9 @@ class DataSyncRepository {
       final item = raw as Map<String, dynamic>;
       return InvoiceItem(
         invoiceId: localId,
-        productId: item['productId'] as int,
-        productName: item['productName'] as String,
+        itemId: item['itemId'] as int,
+        itemName: item['itemName'] as String,
+        itemType: ItemType.fromDbValue(item['itemType'] as String?),
         quantity: item['quantity'] as int,
         sellingPrice: (item['sellingPrice'] as num).toDouble(),
         gstRate: (item['gstRate'] as num?)?.toDouble() ?? 0,
@@ -594,7 +597,7 @@ class DataSyncRepository {
     );
   }
 
-  Map<String, dynamic> _productJson(Product p) => {
+  Map<String, dynamic> _itemJson(Item p) => {
         'localId': p.id,
         'name': p.name,
         'sku': p.sku,
@@ -607,6 +610,8 @@ class DataSyncRepository {
         'reorderLevel': p.reorderLevel,
         'imagePath': p.imagePath,
         'imageUrl': p.imageUrl,
+        'itemType': p.itemType.dbValue,
+        'inventoryEnabled': p.inventoryEnabled,
         'aliases': p.aliases,
         'isActive': p.isActive,
         'createdAt': p.createdAt.toIso8601String(),
@@ -651,8 +656,9 @@ class DataSyncRepository {
         'items': inv.items
             .map((item) => {
                   'localId': item.id,
-                  'productId': item.productId,
-                  'productName': item.productName,
+                  'itemId': item.itemId,
+                  'itemName': item.itemName,
+                  'itemType': item.itemType.dbValue,
                   'quantity': item.quantity,
                   'sellingPrice': item.sellingPrice,
                   'gstRate': item.gstRate,
@@ -664,7 +670,7 @@ class DataSyncRepository {
 
   Map<String, dynamic> _inventoryTransactionJson(Map<String, Object?> row) => {
         'localId': row['id'],
-        'productId': row['product_id'],
+        'itemId': row['item_id'],
         'invoiceId': row['invoice_id'],
         'type': row['type'],
         'quantityChange': row['quantity_change'],

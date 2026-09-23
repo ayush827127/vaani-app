@@ -71,6 +71,10 @@ class DatabaseHelper {
       await db.execute('ALTER TABLE customers ADD COLUMN total_outstanding REAL NOT NULL DEFAULT 0');
     }
     if (oldVersion < 4) {
+      // Historical DDL — the table was still named "products" at this point
+      // in a device's upgrade history (the products→items rename happens in
+      // the v14 block below, which always runs after this one). Do not
+      // "fix" these table names to match the current schema.
       await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
       await db.execute(
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL',
@@ -87,7 +91,8 @@ class DatabaseHelper {
           FOREIGN KEY (shop_id) REFERENCES shops(id)
         )
       ''');
-      // Migrate categories already stored on products
+      // Migrate categories already stored on products (historical table name
+      // — see the note in the v4 block above).
       await db.rawInsert('''
         INSERT OR IGNORE INTO categories (shop_id, name, created_at)
         SELECT DISTINCT shop_id, category, datetime('now')
@@ -135,7 +140,7 @@ class DatabaseHelper {
       // Two-way sync: an admin-panel delete is a tombstone the phone needs
       // to see and hide locally, not a hard local delete (which would risk
       // breaking other local records that still reference the deleted row,
-      // e.g. a payment pointing at a deleted invoice). Products don't get
+      // e.g. a payment pointing at a deleted invoice). Items don't get
       // their own column — they already have is_active for exactly this.
       await db.execute('ALTER TABLE customers ADD COLUMN deleted_at TEXT');
       await db.execute('ALTER TABLE invoices ADD COLUMN deleted_at TEXT');
@@ -150,16 +155,16 @@ class DatabaseHelper {
     if (oldVersion < 10) {
       // returned_quantity backs partial-return/void support — tracks how much
       // of each line has already been reversed so a line can't be returned
-      // twice. cost_price snapshots the product's cost at sale time so
+      // twice. cost_price snapshots the item's cost at sale time so
       // profit reports and later void/return reversals stay accurate even if
-      // the product's cost is edited afterwards.
+      // the item's cost is edited afterwards.
       await db.execute(
           'ALTER TABLE invoice_items ADD COLUMN returned_quantity INTEGER NOT NULL DEFAULT 0');
       await db.execute('ALTER TABLE invoice_items ADD COLUMN cost_price REAL NOT NULL DEFAULT 0');
     }
     if (oldVersion < 11) {
       // Customer profile photo — local file path only (no image_url/cloud
-      // sync counterpart, unlike products' image_path/image_url pair; this
+      // sync counterpart, unlike items' image_path/image_url pair; this
       // is a device-local convenience, not synced to the backend).
       await db.execute('ALTER TABLE customers ADD COLUMN image_path TEXT');
     }
@@ -171,11 +176,38 @@ class DatabaseHelper {
           'ALTER TABLE invoices ADD COLUMN is_voice_created INTEGER NOT NULL DEFAULT 0');
     }
     if (oldVersion < 13) {
-      // Customer photo now has a cloud counterpart, same pair as products'
+      // Customer photo now has a cloud counterpart, same pair as items'
       // image_path/image_url — this is the fix for a customer's photo
       // vanishing after a reinstall (v11's image_path alone is a local file
       // path, wiped along with the app's storage; nothing backed it up).
       await db.execute('ALTER TABLE customers ADD COLUMN image_url TEXT');
+    }
+    if (oldVersion < 14) {
+      // "Product" → "Item": the app now bills both physical products and
+      // non-inventory services through the same catalog. Renaming preserves
+      // every existing row/id/relationship — RENAME TABLE/COLUMN in SQLite
+      // (3.25+, well within what sqflite ships on both platforms) is a
+      // metadata-only operation, not a copy, so nothing here can lose data
+      // or leave a partially-migrated table if it fails.
+      await db.execute('ALTER TABLE products RENAME TO items');
+      await db.execute('ALTER TABLE product_aliases RENAME TO item_aliases');
+      await db.execute('ALTER TABLE item_aliases RENAME COLUMN product_id TO item_id');
+      await db.execute('ALTER TABLE invoice_items RENAME COLUMN product_id TO item_id');
+      await db.execute('ALTER TABLE invoice_items RENAME COLUMN product_name TO item_name');
+      // Every existing invoice line was necessarily a physical product (the
+      // service concept didn't exist before this version) — same default
+      // reasoning as items.item_type above.
+      await db.execute(
+          "ALTER TABLE invoice_items ADD COLUMN item_type TEXT NOT NULL DEFAULT 'PRODUCT'");
+      await db.execute('ALTER TABLE inventory_transactions RENAME COLUMN product_id TO item_id');
+      // New: every existing row is an inventory-tracked physical product —
+      // exactly its current (unchanged) behavior. inventory_enabled, not
+      // item_type, is what billing actually gates on; item_type mainly
+      // drives what the UI shows/hides.
+      await db.execute(
+          "ALTER TABLE items ADD COLUMN item_type TEXT NOT NULL DEFAULT 'PRODUCT'");
+      await db.execute(
+          'ALTER TABLE items ADD COLUMN inventory_enabled INTEGER NOT NULL DEFAULT 1');
     }
   }
 
@@ -200,7 +232,7 @@ class DatabaseHelper {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS products (
+      CREATE TABLE IF NOT EXISTS items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         shop_id INTEGER NOT NULL,
         name TEXT NOT NULL,
@@ -214,6 +246,8 @@ class DatabaseHelper {
         reorder_level INTEGER NOT NULL DEFAULT 10,
         image_path TEXT,
         image_url TEXT,
+        item_type TEXT NOT NULL DEFAULT 'PRODUCT',
+        inventory_enabled INTEGER NOT NULL DEFAULT 1,
         is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -222,12 +256,12 @@ class DatabaseHelper {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS product_aliases (
+      CREATE TABLE IF NOT EXISTS item_aliases (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        product_id INTEGER NOT NULL,
+        item_id INTEGER NOT NULL,
         alias TEXT NOT NULL,
         language TEXT NOT NULL DEFAULT 'en',
-        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+        FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
       )
     ''');
 
@@ -284,8 +318,9 @@ class DatabaseHelper {
       CREATE TABLE IF NOT EXISTS invoice_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         invoice_id INTEGER NOT NULL,
-        product_id INTEGER NOT NULL,
-        product_name TEXT NOT NULL,
+        item_id INTEGER NOT NULL,
+        item_name TEXT NOT NULL,
+        item_type TEXT NOT NULL DEFAULT 'PRODUCT',
         quantity INTEGER NOT NULL,
         selling_price REAL NOT NULL,
         gst_rate REAL NOT NULL DEFAULT 0,
@@ -294,14 +329,14 @@ class DatabaseHelper {
         returned_quantity INTEGER NOT NULL DEFAULT 0,
         cost_price REAL NOT NULL DEFAULT 0,
         FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
-        FOREIGN KEY (product_id) REFERENCES products(id)
+        FOREIGN KEY (item_id) REFERENCES items(id)
       )
     ''');
 
     await db.execute('''
       CREATE TABLE IF NOT EXISTS inventory_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        product_id INTEGER NOT NULL,
+        item_id INTEGER NOT NULL,
         invoice_id INTEGER,
         type TEXT NOT NULL,
         quantity_change INTEGER NOT NULL,
@@ -309,7 +344,7 @@ class DatabaseHelper {
         stock_after INTEGER NOT NULL,
         notes TEXT,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (product_id) REFERENCES products(id),
+        FOREIGN KEY (item_id) REFERENCES items(id),
         FOREIGN KEY (invoice_id) REFERENCES invoices(id)
       )
     ''');
@@ -370,18 +405,18 @@ class DatabaseHelper {
   }
 
   Future<void> _createIndexes(Database db) async {
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_products_shop ON products(shop_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_items_shop ON items(shop_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_items_name ON items(name)');
     await db.execute(
-      'CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL',
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode) WHERE barcode IS NOT NULL',
     );
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_aliases_product ON product_aliases(product_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_aliases_alias ON product_aliases(alias)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_aliases_item ON item_aliases(item_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_aliases_alias ON item_aliases(alias)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_shop_date ON invoices(shop_id, created_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_customer ON invoices(customer_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_invoice_items_product ON invoice_items(product_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_trans_product ON inventory_transactions(product_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_invoice_items_item ON invoice_items(item_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_trans_item ON inventory_transactions(item_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_summary_date ON sales_summary(date)');
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_pay_txn_customer ON payment_transactions(customer_id)');
@@ -419,10 +454,10 @@ class DatabaseHelper {
     await db.delete('invoices');
     await db.delete('sales_summary');
     await db.delete('notifications');
-    await db.delete('product_aliases');
+    await db.delete('item_aliases');
     await db.delete('categories');
     await db.delete('customers');
-    await db.delete('products');
+    await db.delete('items');
     await db.delete('shops');
   }
 }

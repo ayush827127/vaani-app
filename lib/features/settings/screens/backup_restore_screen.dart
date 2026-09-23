@@ -162,7 +162,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Restore this backup?', style: TextStyle(color: c.textPrimary)),
         content: Text(
-          'This replaces ALL current products, customers, bills and payments with '
+          'This replaces ALL current items, customers, bills and payments with '
           "what's in the selected backup file. Anything recorded since that backup "
           'was made will be lost. This cannot be undone.',
           style: TextStyle(color: c.textSecondary),
@@ -241,7 +241,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Saves a copy of everything — products, customers, bills, payments — '
+                  'Saves a copy of everything — items, customers, bills, payments — '
                   'then lets you choose where to keep it (Google Drive, Files, email, etc.). '
                   "Save it somewhere outside this app so it survives an uninstall.",
                   style: TextStyle(color: c.textSecondary, fontSize: 13),
