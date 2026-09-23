@@ -56,6 +56,7 @@ class GiveCreditSheet extends StatefulWidget {
 class _GiveCreditSheetState extends State<GiveCreditSheet> {
   final _amountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  DateTime _date = DateTime.now();
   bool _isProcessing = false;
   bool _success = false;
 
@@ -83,6 +84,7 @@ class _GiveCreditSheetState extends State<GiveCreditSheet> {
         amount: _amount,
         newOutstanding: newOutstanding,
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        transactionDate: _date,
       );
 
       if (mounted) setState(() { _isProcessing = false; _success = true; });
@@ -176,7 +178,7 @@ class _GiveCreditSheetState extends State<GiveCreditSheet> {
                       children: [
                         Icon(Icons.warning_amber_rounded, color: const Color(0xFFFF8C00), size: 15),
                         const SizedBox(width: 8),
-                        Text(l10n.outstanding,
+                        Text(l10n.previousDue,
                             style: const TextStyle(color: Color(0xFFFF8C00), fontSize: 13)),
                         const Spacer(),
                         Text(
@@ -227,6 +229,44 @@ class _GiveCreditSheetState extends State<GiveCreditSheet> {
                 ),
                 const SizedBox(height: 16),
 
+                // Date — defaults to today, editable for a backdated entry.
+                Row(
+                  children: [
+                    Text(l10n.date, style: TextStyle(color: c.textSecondary, fontSize: 14)),
+                    const Spacer(),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _date,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) setState(() => _date = picked);
+                      },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: c.surface,
+                          borderRadius: BorderRadius.circular(10),
+                          border: isDark ? null : Border.all(color: c.inputBorder),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.calendar_today_rounded, size: 14, color: c.textHint),
+                            const SizedBox(width: 8),
+                            Text(AppFormatters.formatDate(_date),
+                                style: TextStyle(color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
                 // Reason field
                 Align(
                   alignment: Alignment.centerLeft,
@@ -259,7 +299,7 @@ class _GiveCreditSheetState extends State<GiveCreditSheet> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(l10n.newOutstanding,
+                        Text(l10n.newDueLabel,
                             style: TextStyle(color: c.textSecondary, fontSize: 13)),
                         Text(
                           AppFormatters.formatCurrency(widget.customer.totalOutstanding + _amount),

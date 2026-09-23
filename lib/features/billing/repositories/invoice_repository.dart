@@ -122,6 +122,8 @@ class InvoiceRepository {
           'invoice_id': invoiceId,
           'item_id': item.item.id,
           'item_name': item.item.name,
+          'item_type': item.item.itemType.dbValue,
+          'inventory_tracked': item.item.inventoryEnabled ? 1 : 0,
           'quantity': item.quantity,
           'selling_price': item.effectivePrice,
           'gst_rate': item.item.gstRate,
@@ -131,48 +133,54 @@ class InvoiceRepository {
           'cost_price': item.item.costPrice,
         });
 
-        // Get current stock
-        final stockRows = await txn.query('items',
-            columns: ['stock_quantity'], where: 'id = ?', whereArgs: [item.item.id]);
-        if (stockRows.isEmpty) {
-          throw InsufficientStockException(
-            itemName: item.item.name,
-            available: 0,
-            requested: item.quantity,
-          );
-        }
-        final stockBefore = stockRows.first['stock_quantity'] as int;
-        final stockAfter = stockBefore - item.quantity;
-        if (stockAfter < 0) {
-          // Every earlier check (manual buttons, voice actions) is UI-level
-          // and can be stale by the time checkout actually runs — this is
-          // the one point that always sees the real row, so it's the one
-          // that must actually refuse rather than just warn.
-          throw InsufficientStockException(
-            itemName: item.item.name,
-            available: stockBefore,
-            requested: item.quantity,
-          );
-        }
+        // Services (inventoryEnabled == false) never touch stock: no
+        // validation, no deduction, no inventory_transactions row — this is
+        // the one gate that decides it, independent of item_type. See the
+        // matching note on Item.inventoryEnabled.
+        if (item.item.inventoryEnabled) {
+          // Get current stock
+          final stockRows = await txn.query('items',
+              columns: ['stock_quantity'], where: 'id = ?', whereArgs: [item.item.id]);
+          if (stockRows.isEmpty) {
+            throw InsufficientStockException(
+              itemName: item.item.name,
+              available: 0,
+              requested: item.quantity,
+            );
+          }
+          final stockBefore = stockRows.first['stock_quantity'] as int;
+          final stockAfter = stockBefore - item.quantity;
+          if (stockAfter < 0) {
+            // Every earlier check (manual buttons, voice actions) is UI-level
+            // and can be stale by the time checkout actually runs — this is
+            // the one point that always sees the real row, so it's the one
+            // that must actually refuse rather than just warn.
+            throw InsufficientStockException(
+              itemName: item.item.name,
+              available: stockBefore,
+              requested: item.quantity,
+            );
+          }
 
-        // Deduct stock
-        await txn.update(
-          'items',
-          {'stock_quantity': stockAfter, 'updated_at': DateTime.now().toIso8601String()},
-          where: 'id = ?',
-          whereArgs: [item.item.id],
-        );
+          // Deduct stock
+          await txn.update(
+            'items',
+            {'stock_quantity': stockAfter, 'updated_at': DateTime.now().toIso8601String()},
+            where: 'id = ?',
+            whereArgs: [item.item.id],
+          );
 
-        // Inventory transaction
-        await txn.insert('inventory_transactions', {
-          'item_id': item.item.id,
-          'invoice_id': invoiceId,
-          'type': 'sale',
-          'quantity_change': -item.quantity,
-          'stock_before': stockBefore,
-          'stock_after': stockAfter,
-          'created_at': DateTime.now().toIso8601String(),
-        });
+          // Inventory transaction
+          await txn.insert('inventory_transactions', {
+            'item_id': item.item.id,
+            'invoice_id': invoiceId,
+            'type': AppConstants.txnSale,
+            'quantity_change': -item.quantity,
+            'stock_before': stockBefore,
+            'stock_after': stockAfter,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        }
 
         totalCost += item.quantity * item.item.costPrice;
         totalItems += item.quantity;
@@ -455,6 +463,12 @@ class InvoiceRepository {
   /// crash partway through could leave an invoice marked paid with no
   /// ledger row for it, or a ledger row recorded against a balance that
   /// was never actually updated.
+  /// [transactionDate] is the ledger entry's own record date — defaults to
+  /// now, but the Collect Payment sheet lets the user pick an earlier one
+  /// for a backdated "You Got" entry. It only stamps created_at on the new
+  /// payment_transactions rows; updated_at on invoices/customers always
+  /// uses the real current time (that's genuinely when the row changed,
+  /// backdating the entry doesn't rewrite history for sync purposes).
   Future<void> collectPayment({
     required int shopId,
     required int customerId,
@@ -464,10 +478,12 @@ class InvoiceRepository {
     double? advanceDepositAmount,
     List<InvoicePaymentAllocation> invoiceAllocations = const [],
     double? generalCollectionAmount,
+    DateTime? transactionDate,
   }) async {
     final db = await _db.database;
     await db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
+      final entryDate = (transactionDate ?? DateTime.now()).toIso8601String();
 
       if (advanceDepositAmount != null && advanceDepositAmount > 0) {
         await txn.insert('payment_transactions', {
@@ -478,7 +494,7 @@ class InvoiceRepository {
           'amount': advanceDepositAmount,
           'payment_mode': paymentMode,
           'notes': null,
-          'created_at': now,
+          'created_at': entryDate,
           'updated_at': now,
         });
       }
@@ -496,7 +512,7 @@ class InvoiceRepository {
           'amount': generalCollectionAmount,
           'payment_mode': paymentMode,
           'notes': null,
-          'created_at': now,
+          'created_at': entryDate,
           'updated_at': now,
         });
       }
@@ -521,7 +537,7 @@ class InvoiceRepository {
           'amount': alloc.allocated,
           'payment_mode': paymentMode,
           'notes': null,
-          'created_at': now,
+          'created_at': entryDate,
           'updated_at': now,
         });
       }
@@ -544,16 +560,19 @@ class InvoiceRepository {
   /// given to a customer on credit with no formal invoice (give_credit_
   /// sheet.dart) — as a 'manual_credit' ledger row and increases the
   /// customer's outstanding balance, in one transaction.
+  /// [transactionDate] — see the matching note on [collectPayment].
   Future<void> giveCredit({
     required int shopId,
     required int customerId,
     required double amount,
     required double newOutstanding,
     String? notes,
+    DateTime? transactionDate,
   }) async {
     final db = await _db.database;
     await db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
+      final entryDate = (transactionDate ?? DateTime.now()).toIso8601String();
       await txn.insert('payment_transactions', {
         'shop_id': shopId,
         'customer_id': customerId,
@@ -562,7 +581,7 @@ class InvoiceRepository {
         'amount': amount,
         'payment_mode': 'adjustment',
         'notes': notes,
-        'created_at': now,
+        'created_at': entryDate,
         'updated_at': now,
       });
       await txn.update(
@@ -813,6 +832,12 @@ class InvoiceRepository {
       final gstRate = (row['gst_rate'] as num?)?.toDouble() ?? 0;
       final costPrice = (row['cost_price'] as num?)?.toDouble() ?? 0;
       final returnedSoFar = row['returned_quantity'] as int? ?? 0;
+      // Whether THIS line actually deducted stock at sale time — not the
+      // item's current inventoryEnabled, which may have changed since (e.g.
+      // switched product→service, or vice versa). Using the live flag here
+      // would either skip restoring stock that really was deducted, or
+      // "restore" stock that was never touched in the first place.
+      final wasInventoryTracked = (row['inventory_tracked'] as int? ?? 1) == 1;
 
       final lineReversed = unitPrice * qtyToReverse;
       final taxableReversed = lineReversed * (1 - discountRatio);
@@ -823,27 +848,29 @@ class InvoiceRepository {
       reversedCost += costPrice * qtyToReverse;
       reversedQtyTotal += qtyToReverse;
 
-      // Put stock back.
-      final stockRows = await txn.query('items', columns: ['stock_quantity'], where: 'id = ?', whereArgs: [itemId]);
-      if (stockRows.isNotEmpty) {
-        final stockBefore = stockRows.first['stock_quantity'] as int;
-        final stockAfter = stockBefore + qtyToReverse;
-        await txn.update(
-          'items',
-          {'stock_quantity': stockAfter, 'updated_at': now},
-          where: 'id = ?',
-          whereArgs: [itemId],
-        );
-        await txn.insert('inventory_transactions', {
-          'item_id': itemId,
-          'invoice_id': invoice.id,
-          'type': reason,
-          'quantity_change': qtyToReverse,
-          'stock_before': stockBefore,
-          'stock_after': stockAfter,
-          'notes': note,
-          'created_at': now,
-        });
+      // Put stock back — only for lines that actually took stock out.
+      if (wasInventoryTracked) {
+        final stockRows = await txn.query('items', columns: ['stock_quantity'], where: 'id = ?', whereArgs: [itemId]);
+        if (stockRows.isNotEmpty) {
+          final stockBefore = stockRows.first['stock_quantity'] as int;
+          final stockAfter = stockBefore + qtyToReverse;
+          await txn.update(
+            'items',
+            {'stock_quantity': stockAfter, 'updated_at': now},
+            where: 'id = ?',
+            whereArgs: [itemId],
+          );
+          await txn.insert('inventory_transactions', {
+            'item_id': itemId,
+            'invoice_id': invoice.id,
+            'type': reason,
+            'quantity_change': qtyToReverse,
+            'stock_before': stockBefore,
+            'stock_after': stockAfter,
+            'notes': note,
+            'created_at': now,
+          });
+        }
       }
 
       await txn.update(

@@ -7,6 +7,7 @@ import '../../../shared/models/customer.dart';
 import '../../../shared/models/invoice.dart';
 import '../../../shared/models/payment_transaction.dart';
 import '../../../shared/widgets/customer_avatar.dart';
+import '../customer_ledger.dart' show netBalance;
 import '../repositories/customer_repository.dart';
 import '../../billing/repositories/invoice_repository.dart';
 import '../../billing/repositories/payment_transaction_repository.dart';
@@ -84,6 +85,12 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     );
   }
 
+  void _createBill() {
+    final cust = _customer;
+    if (cust == null) return;
+    context.push('/billing', extra: cust).then((_) => _load());
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -129,7 +136,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
           labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           tabs: [
             Tab(text: l10n.overview),
-            Tab(text: l10n.allInvoices),
+            Tab(text: l10n.bills),
             Tab(text: l10n.ledger),
           ],
         ),
@@ -144,7 +151,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _OverviewTab(customer: cust),
+          _OverviewTab(customer: cust, onCreateBill: _createBill),
           _InvoicesTab(invoices: _invoices),
           _LedgerTab(transactions: _transactions, currentOutstanding: cust.totalOutstanding),
         ],
@@ -211,21 +218,27 @@ class _LedgerActionBar extends StatelessWidget {
 
 class _OverviewTab extends StatelessWidget {
   final Customer customer;
+  final VoidCallback onCreateBill;
 
-  const _OverviewTab({required this.customer});
+  const _OverviewTab({required this.customer, required this.onCreateBill});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
-    final hasBalance = customer.totalOutstanding > 0 || customer.advanceBalance > 0;
+    // Netted, same rule as the Customers list — totalOutstanding and
+    // advanceBalance are two separate DB fields and can both be non-zero,
+    // but a customer is never shown owing and being owed at once. Positive
+    // = Due, negative = Advance, zero = nothing shown at all (never a
+    // "Settled" badge here either — Settled is filter-only, on the list).
+    final net = netBalance(customer);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Profile card
+          // Header: name, phone, last visit (Edit lives in the AppBar).
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -264,12 +277,9 @@ class _OverviewTab extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // Total Sales / Total Bills side by side, then the customer's total
-          // Outstanding on its own. There is deliberately no separate
-          // "Pending" figure here: pending is a per-bill amount (shown on
-          // each bill and in the billing payment screen), and summing it
-          // here just showed the same number as Outstanding under a second
-          // name.
+          // Financial summary: Total Sales / Total Bills, then ONE balance
+          // card — Previous Due if net > 0, Advance if net < 0, nothing at
+          // all if net == 0. Never both, never a bare "Outstanding".
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -296,61 +306,38 @@ class _OverviewTab extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          _StatCard(
-            value: AppFormatters.formatCurrency(customer.totalOutstanding),
-            label: l10n.outstanding,
-            color: const Color(0xFFFF6B00),
-            icon: Icons.warning_amber_rounded,
-            c: c,
-          ),
-
-          // Balance card with advance + collect payment
-          if (hasBalance) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: c.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: c.surfaceBorder),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.balanceSummary,
-                    style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: c.textPrimary),
-                  ),
-                  const SizedBox(height: 12),
-                  if (customer.totalOutstanding > 0)
-                    _BalanceRow(
-                      icon: Icons.warning_amber_rounded,
-                      label: l10n.outstanding,
-                      value: AppFormatters.formatCurrency(customer.totalOutstanding),
-                      color: const Color(0xFFFF6B00),
-                    ),
-                  if (customer.totalOutstanding > 0 && customer.advanceBalance > 0)
-                    const SizedBox(height: 10),
-                  if (customer.advanceBalance > 0)
-                    _BalanceRow(
-                      icon: Icons.account_balance_wallet_rounded,
-                      label: l10n.advanceBalance,
-                      value: AppFormatters.formatCurrency(customer.advanceBalance),
-                      color: c.success,
-                    ),
-                  // No action buttons here — the persistent "You Gave / You
-                  // Got" bar at the bottom of this screen already covers
-                  // both directions on every tab; repeating one of them
-                  // here would just be a second, redundant button.
-                ],
-              ),
+          if (net != 0) ...[
+            const SizedBox(height: 12),
+            _StatCard(
+              value: AppFormatters.formatCurrency(net.abs()),
+              label: net > 0 ? l10n.previousDue : l10n.advanceLabel,
+              color: net > 0 ? const Color(0xFFFF6B00) : c.success,
+              icon: net > 0 ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+              c: c,
             ),
           ],
+          const SizedBox(height: 16),
+
+          // Quick actions — You Gave/You Got are already one tap away via
+          // the persistent bottom bar on every tab; Create Bill lives here
+          // since starting a new bill is specific to acting on this
+          // customer's profile, not a ledger action.
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: onCreateBill,
+              icon: const Icon(Icons.receipt_long_rounded, size: 18),
+              label: Text(l10n.newBill,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryLight,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -763,7 +750,7 @@ class _TxnTile extends StatelessWidget {
         return (
           Icons.check_circle_rounded,
           c.success as Color,
-          l10n.outstandingCollected as String,
+          l10n.dueCollectedLabel as String,
           false,
         );
       case 'advance_deposit':
@@ -782,33 +769,3 @@ class _TxnTile extends StatelessWidget {
   }
 }
 
-// ── Shared Widgets ────────────────────────────────────────────────────────────
-
-class _BalanceRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-
-  const _BalanceRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) => Row(
-        children: [
-          Icon(icon, color: color, size: 16),
-          const SizedBox(width: 8),
-          Text(label, style: TextStyle(color: color, fontSize: 13)),
-          const Spacer(),
-          Text(
-            value,
-            style: TextStyle(
-                color: color, fontSize: 14, fontWeight: FontWeight.bold),
-          ),
-        ],
-      );
-}

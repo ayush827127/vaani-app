@@ -92,8 +92,12 @@ class ActionExecutor {
           // clamping here at execution time (not just at parse time, where
           // the stock snapshot can be a moment stale) closes that gap.
           final requestedQty = action.quantity;
-          final clampedQty =
-              item.stockQuantity > 0 ? requestedQty.clamp(1, item.stockQuantity) : 0;
+          // Services never clamp — they have no stock to run out of.
+          final clampedQty = !item.inventoryEnabled
+              ? requestedQty.clamp(1, 9999)
+              : item.stockQuantity > 0
+                  ? requestedQty.clamp(1, item.stockQuantity)
+                  : 0;
           if (clampedQty == 0) {
             errors.add('${action.itemName} is out of stock');
             break;
@@ -125,8 +129,11 @@ class ActionExecutor {
           final requestedQty = currentQty + action.delta;
           // Same stock clamp as SetQuantityAction above — this path had no
           // inventory check at all before, soft or otherwise.
-          final clampedQty =
-              item.stockQuantity > 0 ? requestedQty.clamp(1, item.stockQuantity) : 0;
+          final clampedQty = !item.inventoryEnabled
+              ? requestedQty.clamp(1, 9999)
+              : item.stockQuantity > 0
+                  ? requestedQty.clamp(1, item.stockQuantity)
+                  : 0;
           if (clampedQty == 0) {
             errors.add('${action.itemName} is out of stock');
             break;

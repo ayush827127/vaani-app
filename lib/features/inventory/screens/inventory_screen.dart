@@ -87,11 +87,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
             p.aliases.any((a) => a.toLowerCase().contains(q));
         final matchesCategory =
             _selectedCategory == null || p.category == _selectedCategory;
+        // Services never match a stock filter — they don't track stock at
+        // all, so "Low Stock"/"Out of Stock" (both meaningless for them)
+        // would otherwise wrongly catch every service via stockQuantity's
+        // forced-0 default.
         final matchesStock = _stockFilter == 'all' ||
-            (_stockFilter == 'low' &&
+            (p.inventoryEnabled &&
+                _stockFilter == 'low' &&
                 p.stockQuantity > 0 &&
                 p.stockQuantity <= p.reorderLevel) ||
-            (_stockFilter == 'out' && p.stockQuantity == 0);
+            (p.inventoryEnabled && _stockFilter == 'out' && p.stockQuantity == 0);
         return matchesSearch && matchesCategory && matchesStock;
       }).toList();
 
@@ -797,37 +802,55 @@ class _ItemCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            // Right: stock status dot + qty label
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                          color: stockColor, shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      _stockLabel(l10n),
-                      style: TextStyle(
-                          color: stockColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500),
-                    ),
-                  ],
+            // Right: stock status dot + qty label — a service has neither
+            // (it never carries stock), so it gets a plain type chip instead
+            // of a meaningless "Out"/"Qty: 0".
+            if (item.inventoryEnabled)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                            color: stockColor, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        _stockLabel(l10n),
+                        style: TextStyle(
+                            color: stockColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    l10n.qtyLabel('${item.stockQuantity}'),
+                    style: TextStyle(
+                        color: c.textHint, fontSize: 12),
+                  ),
+                ],
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  l10n.qtyLabel('${item.stockQuantity}'),
-                  style: TextStyle(
-                      color: c.textHint, fontSize: 12),
+                child: Text(
+                  l10n.itemTypeService,
+                  style: const TextStyle(
+                      color: AppColors.primaryLight,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600),
                 ),
-              ],
-            ),
+              ),
             // Three-dot overflow menu
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert_rounded,

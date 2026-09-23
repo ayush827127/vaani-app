@@ -27,6 +27,14 @@ import '../../../core/services/voice_recognition_service.dart';
 import '../widgets/payment_bottom_sheet.dart';
 import '../../../l10n/l10n_extensions.dart';
 
+// Services (inventoryEnabled == false) never have a stock limit — the one
+// gate every "can I add one more?" check in this file goes through, rather
+// than each site separately remembering to skip stockQuantity for a
+// non-inventory item. Top-level (not a State method) since both
+// BillingScreen and the cart sheet's own State need it.
+bool _atStockLimit(Item item, int currentQty) =>
+    item.inventoryEnabled && currentQty >= item.stockQuantity;
+
 // ── Cart provider ─────────────────────────────────────────────────────────────
 
 class CartNotifier extends StateNotifier<List<CartItem>> {
@@ -92,7 +100,11 @@ final cartProvider =
 // ── BillingScreen ─────────────────────────────────────────────────────────────
 
 class BillingScreen extends ConsumerStatefulWidget {
-  const BillingScreen({super.key});
+  // Set when navigating here from a customer's own page ("Create Bill" quick
+  // action) — pre-selects them so the shopkeeper doesn't have to search for
+  // the same customer again right after opening their profile.
+  final Customer? initialCustomer;
+  const BillingScreen({super.key, this.initialCustomer});
 
   @override
   ConsumerState<BillingScreen> createState() => _BillingScreenState();
@@ -120,6 +132,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedCustomer = widget.initialCustomer;
     _initTts();
     _init();
   }
@@ -214,7 +227,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               .firstOrNull
               ?.quantity ??
           0;
-      if (currentQty >= item.stockQuantity) {
+      if (_atStockLimit(item, currentQty)) {
         _showStockLimitSnack(item);
         return;
       }
@@ -239,7 +252,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             .firstOrNull
             ?.quantity ??
         0;
-    if (currentQty >= item.stockQuantity) {
+    if (_atStockLimit(item, currentQty)) {
       _showStockLimitSnack(item);
       return;
     }
@@ -1504,7 +1517,7 @@ class _ItemGridCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final inStock = item.stockQuantity > 0;
+    final inStock = !item.inventoryEnabled || item.stockQuantity > 0;
     final inCart = cartQty > 0;
     final catColor = _catColor;
 
@@ -1625,26 +1638,28 @@ class _ItemGridCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      // Stock badge
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 5, vertical: stPadV),
-                        decoration: BoxDecoration(
-                          color: inStock
-                              ? c.success.withValues(alpha: 0.15)
-                              : c.danger.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
+                      // Stock badge — meaningless for a service, so it's
+                      // simply not shown rather than displaying "Qty: 0".
+                      if (item.inventoryEnabled)
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 5, vertical: stPadV),
+                          decoration: BoxDecoration(
+                            color: inStock
+                                ? c.success.withValues(alpha: 0.15)
+                                : c.danger.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            inStock
+                                ? l10n.qtyColon('${item.stockQuantity}')
+                                : l10n.outOfStockBadge,
+                            style: TextStyle(
+                                fontSize: stFontSz,
+                                color: inStock ? c.success : c.danger,
+                                fontWeight: FontWeight.w600),
+                          ),
                         ),
-                        child: Text(
-                          inStock
-                              ? l10n.qtyColon('${item.stockQuantity}')
-                              : l10n.outOfStockBadge,
-                          style: TextStyle(
-                              fontSize: stFontSz,
-                              color: inStock ? c.success : c.danger,
-                              fontWeight: FontWeight.w600),
-                        ),
-                      ),
                       const Spacer(),
                       // Qty controls: - count +
                       Row(
@@ -1717,7 +1732,7 @@ class _ItemListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
-    final inStock = item.stockQuantity > 0;
+    final inStock = !item.inventoryEnabled || item.stockQuantity > 0;
     final inCart = cartQty > 0;
     final catColor = _catColor;
 
@@ -1809,26 +1824,28 @@ class _ItemListTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: inStock
-                            ? c.success.withValues(alpha: 0.15)
-                            : c.danger.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(5),
+                    if (item.inventoryEnabled) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: inStock
+                              ? c.success.withValues(alpha: 0.15)
+                              : c.danger.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          inStock
+                              ? l10n.inStockQty('${item.stockQuantity}')
+                              : l10n.outLabel,
+                          style: TextStyle(
+                              fontSize: 9,
+                              color: inStock ? c.success : c.danger,
+                              fontWeight: FontWeight.w600),
+                        ),
                       ),
-                      child: Text(
-                        inStock
-                            ? l10n.inStockQty('${item.stockQuantity}')
-                            : l10n.outLabel,
-                        style: TextStyle(
-                            fontSize: 9,
-                            color: inStock ? c.success : c.danger,
-                            fontWeight: FontWeight.w600),
-                      ),
-                    ),
+                    ],
                   ],
                 ),
               ],
@@ -2062,7 +2079,7 @@ class _CartSheetState extends ConsumerState<_CartSheet> {
                             _CartItemQtyBtn(
                               icon: Icons.add_rounded,
                               onTap: () {
-                                if (item.quantity >= item.item.stockQuantity) {
+                                if (_atStockLimit(item.item, item.quantity)) {
                                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                     content: Text(
                                         'Only ${item.item.stockQuantity} of ${item.item.name} in stock'),

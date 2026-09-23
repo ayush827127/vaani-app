@@ -758,6 +758,96 @@ abstract class AppLocalizations {
   /// **'Add Stock'**
   String get addStock;
 
+  /// No description provided for @removeStockLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Stock'**
+  String get removeStockLabel;
+
+  /// No description provided for @reasonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason'**
+  String get reasonLabel;
+
+  /// No description provided for @noteOptionalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Note (optional)'**
+  String get noteOptionalLabel;
+
+  /// No description provided for @stockHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Stock History'**
+  String get stockHistory;
+
+  /// No description provided for @noStockHistoryYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No stock movements yet'**
+  String get noStockHistoryYet;
+
+  /// No description provided for @serviceNoStockHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Services don\'t carry stock'**
+  String get serviceNoStockHint;
+
+  /// No description provided for @billingHistoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Billing History'**
+  String get billingHistoryLabel;
+
+  /// No description provided for @stockMovementSale.
+  ///
+  /// In en, this message translates to:
+  /// **'Sale'**
+  String get stockMovementSale;
+
+  /// No description provided for @stockMovementStockIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Stock In'**
+  String get stockMovementStockIn;
+
+  /// No description provided for @stockMovementDamaged.
+  ///
+  /// In en, this message translates to:
+  /// **'Damaged'**
+  String get stockMovementDamaged;
+
+  /// No description provided for @stockMovementReturnIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Return In'**
+  String get stockMovementReturnIn;
+
+  /// No description provided for @stockMovementReturnOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Return Out'**
+  String get stockMovementReturnOut;
+
+  /// No description provided for @stockMovementVoided.
+  ///
+  /// In en, this message translates to:
+  /// **'Voided Bill'**
+  String get stockMovementVoided;
+
+  /// No description provided for @stockMovementAdjustment.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjustment'**
+  String get stockMovementAdjustment;
+
+  /// No description provided for @billNumberRef.
+  ///
+  /// In en, this message translates to:
+  /// **'Bill #{id}'**
+  String billNumberRef(String id);
+
   /// No description provided for @currentStock.
   ///
   /// In en, this message translates to:
@@ -931,6 +1021,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Item Name *'**
   String get itemName;
+
+  /// No description provided for @itemTypeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Item Type'**
+  String get itemTypeLabel;
+
+  /// No description provided for @itemTypeProduct.
+  ///
+  /// In en, this message translates to:
+  /// **'Product'**
+  String get itemTypeProduct;
+
+  /// No description provided for @itemTypeService.
+  ///
+  /// In en, this message translates to:
+  /// **'Service'**
+  String get itemTypeService;
+
+  /// No description provided for @trackInventoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Track Inventory'**
+  String get trackInventoryLabel;
+
+  /// No description provided for @trackInventoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Stock is validated and deducted on every bill'**
+  String get trackInventoryHint;
+
+  /// No description provided for @trackInventoryOffHint.
+  ///
+  /// In en, this message translates to:
+  /// **'No stock to track — bills for this item never touch inventory'**
+  String get trackInventoryOffHint;
 
   /// No description provided for @skuPhoneCode.
   ///
@@ -1448,11 +1574,11 @@ abstract class AppLocalizations {
   /// **'Net Bill'**
   String get netDue;
 
-  /// No description provided for @oldDuesReduced.
+  /// No description provided for @previousDueReduced.
   ///
   /// In en, this message translates to:
-  /// **'Previous Outstanding Reduced'**
-  String get oldDuesReduced;
+  /// **'Previous Due Reduced'**
+  String get previousDueReduced;
 
   /// No description provided for @addedToAdvance.
   ///
@@ -1496,23 +1622,11 @@ abstract class AppLocalizations {
   /// **'Partial payment requires a customer.'**
   String get partialPaymentRequiresCustomer;
 
-  /// No description provided for @newOutstanding.
-  ///
-  /// In en, this message translates to:
-  /// **'New Outstanding'**
-  String get newOutstanding;
-
   /// No description provided for @collectPayment.
   ///
   /// In en, this message translates to:
   /// **'Collect Payment'**
   String get collectPayment;
-
-  /// No description provided for @outstanding.
-  ///
-  /// In en, this message translates to:
-  /// **'Outstanding'**
-  String get outstanding;
 
   /// No description provided for @depositAsAdvance.
   ///
@@ -1556,11 +1670,11 @@ abstract class AppLocalizations {
   /// **'Balance Summary'**
   String get balanceSummary;
 
-  /// No description provided for @outstandingInvoices.
+  /// No description provided for @unpaidInvoicesLabel.
   ///
   /// In en, this message translates to:
-  /// **'Outstanding Invoices'**
-  String get outstandingInvoices;
+  /// **'Unpaid Bills'**
+  String get unpaidInvoicesLabel;
 
   /// No description provided for @due.
   ///
@@ -1970,11 +2084,17 @@ abstract class AppLocalizations {
   /// **'Advance Used'**
   String get advanceUsed;
 
-  /// No description provided for @outstandingCollected.
+  /// No description provided for @dueCollectedLabel.
   ///
   /// In en, this message translates to:
-  /// **'Outstanding Collected'**
-  String get outstandingCollected;
+  /// **'Due Collected'**
+  String get dueCollectedLabel;
+
+  /// No description provided for @newDueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New Due'**
+  String get newDueLabel;
 
   /// No description provided for @advanceDeposit.
   ///

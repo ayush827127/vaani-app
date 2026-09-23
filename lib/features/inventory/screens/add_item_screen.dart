@@ -16,6 +16,20 @@ import '../repositories/category_repository.dart';
 import '../widgets/category_picker_sheet.dart';
 import '../../../l10n/l10n_extensions.dart';
 
+/// One entry in the gallery being edited — either an existing ItemImage
+/// (has [existingId]) or a freshly-picked local file not yet persisted
+/// ([existingId] is null). Everything here is provisional until Save: adds,
+/// removes and reordering only touch this list; the repository only sees
+/// the final result, all at once, when the form is actually submitted —
+/// same "nothing commits until Save" contract as every other field on this
+/// form.
+class _GalleryEntry {
+  final int? existingId;
+  final String? imagePath;
+  final String? imageUrl;
+  const _GalleryEntry({this.existingId, this.imagePath, this.imageUrl});
+}
+
 class AddItemScreen extends StatefulWidget {
   final int? itemId;
   const AddItemScreen({super.key, this.itemId});
@@ -37,12 +51,21 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
   String? _category;
   double _gstRate = 5.0;
+  ItemType _itemType = ItemType.product;
+  // Independently overridable from _itemType (see the note on
+  // Item.inventoryEnabled) — but new items default it from the type picked,
+  // since that's the right guess almost every time: a physical good tracks
+  // stock, a service doesn't.
+  bool _inventoryEnabled = true;
   bool _isLoading = false;
   bool _isGeneratingBarcode = false;
   bool _isEditing = false;
   Item? _existingItem;
-  String? _imagePath;
-  bool _imageRemoved = false;
+  // The gallery being edited, and which entry (by index) is primary. Loaded
+  // from item_images for an existing item; starts empty for a new one.
+  List<_GalleryEntry> _images = [];
+  int _primaryIndex = 0;
+  final Set<int> _deletedExistingImageIds = {};
   List<String> _categories = [];
   int _shopId = 1;
 
@@ -68,48 +91,48 @@ class _AddItemScreenState extends State<AddItemScreen> {
   Future<void> _loadItem() async {
     final repo = getIt<ItemRepository>();
     final item = await repo.getItemById(widget.itemId!);
-    if (item != null && mounted) {
-      setState(() {
-        _existingItem = item;
-        _nameCtrl.text = item.name;
-        _skuCtrl.text = item.sku ?? '';
-        _barcodeCtrl.text = item.barcode ?? '';
-        _costCtrl.text = item.costPrice.toString();
-        _priceCtrl.text = item.sellingPrice.toString();
-        _stockCtrl.text = item.stockQuantity.toString();
-        _reorderCtrl.text = item.reorderLevel.toString();
-        _aliasCtrl.text = item.aliases.join(', ');
-        _category = item.category;
-        _gstRate = item.gstRate;
-        _imagePath = item.imagePath;
-      });
-    }
+    if (item == null || !mounted) return;
+    final gallery = await repo.getImages(widget.itemId!);
+    if (!mounted) return;
+    setState(() {
+      _existingItem = item;
+      _nameCtrl.text = item.name;
+      _skuCtrl.text = item.sku ?? '';
+      _barcodeCtrl.text = item.barcode ?? '';
+      _costCtrl.text = item.costPrice.toString();
+      _priceCtrl.text = item.sellingPrice.toString();
+      _stockCtrl.text = item.stockQuantity.toString();
+      _reorderCtrl.text = item.reorderLevel.toString();
+      _aliasCtrl.text = item.aliases.join(', ');
+      _category = item.category;
+      _gstRate = item.gstRate;
+      _itemType = item.itemType;
+      _inventoryEnabled = item.inventoryEnabled;
+      _images = gallery
+          .map((g) => _GalleryEntry(existingId: g.id, imagePath: g.imagePath, imageUrl: g.imageUrl))
+          .toList();
+      _primaryIndex = gallery.isEmpty ? 0 : gallery.indexWhere((g) => g.isPrimary).clamp(0, gallery.length - 1);
+    });
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  /// Copies a picked file into the app's documents directory (same
+  /// treatment every other picked image in this app gets) and appends it
+  /// to the gallery being edited. The very first image added becomes
+  /// primary automatically.
+  Future<void> _addPickedFile(XFile picked) async {
     try {
-      final picked = await _picker.pickImage(
-        source: source,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 85,
-      );
-      if (picked == null) return;
-
-      // Copy to app's documents directory for persistence
       final dir = await getApplicationDocumentsDirectory();
       final imagesDir = Directory(p.join(dir.path, 'item_images'));
       if (!await imagesDir.exists()) await imagesDir.create(recursive: true);
 
       final ext = p.extension(picked.path);
-      final filename = 'item_${DateTime.now().millisecondsSinceEpoch}$ext';
+      final filename = 'item_${DateTime.now().millisecondsSinceEpoch}_${_images.length}$ext';
       final dest = p.join(imagesDir.path, filename);
       await File(picked.path).copy(dest);
 
       if (mounted) {
         setState(() {
-          _imagePath = dest;
-          _imageRemoved = false;
+          _images.add(_GalleryEntry(imagePath: dest));
         });
       }
     } catch (e) {
@@ -120,6 +143,51 @@ class _AddItemScreenState extends State<AddItemScreen> {
         ));
       }
     }
+  }
+
+  Future<void> _pickFromGallery() async {
+    final picked = await _picker.pickMultiImage(maxWidth: 800, maxHeight: 800, imageQuality: 85);
+    for (final file in picked) {
+      await _addPickedFile(file);
+    }
+  }
+
+  Future<void> _pickFromCamera() async {
+    final picked =
+        await _picker.pickImage(source: ImageSource.camera, maxWidth: 800, maxHeight: 800, imageQuality: 85);
+    if (picked != null) await _addPickedFile(picked);
+  }
+
+  void _removeImageAt(int index) {
+    setState(() {
+      final removed = _images.removeAt(index);
+      if (removed.existingId != null) _deletedExistingImageIds.add(removed.existingId!);
+      if (_images.isEmpty) {
+        _primaryIndex = 0;
+      } else if (_primaryIndex >= _images.length) {
+        _primaryIndex = _images.length - 1;
+      } else if (index < _primaryIndex) {
+        _primaryIndex--;
+      }
+    });
+  }
+
+  void _setPrimary(int index) => setState(() => _primaryIndex = index);
+
+  void _moveImage(int index, int delta) {
+    final target = index + delta;
+    if (target < 0 || target >= _images.length) return;
+    setState(() {
+      final item = _images.removeAt(index);
+      _images.insert(target, item);
+      // The primary designation follows whichever entry it was on, not the
+      // slot — keep it pointed at the same image after the reorder.
+      if (_primaryIndex == index) {
+        _primaryIndex = target;
+      } else if (_primaryIndex == target) {
+        _primaryIndex = index;
+      }
+    });
   }
 
   void _showImageOptions() {
@@ -150,7 +218,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   style: TextStyle(color: c.textPrimary)),
               onTap: () {
                 Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
+                _pickFromGallery();
               },
             ),
             ListTile(
@@ -160,23 +228,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   style: TextStyle(color: c.textPrimary)),
               onTap: () {
                 Navigator.pop(context);
-                _pickImage(ImageSource.camera);
+                _pickFromCamera();
               },
             ),
-            if (_imagePath != null)
-              ListTile(
-                leading: Icon(Icons.delete_outline_rounded,
-                    color: c.danger),
-                title: Text(l10n.removeImage,
-                    style: TextStyle(color: c.danger)),
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() {
-                    _imagePath = null;
-                    _imageRemoved = true;
-                  });
-                },
-              ),
             const SizedBox(height: 8),
           ],
         ),
@@ -219,8 +273,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
         .where((a) => a.isNotEmpty)
         .toList();
 
-    final resolvedImagePath = _imageRemoved ? null : _imagePath;
-
+    // imagePath/imageUrl are deliberately left off this object — they're
+    // now a denormalized cache the gallery below keeps in sync
+    // (ItemRepository._syncPrimaryCache), not written directly by this form.
     final item = Item(
       id: _existingItem?.id,
       shopId: shopId,
@@ -231,9 +286,13 @@ class _AddItemScreenState extends State<AddItemScreen> {
       costPrice: double.tryParse(_costCtrl.text) ?? 0,
       sellingPrice: double.parse(_priceCtrl.text),
       gstRate: _gstRate,
-      stockQuantity: int.tryParse(_stockCtrl.text) ?? 0,
-      reorderLevel: int.tryParse(_reorderCtrl.text) ?? 10,
-      imagePath: resolvedImagePath,
+      // Stock fields are hidden in the UI (and meaningless) once inventory
+      // tracking is off — force them to 0 rather than saving whatever was
+      // last typed/loaded, so a service never shows a stale stock count.
+      stockQuantity: _inventoryEnabled ? (int.tryParse(_stockCtrl.text) ?? 0) : 0,
+      reorderLevel: _inventoryEnabled ? (int.tryParse(_reorderCtrl.text) ?? 10) : 0,
+      itemType: _itemType,
+      inventoryEnabled: _inventoryEnabled,
       aliases: aliases,
       createdAt: _existingItem?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
@@ -245,10 +304,33 @@ class _AddItemScreenState extends State<AddItemScreen> {
     // item's barcode could still throw here) left the form permanently
     // stuck on its loading spinner with no error shown and no way to retry.
     try {
+      int itemId;
       if (_isEditing) {
+        itemId = _existingItem!.id!;
         await repo.updateItem(item);
       } else {
-        await repo.insertItem(item);
+        itemId = await repo.insertItem(item);
+      }
+
+      // Gallery: apply removals first, then persist every remaining entry
+      // (new local picks get inserted; existing ones are already rows —
+      // just need their final order), then set primary/order to match
+      // exactly what's on screen. All provisional until this point, same
+      // as the rest of the form.
+      for (final id in _deletedExistingImageIds) {
+        await repo.removeImage(itemId, id);
+      }
+      final finalIds = <int>[];
+      for (final entry in _images) {
+        if (entry.existingId != null) {
+          finalIds.add(entry.existingId!);
+        } else {
+          finalIds.add(await repo.addImage(itemId, imagePath: entry.imagePath));
+        }
+      }
+      if (finalIds.isNotEmpty) {
+        await repo.reorderImages(itemId, finalIds);
+        await repo.setPrimaryImage(itemId, finalIds[_primaryIndex.clamp(0, finalIds.length - 1)]);
       }
 
       // Persist category in categories table so it's available for other items
@@ -339,77 +421,18 @@ class _AddItemScreenState extends State<AddItemScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Item image picker
-            Center(
-              child: GestureDetector(
-                onTap: _showImageOptions,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      width: 96,
-                      height: 96,
-                      decoration: BoxDecoration(
-                        color: c.surface,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: _imagePath != null
-                              ? AppColors.primaryLight
-                              : c.surfaceBorder,
-                          width: _imagePath != null ? 2 : 1,
-                        ),
-                      ),
-                      child: _imagePath != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(17),
-                              child: Image.file(
-                                File(_imagePath!),
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Icon(
-                                    Icons.broken_image_rounded,
-                                    size: 36,
-                                    color: c.textHint),
-                              ),
-                            )
-                          : const Icon(
-                              Icons.add_photo_alternate_rounded,
-                              size: 36,
-                              color: AppColors.primaryLight,
-                            ),
-                    ),
-                    // Edit badge
-                    Positioned(
-                      bottom: -6,
-                      right: -6,
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                          border:
-                              Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
-                        ),
-                        child: const Icon(Icons.edit_rounded,
-                            size: 14, color: Colors.white),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                _imagePath != null ? l10n.tapToChangeImage : l10n.addItemImage,
-                style: TextStyle(
-                    color: c.textSecondary, fontSize: 12),
-              ),
-            ),
+            // Item image gallery — no image is valid, one is valid, several
+            // are valid. The starred badge marks the primary (used anywhere
+            // a single image is needed: item list/detail, invoice PDFs).
+            _buildImageGallery(c, l10n),
             const SizedBox(height: 20),
             _buildField(l10n.itemName, _nameCtrl,
                 validator: (v) => v?.trim().isEmpty == true ? l10n.required : null),
             _buildField(l10n.skuPhoneCode, _skuCtrl),
+            const SizedBox(height: 4),
+            _buildTypeSelector(c, l10n),
+            const SizedBox(height: 16),
+            _buildInventoryToggle(c, l10n),
             const SizedBox(height: 16),
             // Category — tappable picker
             _buildCategoryField(c, l10n),
@@ -455,18 +478,20 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   .toList(),
               onChanged: (v) => setState(() => _gstRate = v ?? 5.0),
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                    child: _buildField(l10n.stockQuantity, _stockCtrl,
-                        type: TextInputType.number)),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: _buildField(l10n.reorderLevel, _reorderCtrl,
-                        type: TextInputType.number)),
-              ],
-            ),
+            if (_inventoryEnabled) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                      child: _buildField(l10n.stockQuantity, _stockCtrl,
+                          type: TextInputType.number)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                      child: _buildField(l10n.reorderLevel, _reorderCtrl,
+                          type: TextInputType.number)),
+                ],
+              ),
+            ],
             _buildField(
               l10n.aliasesLabel,
               _aliasCtrl,
@@ -489,6 +514,227 @@ class _AddItemScreenState extends State<AddItemScreen> {
             const SizedBox(height: 40),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTypeSelector(AppSemanticColors c, AppLocalizations l10n) {
+    Widget segment(ItemType type, String label, IconData icon) {
+      final selected = _itemType == type;
+      return Expanded(
+        child: InkWell(
+          onTap: () => setState(() {
+            _itemType = type;
+            // Re-guess inventory tracking from the newly picked type — the
+            // right default almost always, and the user can still flip it
+            // independently right below.
+            _inventoryEnabled = type == ItemType.product;
+          }),
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primaryLight : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 16, color: selected ? Colors.white : c.textSecondary),
+                const SizedBox(width: 6),
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: selected ? Colors.white : c.textSecondary)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.itemTypeLabel,
+            style: TextStyle(color: c.textHint, fontSize: 12, height: 1.2)),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: c.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.inputBorder),
+          ),
+          child: Row(
+            children: [
+              segment(ItemType.product, l10n.itemTypeProduct, Icons.inventory_2_rounded),
+              const SizedBox(width: 4),
+              segment(ItemType.service, l10n.itemTypeService, Icons.design_services_rounded),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInventoryToggle(AppSemanticColors c, AppLocalizations l10n) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.inputBorder),
+      ),
+      child: SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(l10n.trackInventoryLabel,
+            style: TextStyle(color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w500)),
+        subtitle: Text(
+          _inventoryEnabled ? l10n.trackInventoryHint : l10n.trackInventoryOffHint,
+          style: TextStyle(color: c.textSecondary, fontSize: 11.5),
+        ),
+        value: _inventoryEnabled,
+        activeThumbColor: AppColors.primaryLight,
+        onChanged: (v) => setState(() => _inventoryEnabled = v),
+      ),
+    );
+  }
+
+  Widget _buildImageGallery(AppSemanticColors c, AppLocalizations l10n) {
+    const tile = 84.0;
+    return SizedBox(
+      height: tile + 8,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _images.length + 1, // +1 for the trailing Add tile
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (context, index) {
+          if (index == _images.length) {
+            // Add tile
+            return GestureDetector(
+              onTap: _showImageOptions,
+              child: Container(
+                width: tile,
+                height: tile,
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: c.surfaceBorder, style: BorderStyle.solid),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.add_photo_alternate_rounded,
+                        size: 26, color: AppColors.primaryLight),
+                    const SizedBox(height: 4),
+                    Text(
+                      _images.isEmpty ? l10n.addItemImage : l10n.addLabel,
+                      style: TextStyle(color: c.textSecondary, fontSize: 10),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final entry = _images[index];
+          final isPrimary = index == _primaryIndex;
+          final image = entry.imagePath != null && File(entry.imagePath!).existsSync()
+              ? Image.file(File(entry.imagePath!), fit: BoxFit.cover, width: tile, height: tile)
+              : entry.imageUrl != null
+                  ? Image.network(entry.imageUrl!, fit: BoxFit.cover, width: tile, height: tile)
+                  : Container(color: c.divider);
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              GestureDetector(
+                onTap: () => _setPrimary(index),
+                child: Container(
+                  width: tile,
+                  height: tile,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: isPrimary ? AppColors.primaryLight : c.surfaceBorder,
+                        width: isPrimary ? 2 : 1),
+                  ),
+                  child: ClipRRect(borderRadius: BorderRadius.circular(14), child: image),
+                ),
+              ),
+              // Primary star — also doubles as the tap target to make a
+              // non-primary image the primary one.
+              Positioned(
+                top: -6,
+                left: -6,
+                child: GestureDetector(
+                  onTap: () => _setPrimary(index),
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: isPrimary ? AppColors.primary : c.textHint,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
+                    ),
+                    child: Icon(Icons.star_rounded, size: 12, color: Colors.white),
+                  ),
+                ),
+              ),
+              // Remove
+              Positioned(
+                top: -6,
+                right: -6,
+                child: GestureDetector(
+                  onTap: () => _removeImageAt(index),
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: c.danger,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
+                    ),
+                    child: const Icon(Icons.close_rounded, size: 12, color: Colors.white),
+                  ),
+                ),
+              ),
+              // Reorder — only worth showing once there's something to
+              // reorder against.
+              if (_images.length > 1)
+                Positioned(
+                  bottom: 2,
+                  left: 2,
+                  right: 2,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _reorderButton(Icons.chevron_left_rounded,
+                          enabled: index > 0, onTap: () => _moveImage(index, -1)),
+                      _reorderButton(Icons.chevron_right_rounded,
+                          enabled: index < _images.length - 1, onTap: () => _moveImage(index, 1)),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _reorderButton(IconData icon, {required bool enabled, required VoidCallback onTap}) {
+    if (!enabled) return const SizedBox(width: 20, height: 20);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), shape: BoxShape.circle),
+        child: Icon(icon, size: 14, color: Colors.white),
       ),
     );
   }

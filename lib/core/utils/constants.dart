@@ -87,4 +87,13 @@ class AppConstants {
   static const String txnDamage = 'damage';
   static const String txnReturn = 'return';
   static const String txnVoid = 'void';
+
+  // Reason labels offered by the Add/Remove Stock sheets — a short,
+  // shopkeeper-facing "why", stored in inventory_transactions.reason
+  // alongside the broader `type` bucket above (which drives the +/- sign
+  // and the audit-trail grouping). Kept as plain strings rather than an
+  // enum: this is display text a reason picker shows, not a code path any
+  // logic branches on.
+  static const List<String> stockInReasons = ['Purchase', 'Stock Correction', 'Return from Customer', 'Other'];
+  static const List<String> stockOutReasons = ['Damaged', 'Stock Correction', 'Expired', 'Given as Sample', 'Other'];
 }

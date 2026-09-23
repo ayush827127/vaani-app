@@ -25,14 +25,24 @@ class MainShell extends ConsumerStatefulWidget {
 class _MainShellState extends ConsumerState<MainShell>
     with WidgetsBindingObserver {
 
-  // Tab 3 points to /bills (invoice list); /billing is the new-bill screen
-  static const _routes = ['/home', '/inventory', '', '/bills', ''];
+  // Tab 3 points to /customers — Customers replaces Bills as the primary
+  // footer destination (the ledger/udhar view is what shopkeepers reach
+  // for most); Bills is still fully there, just one tap further in: from
+  // Home's recent bills, or a customer's own Bills tab. /billing (the
+  // new-bill/checkout screen) stays reachable only via the mic button, as
+  // before — it was never a footer destination itself.
+  static const _routes = ['/home', '/inventory', '', '/customers', ''];
 
   static int _indexFromPath(String path) {
     if (path.startsWith('/home')) return 0;
     if (path.startsWith('/inventory')) return 1;
-    if (path.startsWith('/bills') || path.startsWith('/billing')) return 3;
+    if (path.startsWith('/customers')) return 3;
     if (path.startsWith('/profile')) return 4;
+    // /billing (checkout) and /bills (the bill list, now reached from
+    // inside a customer or Home rather than its own tab) are reached via
+    // the mic button or a push from elsewhere — neither is a footer
+    // destination anymore, so nothing here should light up as "current".
+    if (path.startsWith('/billing') || path.startsWith('/bills')) return -1;
     return 0;
   }
 
@@ -103,11 +113,11 @@ class _MainShellState extends ConsumerState<MainShell>
             height: 64,
             child: Row(
               children: [
-                _NavItem(icon: Icons.home_rounded,         label: l10n.home,     index: 0, current: currentIndex, onTap: onTap, cs: cs),
-                _NavItem(icon: Icons.inventory_2_rounded,  label: l10n.items, index: 1, current: currentIndex, onTap: onTap, cs: cs),
+                _NavItem(icon: Icons.home_rounded,         label: l10n.home,      index: 0, current: currentIndex, onTap: onTap, cs: cs),
+                _NavItem(icon: Icons.inventory_2_rounded,  label: l10n.items,     index: 1, current: currentIndex, onTap: onTap, cs: cs),
                 const _VoiceFAB(),
-                _NavItem(icon: Icons.receipt_long_rounded, label: l10n.billing,  index: 3, current: currentIndex, onTap: onTap, cs: cs),
-                _NavItem(icon: Icons.person_rounded,       label: l10n.profile,  index: 4, current: currentIndex, onTap: onTap, cs: cs),
+                _NavItem(icon: Icons.people_alt_rounded,   label: l10n.customers, index: 3, current: currentIndex, onTap: onTap, cs: cs),
+                _NavItem(icon: Icons.person_rounded,       label: l10n.profile,   index: 4, current: currentIndex, onTap: onTap, cs: cs),
               ],
             ),
           ),

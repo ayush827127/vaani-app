@@ -96,7 +96,8 @@ GoRouter createRouter() => GoRouter(
             ),
             GoRoute(
               path: '/billing',
-              builder: (_, __) => const BillingScreen(),
+              builder: (context, state) =>
+                  BillingScreen(initialCustomer: state.extra as Customer?),
               routes: [
                 GoRoute(
                   path: 'voice',

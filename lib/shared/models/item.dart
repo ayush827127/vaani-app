@@ -61,9 +61,13 @@ class Item {
     this.aliases = const [],
   });
 
-  bool get isLowStock => stockQuantity <= reorderLevel && stockQuantity > 0;
-  bool get isOutOfStock => stockQuantity == 0;
-  bool get isInStock => stockQuantity > reorderLevel;
+  // All three are meaningless (and default false) for a service — it never
+  // carries stock, so it's neither "low", "out" nor "in stock", it simply
+  // doesn't track stock at all.
+  bool get isLowStock =>
+      inventoryEnabled && stockQuantity <= reorderLevel && stockQuantity > 0;
+  bool get isOutOfStock => inventoryEnabled && stockQuantity == 0;
+  bool get isInStock => inventoryEnabled && stockQuantity > reorderLevel;
 
   /// image_url is deliberately excluded — it's a sync-managed field written
   /// only by ItemRepository.setImageUrl()/the image-change-detection in

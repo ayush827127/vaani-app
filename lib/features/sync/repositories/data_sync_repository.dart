@@ -673,6 +673,7 @@ class DataSyncRepository {
         'itemId': row['item_id'],
         'invoiceId': row['invoice_id'],
         'type': row['type'],
+        'reason': row['reason'],
         'quantityChange': row['quantity_change'],
         'stockBefore': row['stock_before'],
         'stockAfter': row['stock_after'],

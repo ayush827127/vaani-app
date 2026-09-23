@@ -355,6 +355,53 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addStock => 'Add Stock';
 
   @override
+  String get removeStockLabel => 'Remove Stock';
+
+  @override
+  String get reasonLabel => 'Reason';
+
+  @override
+  String get noteOptionalLabel => 'Note (optional)';
+
+  @override
+  String get stockHistory => 'Stock History';
+
+  @override
+  String get noStockHistoryYet => 'No stock movements yet';
+
+  @override
+  String get serviceNoStockHint => 'Services don\'t carry stock';
+
+  @override
+  String get billingHistoryLabel => 'Billing History';
+
+  @override
+  String get stockMovementSale => 'Sale';
+
+  @override
+  String get stockMovementStockIn => 'Stock In';
+
+  @override
+  String get stockMovementDamaged => 'Damaged';
+
+  @override
+  String get stockMovementReturnIn => 'Return In';
+
+  @override
+  String get stockMovementReturnOut => 'Return Out';
+
+  @override
+  String get stockMovementVoided => 'Voided Bill';
+
+  @override
+  String get stockMovementAdjustment => 'Adjustment';
+
+  @override
+  String billNumberRef(String id) {
+    return 'Bill #$id';
+  }
+
+  @override
   String currentStock(String count) {
     return 'Current stock: $count units';
   }
@@ -448,6 +495,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get itemName => 'Item Name *';
+
+  @override
+  String get itemTypeLabel => 'Item Type';
+
+  @override
+  String get itemTypeProduct => 'Product';
+
+  @override
+  String get itemTypeService => 'Service';
+
+  @override
+  String get trackInventoryLabel => 'Track Inventory';
+
+  @override
+  String get trackInventoryHint =>
+      'Stock is validated and deducted on every bill';
+
+  @override
+  String get trackInventoryOffHint =>
+      'No stock to track — bills for this item never touch inventory';
 
   @override
   String get skuPhoneCode => 'SKU / Phone Code';
@@ -733,7 +800,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get netDue => 'Net Bill';
 
   @override
-  String get oldDuesReduced => 'Previous Outstanding Reduced';
+  String get previousDueReduced => 'Previous Due Reduced';
 
   @override
   String get addedToAdvance => 'Added to Advance';
@@ -758,13 +825,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Partial payment requires a customer.';
 
   @override
-  String get newOutstanding => 'New Outstanding';
-
-  @override
   String get collectPayment => 'Collect Payment';
-
-  @override
-  String get outstanding => 'Outstanding';
 
   @override
   String get depositAsAdvance => 'Deposit as Advance';
@@ -790,7 +851,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get balanceSummary => 'Balance Summary';
 
   @override
-  String get outstandingInvoices => 'Outstanding Invoices';
+  String get unpaidInvoicesLabel => 'Unpaid Bills';
 
   @override
   String get due => 'Due';
@@ -1018,7 +1079,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get advanceUsed => 'Advance Used';
 
   @override
-  String get outstandingCollected => 'Outstanding Collected';
+  String get dueCollectedLabel => 'Due Collected';
+
+  @override
+  String get newDueLabel => 'New Due';
 
   @override
   String get advanceDeposit => 'Advance Deposit';

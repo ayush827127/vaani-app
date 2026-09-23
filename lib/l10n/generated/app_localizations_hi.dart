@@ -354,6 +354,53 @@ class AppLocalizationsHi extends AppLocalizations {
   String get addStock => 'स्टॉक जोड़ें';
 
   @override
+  String get removeStockLabel => 'स्टॉक हटाएं';
+
+  @override
+  String get reasonLabel => 'कारण';
+
+  @override
+  String get noteOptionalLabel => 'नोट (वैकल्पिक)';
+
+  @override
+  String get stockHistory => 'स्टॉक इतिहास';
+
+  @override
+  String get noStockHistoryYet => 'अभी तक कोई स्टॉक मूवमेंट नहीं';
+
+  @override
+  String get serviceNoStockHint => 'सर्विस में स्टॉक नहीं होता';
+
+  @override
+  String get billingHistoryLabel => 'बिलिंग इतिहास';
+
+  @override
+  String get stockMovementSale => 'बिक्री';
+
+  @override
+  String get stockMovementStockIn => 'स्टॉक इन';
+
+  @override
+  String get stockMovementDamaged => 'क्षतिग्रस्त';
+
+  @override
+  String get stockMovementReturnIn => 'रिटर्न इन';
+
+  @override
+  String get stockMovementReturnOut => 'रिटर्न आउट';
+
+  @override
+  String get stockMovementVoided => 'रद्द बिल';
+
+  @override
+  String get stockMovementAdjustment => 'समायोजन';
+
+  @override
+  String billNumberRef(String id) {
+    return 'बिल #$id';
+  }
+
+  @override
   String currentStock(String count) {
     return 'मौजूदा स्टॉक: $count यूनिट';
   }
@@ -447,6 +494,25 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get itemName => 'आइटम का नाम *';
+
+  @override
+  String get itemTypeLabel => 'आइटम प्रकार';
+
+  @override
+  String get itemTypeProduct => 'प्रोडक्ट';
+
+  @override
+  String get itemTypeService => 'सर्विस';
+
+  @override
+  String get trackInventoryLabel => 'स्टॉक ट्रैक करें';
+
+  @override
+  String get trackInventoryHint => 'हर बिल पर स्टॉक जांचा और घटाया जाएगा';
+
+  @override
+  String get trackInventoryOffHint =>
+      'कोई स्टॉक नहीं — इस आइटम का बिल इन्वेंटरी को नहीं छुएगा';
 
   @override
   String get skuPhoneCode => 'SKU / फ़ोन कोड';
@@ -730,7 +796,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get netDue => 'शुद्ध बिल';
 
   @override
-  String get oldDuesReduced => 'पुराना बकाया कम हुआ';
+  String get previousDueReduced => 'पिछला बाकी कम हुआ';
 
   @override
   String get addedToAdvance => 'अग्रिम में जोड़ा';
@@ -755,13 +821,7 @@ class AppLocalizationsHi extends AppLocalizations {
       'आंशिक भुगतान के लिए ग्राहक आवश्यक है।';
 
   @override
-  String get newOutstanding => 'नया बकाया';
-
-  @override
   String get collectPayment => 'भुगतान लें';
-
-  @override
-  String get outstanding => 'बकाया';
 
   @override
   String get depositAsAdvance => 'अग्रिम जमा करें';
@@ -787,7 +847,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get balanceSummary => 'बैलेंस सारांश';
 
   @override
-  String get outstandingInvoices => 'बकाया बिल';
+  String get unpaidInvoicesLabel => 'अदा न किए बिल';
 
   @override
   String get due => 'बकाया';
@@ -1014,7 +1074,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get advanceUsed => 'अग्रिम उपयोग';
 
   @override
-  String get outstandingCollected => 'बकाया संग्रह';
+  String get dueCollectedLabel => 'बाकी वसूला गया';
+
+  @override
+  String get newDueLabel => 'नया बाकी';
 
   @override
   String get advanceDeposit => 'अग्रिम जमा';

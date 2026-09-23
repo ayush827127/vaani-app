@@ -10,6 +10,11 @@ class InvoiceItem {
   // product → service) or deleted. Defaults to product: every line ever
   // created before this field existed really was a physical product.
   final ItemType itemType;
+  // Whether THIS line actually deducted stock at sale time — see the
+  // matching note in database_helper.dart's v14 migration. Void/return read
+  // this, not the item's current inventoryEnabled, to decide whether to
+  // restore stock.
+  final bool inventoryTracked;
   final int quantity;
   final double sellingPrice;
   final double gstRate;
@@ -28,6 +33,7 @@ class InvoiceItem {
     required this.itemId,
     required this.itemName,
     this.itemType = ItemType.product,
+    this.inventoryTracked = true,
     required this.quantity,
     required this.sellingPrice,
     this.gstRate = 0,
@@ -45,6 +51,7 @@ class InvoiceItem {
         'item_id': itemId,
         'item_name': itemName,
         'item_type': itemType.dbValue,
+        'inventory_tracked': inventoryTracked ? 1 : 0,
         'quantity': quantity,
         'selling_price': sellingPrice,
         'gst_rate': gstRate,
@@ -60,6 +67,7 @@ class InvoiceItem {
         itemId: map['item_id'] as int,
         itemName: map['item_name'] as String,
         itemType: ItemType.fromDbValue(map['item_type'] as String?),
+        inventoryTracked: (map['inventory_tracked'] as int? ?? 1) == 1,
         quantity: map['quantity'] as int,
         sellingPrice: (map['selling_price'] as num).toDouble(),
         gstRate: (map['gst_rate'] as num?)?.toDouble() ?? 0,

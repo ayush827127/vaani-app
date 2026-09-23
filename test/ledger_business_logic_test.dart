@@ -382,4 +382,215 @@ void main() {
       await ledgerReconciles();
     });
   });
+
+  group('services (inventory_enabled = false)', () {
+    late Item service;
+
+    setUp(() async {
+      final sid = await items.insertItem(Item(
+        shopId: shopId,
+        name: 'Home Delivery',
+        sellingPrice: 50,
+        gstRate: 0,
+        costPrice: 0,
+        stockQuantity: 0,
+        reorderLevel: 0,
+        itemType: ItemType.service,
+        inventoryEnabled: false,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ));
+      service = (await items.getItemById(sid))!;
+    });
+
+    Future<Invoice> checkoutService({required int qty}) async {
+      final inv = Invoice(
+        invoiceNumber: await invoices.getNextInvoiceNumber(shopId),
+        shopId: shopId,
+        customerId: customerId,
+        customerName: (await cust()).name,
+        subtotal: service.sellingPrice * qty,
+        grandTotal: service.sellingPrice * qty,
+        receivedAmount: service.sellingPrice * qty,
+        pendingAmount: 0,
+        paymentMode: 'cash',
+        status: 'paid',
+        createdAt: DateTime.now(),
+      );
+      return invoices.createInvoice(
+        invoice: inv,
+        cartItems: [CartItem(item: service, quantity: qty)],
+        customerId: customerId,
+      );
+    }
+
+    Future<int> movementCount(int itemId) async {
+      final db = await DatabaseHelper.instance.database;
+      final rows = await db.query('inventory_transactions', where: 'item_id = ?', whereArgs: [itemId]);
+      return rows.length;
+    }
+
+    test('billing a service never touches stock, however large the quantity', () async {
+      // 9999 units of a service that has 0 "stock" would throw
+      // InsufficientStockException for a product — it must not for a
+      // service, since inventory_enabled gates the check entirely.
+      final inv = await checkoutService(qty: 9999);
+      expect(inv.id, isNotNull);
+      expect((await items.getItemById(service.id!))!.stockQuantity, 0,
+          reason: 'a service never accrues a stock count');
+      expect(await movementCount(service.id!), 0,
+          reason: 'no inventory_transactions row for a non-inventory item');
+    });
+
+    test('a bill mixing a product and a service only deducts the product\'s stock', () async {
+      final inv = Invoice(
+        invoiceNumber: await invoices.getNextInvoiceNumber(shopId),
+        shopId: shopId,
+        customerId: customerId,
+        customerName: (await cust()).name,
+        subtotal: 250,
+        grandTotal: 250,
+        receivedAmount: 250,
+        pendingAmount: 0,
+        paymentMode: 'cash',
+        status: 'paid',
+        createdAt: DateTime.now(),
+      );
+      final saved = await invoices.createInvoice(
+        invoice: inv,
+        cartItems: [
+          CartItem(item: water, quantity: 2), // product: 2 x 100
+          CartItem(item: service, quantity: 1), // service: 1 x 50
+        ],
+        customerId: customerId,
+      );
+      expect((await items.getItemById(water.id!))!.stockQuantity, 998, reason: 'product deducted');
+      expect((await items.getItemById(service.id!))!.stockQuantity, 0, reason: 'service untouched');
+      expect(await movementCount(water.id!), 1);
+      expect(await movementCount(service.id!), 0);
+
+      // Void the same mixed bill: product stock restores, service still
+      // never gets a movement row.
+      await invoices.voidInvoice(saved.id!);
+      expect((await items.getItemById(water.id!))!.stockQuantity, 1000, reason: 'product restored');
+      expect(await movementCount(water.id!), 2, reason: 'sale + restore');
+      expect(await movementCount(service.id!), 0);
+    });
+
+    test(
+        'voiding a bill follows the inventory_tracked SNAPSHOT taken at sale time, '
+        'not the item\'s current inventory_enabled', () async {
+      // Sell the service while it's genuinely a service (no stock touched).
+      final inv = await checkoutService(qty: 1);
+
+      // Later, the shop owner reclassifies it as inventory-tracked (e.g.
+      // realized it should have been a stocked product all along). This
+      // itself is a legitimate, separately-audited stock change (0 -> 5
+      // via the edit form), so it's expected to add its own movement row —
+      // that's not what this test is checking.
+      final reclassified = service.copyWith(inventoryEnabled: true, stockQuantity: 5);
+      await items.updateItem(reclassified);
+      final movementsBeforeVoid = await movementCount(service.id!);
+
+      // Voiding the OLD bill must not "restore" stock for units that were
+      // never deducted in the first place — the live flag is now true, but
+      // the sale itself never touched inventory.
+      await invoices.voidInvoice(inv.id!);
+      expect((await items.getItemById(service.id!))!.stockQuantity, 5,
+          reason: 'nothing to restore — this sale never deducted stock');
+      expect(await movementCount(service.id!), movementsBeforeVoid,
+          reason: 'void adds no movement for a line that was never inventory-tracked');
+    });
+  });
+
+  group('stock movements (Add/Remove Stock)', () {
+    test('Add Stock records a dated, reasoned movement and raises the stock count', () async {
+      final date = DateTime(2026, 9, 20);
+      await items.adjustStock(water.id!, 20, 'restock',
+          reason: 'Purchase', notes: 'Received from supplier', date: date);
+      expect((await items.getItemById(water.id!))!.stockQuantity, 1020);
+
+      final history = await items.getStockHistory(water.id!);
+      expect(history, hasLength(1));
+      expect(history.first['type'], 'restock');
+      expect(history.first['reason'], 'Purchase');
+      expect(history.first['notes'], 'Received from supplier');
+      expect(history.first['quantity_change'], 20);
+      expect(DateTime.parse(history.first['created_at'] as String), date);
+    });
+
+    test('Remove Stock lowers the count and is newest-first alongside a sale', () async {
+      await checkout(total: 100, received: 100, qty: 1); // stock 1000 -> 999, 1 sale movement
+      await items.adjustStock(water.id!, -3, 'damage', reason: 'Damaged', notes: 'Dropped in transit');
+      expect((await items.getItemById(water.id!))!.stockQuantity, 996);
+
+      final history = await items.getStockHistory(water.id!);
+      expect(history, hasLength(2));
+      expect(history.first['type'], 'damage', reason: 'newest movement first');
+      expect(history.last['type'], 'sale');
+    });
+  });
+
+  group('item images (multiple images per item)', () {
+    test('no image is valid — nothing to fall back to but the letter avatar', () async {
+      final gallery = await items.getImages(water.id!);
+      expect(gallery, isEmpty);
+      expect((await items.getItemById(water.id!))!.imagePath, isNull);
+    });
+
+    test('the first image added becomes primary automatically', () async {
+      final id1 = await items.addImage(water.id!, imagePath: '/tmp/a.jpg');
+      final gallery = await items.getImages(water.id!);
+      expect(gallery, hasLength(1));
+      expect(gallery.single.id, id1);
+      expect(gallery.single.isPrimary, isTrue);
+      expect((await items.getItemById(water.id!))!.imagePath, '/tmp/a.jpg',
+          reason: 'items.image_path caches the primary image');
+    });
+
+    test('later images default to non-primary; setPrimaryImage switches the cache', () async {
+      final id1 = await items.addImage(water.id!, imagePath: '/tmp/a.jpg');
+      final id2 = await items.addImage(water.id!, imagePath: '/tmp/b.jpg');
+      var gallery = await items.getImages(water.id!);
+      expect(gallery.firstWhere((g) => g.id == id1).isPrimary, isTrue);
+      expect(gallery.firstWhere((g) => g.id == id2).isPrimary, isFalse);
+      expect((await items.getItemById(water.id!))!.imagePath, '/tmp/a.jpg');
+
+      await items.setPrimaryImage(water.id!, id2);
+      gallery = await items.getImages(water.id!);
+      expect(gallery.firstWhere((g) => g.id == id1).isPrimary, isFalse);
+      expect(gallery.firstWhere((g) => g.id == id2).isPrimary, isTrue);
+      expect((await items.getItemById(water.id!))!.imagePath, '/tmp/b.jpg',
+          reason: 'cache follows the new primary');
+    });
+
+    test('removing the primary promotes the next image by sort order', () async {
+      final id1 = await items.addImage(water.id!, imagePath: '/tmp/a.jpg');
+      final id2 = await items.addImage(water.id!, imagePath: '/tmp/b.jpg');
+
+      await items.removeImage(water.id!, id1);
+      final gallery = await items.getImages(water.id!);
+      expect(gallery, hasLength(1));
+      expect(gallery.single.id, id2);
+      expect(gallery.single.isPrimary, isTrue);
+      expect((await items.getItemById(water.id!))!.imagePath, '/tmp/b.jpg');
+    });
+
+    test('removing the last image clears the primary-image cache', () async {
+      final id1 = await items.addImage(water.id!, imagePath: '/tmp/a.jpg');
+      await items.removeImage(water.id!, id1);
+      expect(await items.getImages(water.id!), isEmpty);
+      expect((await items.getItemById(water.id!))!.imagePath, isNull);
+    });
+
+    test('reorderImages persists the new display order', () async {
+      final id1 = await items.addImage(water.id!, imagePath: '/tmp/a.jpg');
+      final id2 = await items.addImage(water.id!, imagePath: '/tmp/b.jpg');
+      final id3 = await items.addImage(water.id!, imagePath: '/tmp/c.jpg');
+
+      await items.reorderImages(water.id!, [id3, id1, id2]);
+      final gallery = await items.getImages(water.id!);
+      expect(gallery.map((g) => g.id).toList(), [id3, id1, id2]);
+    });
+  });
 }

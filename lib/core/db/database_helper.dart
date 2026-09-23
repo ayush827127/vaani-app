@@ -199,7 +199,19 @@ class DatabaseHelper {
       // reasoning as items.item_type above.
       await db.execute(
           "ALTER TABLE invoice_items ADD COLUMN item_type TEXT NOT NULL DEFAULT 'PRODUCT'");
+      // Whether THIS line actually deducted stock at sale time — the
+      // authority void/return use to decide whether to restore stock,
+      // independent of the item's CURRENT inventory_enabled (which may have
+      // since changed). Without its own snapshot, voiding an old bill after
+      // its item was later switched product↔service would either restore
+      // stock that was never deducted, or fail to restore stock that was.
+      // Every existing line predates the service concept, so it did deduct.
+      await db.execute(
+          'ALTER TABLE invoice_items ADD COLUMN inventory_tracked INTEGER NOT NULL DEFAULT 1');
       await db.execute('ALTER TABLE inventory_transactions RENAME COLUMN product_id TO item_id');
+      // Add/Remove Stock now capture a short structured reason (Purchase,
+      // Damaged, ...) separate from the free-text notes field.
+      await db.execute('ALTER TABLE inventory_transactions ADD COLUMN reason TEXT');
       // New: every existing row is an inventory-tracked physical product —
       // exactly its current (unchanged) behavior. inventory_enabled, not
       // item_type, is what billing actually gates on; item_type mainly
@@ -208,6 +220,29 @@ class DatabaseHelper {
           "ALTER TABLE items ADD COLUMN item_type TEXT NOT NULL DEFAULT 'PRODUCT'");
       await db.execute(
           'ALTER TABLE items ADD COLUMN inventory_enabled INTEGER NOT NULL DEFAULT 1');
+
+      // One item, many images — items.image_path/image_url stay as a
+      // denormalized cache of the primary image (see the table's own doc
+      // comment in _createTables). Every item that already had a single
+      // image gets it carried over as that first, primary image — nothing
+      // existing is lost.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS item_images (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          item_id INTEGER NOT NULL,
+          image_path TEXT,
+          image_url TEXT,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_primary INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+        )
+      ''');
+      await db.rawInsert('''
+        INSERT INTO item_images (item_id, image_path, image_url, sort_order, is_primary, created_at)
+        SELECT id, image_path, image_url, 0, 1, datetime('now')
+        FROM items WHERE image_path IS NOT NULL OR image_url IS NOT NULL
+      ''');
     }
   }
 
@@ -261,6 +296,26 @@ class DatabaseHelper {
         item_id INTEGER NOT NULL,
         alias TEXT NOT NULL,
         language TEXT NOT NULL DEFAULT 'en',
+        FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // One-to-many, mirroring the local-file/Cloudinary-URL pattern
+    // items.image_path/image_url already uses for its single legacy image —
+    // this is that same pattern made one-to-many. is_primary decides which
+    // image is used anywhere the rest of the app needs just one (ItemAvatar,
+    // invoice PDFs, ...); items.image_path/image_url are kept as a
+    // denormalized cache of that primary image, updated whenever it changes,
+    // so every existing single-image read path keeps working unmodified.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS item_images (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL,
+        image_path TEXT,
+        image_url TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_primary INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
         FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
       )
     ''');
@@ -321,6 +376,7 @@ class DatabaseHelper {
         item_id INTEGER NOT NULL,
         item_name TEXT NOT NULL,
         item_type TEXT NOT NULL DEFAULT 'PRODUCT',
+        inventory_tracked INTEGER NOT NULL DEFAULT 1,
         quantity INTEGER NOT NULL,
         selling_price REAL NOT NULL,
         gst_rate REAL NOT NULL DEFAULT 0,
@@ -339,6 +395,7 @@ class DatabaseHelper {
         item_id INTEGER NOT NULL,
         invoice_id INTEGER,
         type TEXT NOT NULL,
+        reason TEXT,
         quantity_change INTEGER NOT NULL,
         stock_before INTEGER NOT NULL,
         stock_after INTEGER NOT NULL,

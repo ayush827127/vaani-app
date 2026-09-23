@@ -60,6 +60,7 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
   // not a specific bill).
   final _generalCollectionCtrl = TextEditingController();
   String _method = 'cash';
+  DateTime _date = DateTime.now();
   bool _isAdvanceDeposit = false; // true = add to advance; false = reduce outstanding
   bool _isProcessing = false;
   bool _success = false;
@@ -203,6 +204,7 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
         advanceDepositAmount: _isAdvanceDeposit ? _amount : null,
         invoiceAllocations: allocations,
         generalCollectionAmount: generalCollection,
+        transactionDate: _date,
       );
 
       if (mounted) setState(() { _isProcessing = false; _success = true; });
@@ -314,7 +316,7 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
                               const Icon(Icons.warning_amber_rounded,
                                   color: Color(0xFFFF8C00), size: 15),
                               const SizedBox(width: 8),
-                              Text(l10n.outstanding,
+                              Text(l10n.previousDue,
                                   style: const TextStyle(
                                       color: Color(0xFFFF8C00), fontSize: 13)),
                               const Spacer(),
@@ -472,6 +474,44 @@ class _CollectPaymentSheetState extends State<CollectPaymentSheet> {
                       ),
                     );
                   }).toList(),
+                ),
+                const SizedBox(height: 16),
+
+                // Date — defaults to today, editable for a backdated entry.
+                Row(
+                  children: [
+                    Text(l10n.date, style: TextStyle(color: c.textSecondary, fontSize: 14)),
+                    const Spacer(),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _date,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) setState(() => _date = picked);
+                      },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF2A2750) : c.divider,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: c.surfaceBorder),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.calendar_today_rounded, size: 14, color: c.textHint),
+                            const SizedBox(width: 8),
+                            Text(AppFormatters.formatDate(_date),
+                                style: TextStyle(color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 20),
 

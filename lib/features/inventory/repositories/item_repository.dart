@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../../core/db/database_helper.dart';
 import '../../../core/utils/constants.dart';
 import '../../../shared/models/item.dart';
+import '../../../shared/models/item_image.dart';
 
 class ItemRepository {
   final DatabaseHelper _db = DatabaseHelper.instance;
@@ -286,8 +287,14 @@ class ItemRepository {
     );
   }
 
+  /// [date] is the movement's own record date (defaults to now, but the
+  /// caller — the Add/Remove Stock sheets — lets the user pick an earlier
+  /// one for backdated entries, e.g. logging a delivery received yesterday).
+  /// It only affects what the Stock History entry shows; the *current*
+  /// stock_quantity always reflects every movement immediately regardless
+  /// of which date it's attributed to — there's no point-in-time replay.
   Future<void> adjustStock(int itemId, int quantityChange, String type,
-      {int? invoiceId, String? notes}) async {
+      {int? invoiceId, String? reason, String? notes, DateTime? date}) async {
     final db = await _db.database;
     await db.transaction((txn) async {
       final rows = await txn.query('items', columns: ['stock_quantity'], where: 'id = ?', whereArgs: [itemId]);
@@ -303,13 +310,29 @@ class ItemRepository {
         'item_id': itemId,
         'invoice_id': invoiceId,
         'type': type,
+        'reason': reason,
         'quantity_change': quantityChange,
         'stock_before': stockBefore,
         'stock_after': stockAfter,
         'notes': notes,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': (date ?? DateTime.now()).toIso8601String(),
       });
     });
+  }
+
+  /// This item's full stock-movement history, newest first — Add/Remove
+  /// Stock entries, sales, and void/return reversals alike, all sourced
+  /// from the same inventory_transactions audit trail every stock change
+  /// already goes through (see adjustStock and InvoiceRepository's
+  /// create/void/return paths).
+  Future<List<Map<String, Object?>>> getStockHistory(int itemId) async {
+    final db = await _db.database;
+    return db.query(
+      'inventory_transactions',
+      where: 'item_id = ?',
+      whereArgs: [itemId],
+      orderBy: 'created_at DESC, id DESC',
+    );
   }
 
   Future<List<String>> _getAliases(int itemId) async {
@@ -372,5 +395,102 @@ class ItemRepository {
       JOIN items p ON p.id = it.item_id
       WHERE p.shop_id = ? AND it.created_at > ?
     ''', [shopId, since.toIso8601String()]);
+  }
+
+  // ── Item images (Phase 2: multiple images per item) ──────────────────────
+  //
+  // items.image_path/image_url stay as a denormalized cache of whichever row
+  // here is the primary — see item_images' own doc comment in
+  // database_helper.dart. Every write below keeps that cache in sync in the
+  // same transaction, so every existing single-image read path (ItemAvatar,
+  // invoice PDFs, sync, ...) keeps working with zero changes.
+
+  Future<List<ItemImage>> getImages(int itemId) async {
+    final db = await _db.database;
+    final rows = await db.query('item_images',
+        where: 'item_id = ?', whereArgs: [itemId], orderBy: 'sort_order ASC, id ASC');
+    return rows.map(ItemImage.fromMap).toList();
+  }
+
+  Future<void> _syncPrimaryCache(DatabaseExecutor txn, int itemId) async {
+    final rows = await txn.query('item_images',
+        where: 'item_id = ? AND is_primary = 1', whereArgs: [itemId], limit: 1);
+    await txn.update(
+      'items',
+      {
+        'image_path': rows.isNotEmpty ? rows.first['image_path'] as String? : null,
+        'image_url': rows.isNotEmpty ? rows.first['image_url'] as String? : null,
+      },
+      where: 'id = ?',
+      whereArgs: [itemId],
+    );
+  }
+
+  /// Adds one image to the item's gallery. The very first image an item
+  /// gets is automatically primary (there's nothing to choose between yet);
+  /// later ones are added non-primary — the caller uses [setPrimaryImage]
+  /// to change that.
+  Future<int> addImage(int itemId, {String? imagePath, String? imageUrl}) async {
+    final db = await _db.database;
+    return db.transaction((txn) async {
+      final existing = await txn.query('item_images', where: 'item_id = ?', whereArgs: [itemId]);
+      final isFirst = existing.isEmpty;
+      final maxOrder = existing.isEmpty
+          ? -1
+          : existing.map((r) => r['sort_order'] as int? ?? 0).reduce((a, b) => a > b ? a : b);
+      final id = await txn.insert('item_images', {
+        'item_id': itemId,
+        'image_path': imagePath,
+        'image_url': imageUrl,
+        'sort_order': maxOrder + 1,
+        'is_primary': isFirst ? 1 : 0,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      if (isFirst) await _syncPrimaryCache(txn, itemId);
+      return id;
+    });
+  }
+
+  /// Removes one image. If it was the primary, the next image by sort order
+  /// (if any) automatically becomes primary — an item is never left with
+  /// images but no primary among them.
+  Future<void> removeImage(int itemId, int imageId) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      final rows = await txn.query('item_images', where: 'id = ?', whereArgs: [imageId]);
+      if (rows.isEmpty) return;
+      final wasPrimary = (rows.first['is_primary'] as int? ?? 0) == 1;
+      await txn.delete('item_images', where: 'id = ?', whereArgs: [imageId]);
+      if (wasPrimary) {
+        final remaining = await txn.query('item_images',
+            where: 'item_id = ?', whereArgs: [itemId], orderBy: 'sort_order ASC, id ASC', limit: 1);
+        if (remaining.isNotEmpty) {
+          await txn.update('item_images', {'is_primary': 1},
+              where: 'id = ?', whereArgs: [remaining.first['id']]);
+        }
+        await _syncPrimaryCache(txn, itemId);
+      }
+    });
+  }
+
+  Future<void> setPrimaryImage(int itemId, int imageId) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      await txn.update('item_images', {'is_primary': 0}, where: 'item_id = ?', whereArgs: [itemId]);
+      await txn.update('item_images', {'is_primary': 1}, where: 'id = ?', whereArgs: [imageId]);
+      await _syncPrimaryCache(txn, itemId);
+    });
+  }
+
+  /// Persists a new display order — [orderedImageIds] must list every image
+  /// id currently on the item, in the order they should appear.
+  Future<void> reorderImages(int itemId, List<int> orderedImageIds) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      for (var i = 0; i < orderedImageIds.length; i++) {
+        await txn.update('item_images', {'sort_order': i},
+            where: 'id = ?', whereArgs: [orderedImageIds[i]]);
+      }
+    });
   }
 }
