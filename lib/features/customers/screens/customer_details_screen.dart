@@ -306,16 +306,8 @@ class _OverviewTab extends StatelessWidget {
               ],
             ),
           ),
-          if (net != 0) ...[
-            const SizedBox(height: 12),
-            _StatCard(
-              value: AppFormatters.formatCurrency(net.abs()),
-              label: net > 0 ? l10n.previousDue : l10n.advanceLabel,
-              color: net > 0 ? const Color(0xFFFF6B00) : c.success,
-              icon: net > 0 ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-              c: c,
-            ),
-          ],
+          const SizedBox(height: 12),
+          _BalanceCard(customer: customer, net: net, c: c, l10n: l10n),
           const SizedBox(height: 16),
 
           // Quick actions — You Gave/You Got are already one tap away via
@@ -388,6 +380,79 @@ class _StatCard extends StatelessWidget {
               style: TextStyle(color: c.textSecondary, fontSize: 11),
               maxLines: 1,
               overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Balance card (Previous Due / Advance Amount / Current Due) ─────────────
+//
+// Previous Due and Advance Amount are the two raw ledger fields
+// (Customer.totalOutstanding / Customer.advanceBalance) shown as-is, never
+// netted against each other — that's what made the old single "Previous Due
+// OR Advance" card ambiguous. Current Due is the same net-payable figure
+// this screen already computed before (netBalance(customer), clamped at 0
+// since a net advance means nothing is currently payable) — reused, not
+// recalculated.
+class _BalanceCard extends StatelessWidget {
+  final Customer customer;
+  final double net;
+  final AppSemanticColors c;
+  final AppLocalizations l10n;
+  const _BalanceCard({required this.customer, required this.net, required this.c, required this.l10n});
+
+  @override
+  Widget build(BuildContext context) {
+    final previousDue = customer.totalOutstanding;
+    final advance = customer.advanceBalance;
+    final currentDue = net > 0 ? net : 0.0;
+    const dueColor = Color(0xFFFF6B00);
+
+    Widget row(String label, double value, Color color, {bool emphasize = false}) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  color: emphasize ? c.textPrimary : c.textSecondary,
+                  fontSize: emphasize ? 13.5 : 13,
+                  fontWeight: emphasize ? FontWeight.w600 : FontWeight.w500)),
+          Text(AppFormatters.formatCurrency(value),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                  fontFamily: 'Poppins',
+                  color: color,
+                  fontSize: emphasize ? 16 : 14,
+                  fontWeight: FontWeight.bold)),
+        ],
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.surfaceBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.customerBalanceLabel,
+              style: TextStyle(
+                  fontFamily: 'Poppins', fontSize: 13.5, fontWeight: FontWeight.w600, color: c.textSecondary)),
+          const SizedBox(height: 10),
+          row(l10n.previousDue, previousDue, dueColor),
+          if (advance > 0) ...[
+            const SizedBox(height: 8),
+            row(l10n.advanceAmountLabel, advance, c.success),
+          ],
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Divider(height: 1, color: c.divider),
+          ),
+          row(l10n.currentDueLabel, currentDue, currentDue > 0 ? dueColor : c.success, emphasize: true),
         ],
       ),
     );

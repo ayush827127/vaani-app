@@ -362,6 +362,11 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
         grandTotal: widget.grandTotal,
         receivedAmount: _isWalkIn ? widget.grandTotal : invoiceReceived,
         pendingAmount: _pendingAmount,
+        // Snapshot of what was already owed before this bill — the exact
+        // figure shown as "Previous Due" a few lines above in this same
+        // sheet — so the generated bill can show it too instead of only
+        // ever surfacing it live during checkout.
+        previousDue: _previousDue,
         paymentMode: _method,
         status: _status,
         isVoiceCreated: isVoiceOrigin,

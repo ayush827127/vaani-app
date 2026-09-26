@@ -254,7 +254,7 @@ class _InvoicePreviewScreenState extends ConsumerState<InvoicePreviewScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => context.go('/billing'),
+                          onPressed: () => context.push('/billing'),
                           icon: const Icon(Icons.add_rounded, size: 18),
                           label: Text(l10n.newBill),
                         ),

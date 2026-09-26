@@ -192,7 +192,34 @@ class AppLocalizationsHi extends AppLocalizations {
   String get recentBills => 'हाल के बिल';
 
   @override
+  String get recentBillsSubtitle => 'आपके नवीनतम लेनदेन';
+
+  @override
   String get quickActions => 'त्वरित कार्य';
+
+  @override
+  String get quickActionsSubtitle => 'आपकी हर जरूरत, एक ही जगह।';
+
+  @override
+  String get appTagline => 'बोलो · बिल बनाओ · बिज़नेस बढ़ाओ';
+
+  @override
+  String get qaViewManage => 'देखें और प्रबंधित करें';
+
+  @override
+  String get qaManageStock => 'स्टॉक प्रबंधित करें';
+
+  @override
+  String get qaViewAndAdd => 'देखें और जोड़ें';
+
+  @override
+  String get qaQuickAdd => 'तुरंत जोड़ें';
+
+  @override
+  String get qaSalesInsights => 'बिक्री और जानकारी';
+
+  @override
+  String get qaVoiceSmart => 'वॉइस और स्मार्ट';
 
   @override
   String get all => 'सभी';
@@ -255,10 +282,68 @@ class AppLocalizationsHi extends AppLocalizations {
   String get todaysProfit => 'आज का मुनाफ़ा';
 
   @override
+  String get todaysLoss => 'आज का घाटा';
+
+  @override
   String get noBillsToday => 'आज अभी तक कोई बिल नहीं';
 
   @override
   String get voiceBill => 'वॉइस बिल';
+
+  @override
+  String get collectionsLabel => 'वसूली';
+
+  @override
+  String get moneyAtGlanceLabel => 'खाता सारांश';
+
+  @override
+  String get viewLedgerLabel => 'खाता देखें';
+
+  @override
+  String get youllGetLabel => 'आपको मिलेगा';
+
+  @override
+  String get toCollectLabel => 'प्राप्त करना है';
+
+  @override
+  String get youllGiveLabel => 'आपको देना है';
+
+  @override
+  String get toPayLabel => 'चुकाना है';
+
+  @override
+  String get netBalanceLabel => 'शुद्ध शेष';
+
+  @override
+  String get outstandingLabel => 'बकाया राशि';
+
+  @override
+  String get inAdvanceLabel => 'अग्रिम में';
+
+  @override
+  String get upgradeToProTitle => 'VAANI Pro में अपग्रेड करें';
+
+  @override
+  String get upgradeToProSubtitle =>
+      'एडवांस रिपोर्ट, पेमेंट रिमाइंडर, व्हाट्सएप शेयरिंग और भी बहुत कुछ पाएं।';
+
+  @override
+  String get viewPlansLabel => 'प्लान देखें';
+
+  @override
+  String get noRecentActivityYet => 'अभी तक कोई हालिया गतिविधि नहीं';
+
+  @override
+  String get activityPaymentReceived => 'भुगतान प्राप्त हुआ';
+
+  @override
+  String get activityBillCreated => 'बिल बनाया गया';
+
+  @override
+  String get activityCreditGiven => 'उधार दिया गया';
+
+  @override
+  String get activityPaymentMade => 'भुगतान किया गया';
 
   @override
   String get addItem => 'आइटम जोड़ें';
@@ -366,6 +451,61 @@ class AppLocalizationsHi extends AppLocalizations {
   String get stockHistory => 'स्टॉक इतिहास';
 
   @override
+  String get retryLabel => 'पुनः प्रयास करें';
+
+  @override
+  String get overviewTabLabel => 'अवलोकन';
+
+  @override
+  String get transactionsTabLabel => 'लेन-देन';
+
+  @override
+  String get pricingTabLabel => 'मूल्य';
+
+  @override
+  String get detailsTabLabel => 'विवरण';
+
+  @override
+  String get goodStockLabel => 'अच्छा स्टॉक';
+
+  @override
+  String get priceInformationLabel => 'मूल्य जानकारी';
+
+  @override
+  String get taxInformationLabel => 'कर जानकारी';
+
+  @override
+  String get recentActivityLabel => 'हाल की गतिविधि';
+
+  @override
+  String get noRecentActivity => 'अभी तक कोई गतिविधि नहीं';
+
+  @override
+  String get noRecentActivitySubtitle =>
+      'गतिविधि देखने के लिए स्टॉक जोड़ें या समायोजित करें।';
+
+  @override
+  String get unableToLoadItem => 'आइटम लोड नहीं हो सका';
+
+  @override
+  String get pleaseTryAgain => 'कृपया पुनः प्रयास करें।';
+
+  @override
+  String get filterAllTransactions => 'सभी लेन-देन';
+
+  @override
+  String get filterPurchases => 'खरीद';
+
+  @override
+  String get filterSales => 'बिक्री';
+
+  @override
+  String get filterAdjustments => 'समायोजन';
+
+  @override
+  String get copiedToClipboard => 'क्लिपबोर्ड पर कॉपी हो गया';
+
+  @override
   String get noStockHistoryYet => 'अभी तक कोई स्टॉक मूवमेंट नहीं';
 
   @override
@@ -438,7 +578,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get gstRate => 'जीएसटी दर';
 
   @override
-  String get stockLevel => 'स्टॉक स्तर';
+  String get stockLevel => 'मौजूदा स्टॉक';
 
   @override
   String get unitsLabel => 'यूनिट';
@@ -515,7 +655,7 @@ class AppLocalizationsHi extends AppLocalizations {
       'कोई स्टॉक नहीं — इस आइटम का बिल इन्वेंटरी को नहीं छुएगा';
 
   @override
-  String get skuPhoneCode => 'SKU / फ़ोन कोड';
+  String get skuPhoneCode => 'SKU / आंतरिक कोड';
 
   @override
   String get costPriceCurrency => 'लागत मूल्य (₹)';
@@ -528,6 +668,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get stockQuantity => 'स्टॉक मात्रा';
+
+  @override
+  String get stockQuantityRequiredError => '0 से अधिक मात्रा दर्ज करें।';
+
+  @override
+  String get stockExceedsAvailableError =>
+      'मौजूदा स्टॉक से अधिक नहीं हटाया जा सकता।';
 
   @override
   String get aliasesLabel => 'उपनाम (कॉमा से अलग करें)';
@@ -543,6 +690,65 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get itemAdded => 'आइटम जोड़ा गया';
+
+  @override
+  String get continueLabel => 'जारी रखें';
+
+  @override
+  String get backLabel => 'वापस';
+
+  @override
+  String get basicDetailsStepLabel => 'मूल विवरण';
+
+  @override
+  String get inventoryStepLabel => 'इन्वेंटरी';
+
+  @override
+  String get reviewStepLabel => 'समीक्षा';
+
+  @override
+  String get moreOptionsLabel => 'अधिक विकल्प (वैकल्पिक)';
+
+  @override
+  String get additionalInfoLabel => 'अतिरिक्त जानकारी';
+
+  @override
+  String get initialStockLabel => 'प्रारंभिक स्टॉक';
+
+  @override
+  String get pricingSummaryLabel => 'मूल्य सारांश';
+
+  @override
+  String get inventorySummaryLabel => 'इन्वेंटरी सारांश';
+
+  @override
+  String lowStockAlertHint(String count) {
+    return 'जब स्टॉक $count यूनिट तक गिरेगा तो आपको लो-स्टॉक अलर्ट मिलेगा।';
+  }
+
+  @override
+  String get serviceNoInventoryHint =>
+      'सर्विस के लिए इन्वेंटरी ट्रैकिंग आवश्यक नहीं है।';
+
+  @override
+  String get itemNameRequiredError => 'आइटम का नाम आवश्यक है।';
+
+  @override
+  String get sellingPriceInvalidError => 'बिक्री मूल्य 0 से अधिक होना चाहिए।';
+
+  @override
+  String get initialStockNegativeError =>
+      'प्रारंभिक स्टॉक नकारात्मक नहीं हो सकता।';
+
+  @override
+  String get reorderLevelNegativeError =>
+      'रीऑर्डर स्तर नकारात्मक नहीं हो सकता।';
+
+  @override
+  String get yesLabel => 'हाँ';
+
+  @override
+  String get noLabel => 'नहीं';
 
   @override
   String get barcode => 'बारकोड';
@@ -602,6 +808,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String taxLabel(String amount) {
     return 'कर: $amount';
   }
+
+  @override
+  String get editTaxLabel => 'कर संपादित करें';
 
   @override
   String youSave(String amount) {
@@ -752,6 +961,15 @@ class AppLocalizationsHi extends AppLocalizations {
   String get advanceLabel => 'अग्रिम';
 
   @override
+  String get advanceAmountLabel => 'अग्रिम राशि';
+
+  @override
+  String get customerBalanceLabel => 'ग्राहक शेष';
+
+  @override
+  String get currentDueLabel => 'वर्तमान बकाया';
+
+  @override
   String get addLabel => 'जोड़ें';
 
   @override
@@ -774,6 +992,9 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get previousDueInfo => 'पिछले बिलों की बकाया राशि';
+
+  @override
+  String get totalPayableLabel => 'कुल देय राशि';
 
   @override
   String get receiveAmount => 'प्राप्त राशि दर्ज करें';
@@ -985,6 +1206,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get periodThisYear => 'इस साल';
 
   @override
+  String get periodCustomRange => 'कस्टम अवधि';
+
+  @override
   String get totalSales => 'कुल बिक्री';
 
   @override
@@ -1001,6 +1225,131 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get topItems => 'शीर्ष आइटम';
+
+  @override
+  String get tabOverview => 'अवलोकन';
+
+  @override
+  String get tabSales => 'बिक्री';
+
+  @override
+  String get tabItems => 'आइटम';
+
+  @override
+  String get tabPayments => 'भुगतान';
+
+  @override
+  String get tabCustomers => 'ग्राहक';
+
+  @override
+  String get tabInsights => 'इनसाइट्स';
+
+  @override
+  String get salesSummaryLabel => 'बिक्री सारांश';
+
+  @override
+  String get averageBillValueLabel => 'औसत बिल मूल्य';
+
+  @override
+  String get pendingAmountLabel => 'बकाया राशि';
+
+  @override
+  String get amountToCollectLabel => 'वसूलने योग्य राशि';
+
+  @override
+  String get salesTrendLabel => 'बिक्री रुझान';
+
+  @override
+  String get dailySalesLabel => 'दैनिक बिक्री';
+
+  @override
+  String get yesterdayLabel => 'कल';
+
+  @override
+  String get salesByCategoryLabel => 'श्रेणी अनुसार बिक्री';
+
+  @override
+  String get lowStockItemsLabel => 'कम स्टॉक आइटम';
+
+  @override
+  String get paymentSummaryLabel => 'भुगतान सारांश';
+
+  @override
+  String get collectionVsPendingLabel => 'वसूली बनाम बकाया';
+
+  @override
+  String get collectedLabel => 'वसूला गया';
+
+  @override
+  String get recentPaymentsLabel => 'हाल के भुगतान';
+
+  @override
+  String get customerSummaryLabel => 'ग्राहक सारांश';
+
+  @override
+  String get totalCustomersLabel => 'कुल ग्राहक';
+
+  @override
+  String get customersWithDuesLabel => 'बकाया वाले ग्राहक';
+
+  @override
+  String get totalDuesLabel => 'कुल बकाया';
+
+  @override
+  String get topCustomersBySalesLabel => 'बिक्री अनुसार शीर्ष ग्राहक';
+
+  @override
+  String get topCustomersByDueLabel => 'बकाया राशि अनुसार शीर्ष ग्राहक';
+
+  @override
+  String insightSalesIncreased(String percent) {
+    return 'पिछली अवधि की तुलना में बिक्री $percent% बढ़ी।';
+  }
+
+  @override
+  String insightSalesDecreased(String percent) {
+    return 'पिछली अवधि की तुलना में बिक्री $percent% घटी।';
+  }
+
+  @override
+  String insightTopItem(String name) {
+    return '$name की बिक्री सबसे ज़्यादा हुई।';
+  }
+
+  @override
+  String insightAvgBillValue(String amount) {
+    return 'औसत बिल मूल्य $amount है।';
+  }
+
+  @override
+  String insightBillCount(String count) {
+    return 'इस अवधि में $count बिल बनाए गए।';
+  }
+
+  @override
+  String insightPending(String amount) {
+    return 'ग्राहकों से अभी भी $amount बकाया है।';
+  }
+
+  @override
+  String insightTopCategory(String category) {
+    return 'सबसे ज़्यादा बिकने वाली श्रेणी $category है।';
+  }
+
+  @override
+  String get noInsightsYet => 'इनसाइट्स के लिए अभी पर्याप्त डेटा नहीं है।';
+
+  @override
+  String get noSalesYet => 'अभी तक कोई बिक्री नहीं';
+
+  @override
+  String get noItemSalesYet => 'कोई आइटम बिक्री डेटा नहीं';
+
+  @override
+  String get noPaymentsRecordedYet => 'कोई भुगतान दर्ज नहीं';
+
+  @override
+  String get noCustomerDuesYet => 'कोई ग्राहक बकाया नहीं';
 
   @override
   String get categoryNotFound => 'श्रेणी नहीं मिली';

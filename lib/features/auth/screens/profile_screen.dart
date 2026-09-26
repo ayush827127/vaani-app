@@ -484,7 +484,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       _SettingsTile(
                         icon: Icons.receipt_long_rounded,
                         title: l10n.bills,
-                        onTap: () => context.go('/bills'),
+                        onTap: () => context.push('/bills'),
                       ),
                       _SettingsTile(
                         icon: Icons.print_rounded,

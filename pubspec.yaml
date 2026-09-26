@@ -1,7 +1,7 @@
 name: vaani
 description: "Vaani - AI Store Manager. Voice Billing, Inventory, Invoice, Reports."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -98,6 +98,7 @@ flutter:
     - .env
     - assets/images/
     - assets/lottie/
+    - assets/icon/banner.jpeg
 
 # Run `dart run flutter_launcher_icons` after changing anything here to
 # regenerate the actual per-platform icon files.

@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/permission_service.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/shop.dart';
 import '../../../shared/widgets/shop_logo_image.dart';
@@ -62,6 +63,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _pickLogo(ImageSource source) async {
+    if (source == ImageSource.camera) {
+      final granted = await PermissionService.requestCamera(context);
+      if (!granted || !mounted) return;
+    }
     try {
       final picked = await _picker.pickImage(
           source: source, maxWidth: 800, maxHeight: 800, imageQuality: 85);

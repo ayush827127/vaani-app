@@ -192,7 +192,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recentBills => 'Recent Bills';
 
   @override
+  String get recentBillsSubtitle => 'Your latest transactions';
+
+  @override
   String get quickActions => 'Quick Actions';
+
+  @override
+  String get quickActionsSubtitle => 'Everything you need, in one place.';
+
+  @override
+  String get appTagline => 'Bolo · Bill Banao · Business Badhao';
+
+  @override
+  String get qaViewManage => 'View & manage';
+
+  @override
+  String get qaManageStock => 'Manage stock';
+
+  @override
+  String get qaViewAndAdd => 'View & Add';
+
+  @override
+  String get qaQuickAdd => 'Quick add';
+
+  @override
+  String get qaSalesInsights => 'Sales & insights';
+
+  @override
+  String get qaVoiceSmart => 'Voice & Smart';
 
   @override
   String get all => 'All';
@@ -255,10 +282,68 @@ class AppLocalizationsEn extends AppLocalizations {
   String get todaysProfit => 'Today\'s Profit';
 
   @override
+  String get todaysLoss => 'Today\'s Loss';
+
+  @override
   String get noBillsToday => 'No bills yet today';
 
   @override
   String get voiceBill => 'Voice Bill';
+
+  @override
+  String get collectionsLabel => 'Collections';
+
+  @override
+  String get moneyAtGlanceLabel => 'Account Summary';
+
+  @override
+  String get viewLedgerLabel => 'View Ledger';
+
+  @override
+  String get youllGetLabel => 'You\'ll Get';
+
+  @override
+  String get toCollectLabel => 'To Receive';
+
+  @override
+  String get youllGiveLabel => 'You\'ll Give';
+
+  @override
+  String get toPayLabel => 'To Pay';
+
+  @override
+  String get netBalanceLabel => 'Net Balance';
+
+  @override
+  String get outstandingLabel => 'Due Amount';
+
+  @override
+  String get inAdvanceLabel => 'In Advance';
+
+  @override
+  String get upgradeToProTitle => 'Upgrade to VAANI Pro';
+
+  @override
+  String get upgradeToProSubtitle =>
+      'Get advanced reports, payment reminders, WhatsApp sharing and more.';
+
+  @override
+  String get viewPlansLabel => 'View Plans';
+
+  @override
+  String get noRecentActivityYet => 'No recent activity yet';
+
+  @override
+  String get activityPaymentReceived => 'Payment received';
+
+  @override
+  String get activityBillCreated => 'Bill created';
+
+  @override
+  String get activityCreditGiven => 'Credit given';
+
+  @override
+  String get activityPaymentMade => 'Payment made';
 
   @override
   String get addItem => 'Add Item';
@@ -367,6 +452,61 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stockHistory => 'Stock History';
 
   @override
+  String get retryLabel => 'Retry';
+
+  @override
+  String get overviewTabLabel => 'Overview';
+
+  @override
+  String get transactionsTabLabel => 'Transactions';
+
+  @override
+  String get pricingTabLabel => 'Pricing';
+
+  @override
+  String get detailsTabLabel => 'Details';
+
+  @override
+  String get goodStockLabel => 'Good Stock';
+
+  @override
+  String get priceInformationLabel => 'Price Information';
+
+  @override
+  String get taxInformationLabel => 'Tax Information';
+
+  @override
+  String get recentActivityLabel => 'Recent Activity';
+
+  @override
+  String get noRecentActivity => 'No recent activity';
+
+  @override
+  String get noRecentActivitySubtitle =>
+      'Add or adjust stock to see activity here.';
+
+  @override
+  String get unableToLoadItem => 'Unable to load item';
+
+  @override
+  String get pleaseTryAgain => 'Please try again.';
+
+  @override
+  String get filterAllTransactions => 'All Transactions';
+
+  @override
+  String get filterPurchases => 'Purchases';
+
+  @override
+  String get filterSales => 'Sales';
+
+  @override
+  String get filterAdjustments => 'Adjustments';
+
+  @override
+  String get copiedToClipboard => 'Copied to clipboard';
+
+  @override
   String get noStockHistoryYet => 'No stock movements yet';
 
   @override
@@ -439,7 +579,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gstRate => 'GST Rate';
 
   @override
-  String get stockLevel => 'Stock Level';
+  String get stockLevel => 'Current Stock';
 
   @override
   String get unitsLabel => 'units';
@@ -517,7 +657,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'No stock to track — bills for this item never touch inventory';
 
   @override
-  String get skuPhoneCode => 'SKU / Phone Code';
+  String get skuPhoneCode => 'SKU / Internal Code';
 
   @override
   String get costPriceCurrency => 'Cost Price (₹)';
@@ -530,6 +670,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get stockQuantity => 'Stock Quantity';
+
+  @override
+  String get stockQuantityRequiredError => 'Enter a quantity greater than 0.';
+
+  @override
+  String get stockExceedsAvailableError =>
+      'Cannot remove more than the current stock.';
 
   @override
   String get aliasesLabel => 'Aliases (comma-separated)';
@@ -545,6 +692,64 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get itemAdded => 'Item added';
+
+  @override
+  String get continueLabel => 'Continue';
+
+  @override
+  String get backLabel => 'Back';
+
+  @override
+  String get basicDetailsStepLabel => 'Basic Details';
+
+  @override
+  String get inventoryStepLabel => 'Inventory';
+
+  @override
+  String get reviewStepLabel => 'Review';
+
+  @override
+  String get moreOptionsLabel => 'More Options (Optional)';
+
+  @override
+  String get additionalInfoLabel => 'Additional Information';
+
+  @override
+  String get initialStockLabel => 'Initial Stock';
+
+  @override
+  String get pricingSummaryLabel => 'Pricing Summary';
+
+  @override
+  String get inventorySummaryLabel => 'Inventory Summary';
+
+  @override
+  String lowStockAlertHint(String count) {
+    return 'You\'ll get a low stock alert when stock drops to $count units.';
+  }
+
+  @override
+  String get serviceNoInventoryHint =>
+      'Inventory tracking is not required for services.';
+
+  @override
+  String get itemNameRequiredError => 'Item name is required.';
+
+  @override
+  String get sellingPriceInvalidError =>
+      'Selling price must be greater than 0.';
+
+  @override
+  String get initialStockNegativeError => 'Initial stock cannot be negative.';
+
+  @override
+  String get reorderLevelNegativeError => 'Reorder level cannot be negative.';
+
+  @override
+  String get yesLabel => 'Yes';
+
+  @override
+  String get noLabel => 'No';
 
   @override
   String get barcode => 'Barcode';
@@ -605,6 +810,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String taxLabel(String amount) {
     return 'Tax: $amount';
   }
+
+  @override
+  String get editTaxLabel => 'Edit Tax';
 
   @override
   String youSave(String amount) {
@@ -756,6 +964,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get advanceLabel => 'Advance';
 
   @override
+  String get advanceAmountLabel => 'Advance Amount';
+
+  @override
+  String get customerBalanceLabel => 'Customer Balance';
+
+  @override
+  String get currentDueLabel => 'Current Due';
+
+  @override
   String get addLabel => 'Add';
 
   @override
@@ -778,6 +995,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get previousDueInfo => 'Unpaid amount from previous bills';
+
+  @override
+  String get totalPayableLabel => 'Total Payable';
 
   @override
   String get receiveAmount => 'Receive Amount';
@@ -990,6 +1210,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get periodThisYear => 'This Year';
 
   @override
+  String get periodCustomRange => 'Custom Range';
+
+  @override
   String get totalSales => 'Total Sales';
 
   @override
@@ -1006,6 +1229,131 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get topItems => 'Top Items';
+
+  @override
+  String get tabOverview => 'Overview';
+
+  @override
+  String get tabSales => 'Sales';
+
+  @override
+  String get tabItems => 'Items';
+
+  @override
+  String get tabPayments => 'Payments';
+
+  @override
+  String get tabCustomers => 'Customers';
+
+  @override
+  String get tabInsights => 'Insights';
+
+  @override
+  String get salesSummaryLabel => 'Sales Summary';
+
+  @override
+  String get averageBillValueLabel => 'Average Bill Value';
+
+  @override
+  String get pendingAmountLabel => 'Pending Amount';
+
+  @override
+  String get amountToCollectLabel => 'Amount To Collect';
+
+  @override
+  String get salesTrendLabel => 'Sales Trend';
+
+  @override
+  String get dailySalesLabel => 'Daily Sales';
+
+  @override
+  String get yesterdayLabel => 'Yesterday';
+
+  @override
+  String get salesByCategoryLabel => 'Sales by Category';
+
+  @override
+  String get lowStockItemsLabel => 'Low Stock Items';
+
+  @override
+  String get paymentSummaryLabel => 'Payment Summary';
+
+  @override
+  String get collectionVsPendingLabel => 'Collection vs Pending';
+
+  @override
+  String get collectedLabel => 'Collected';
+
+  @override
+  String get recentPaymentsLabel => 'Recent Payments';
+
+  @override
+  String get customerSummaryLabel => 'Customer Summary';
+
+  @override
+  String get totalCustomersLabel => 'Total Customers';
+
+  @override
+  String get customersWithDuesLabel => 'Customers With Dues';
+
+  @override
+  String get totalDuesLabel => 'Total Dues';
+
+  @override
+  String get topCustomersBySalesLabel => 'Top Customers by Sales';
+
+  @override
+  String get topCustomersByDueLabel => 'Top Customers by Due Amount';
+
+  @override
+  String insightSalesIncreased(String percent) {
+    return 'Sales increased by $percent% compared with the previous period.';
+  }
+
+  @override
+  String insightSalesDecreased(String percent) {
+    return 'Sales decreased by $percent% compared with the previous period.';
+  }
+
+  @override
+  String insightTopItem(String name) {
+    return '$name generated the highest sales.';
+  }
+
+  @override
+  String insightAvgBillValue(String amount) {
+    return 'Average bill value is $amount.';
+  }
+
+  @override
+  String insightBillCount(String count) {
+    return '$count bills were created during this period.';
+  }
+
+  @override
+  String insightPending(String amount) {
+    return '$amount is still pending from customers.';
+  }
+
+  @override
+  String insightTopCategory(String category) {
+    return 'The highest-selling category is $category.';
+  }
+
+  @override
+  String get noInsightsYet => 'Not enough data yet for insights.';
+
+  @override
+  String get noSalesYet => 'No sales yet';
+
+  @override
+  String get noItemSalesYet => 'No item sales data';
+
+  @override
+  String get noPaymentsRecordedYet => 'No payments recorded';
+
+  @override
+  String get noCustomerDuesYet => 'No customer dues';
 
   @override
   String get categoryNotFound => 'Category not found';

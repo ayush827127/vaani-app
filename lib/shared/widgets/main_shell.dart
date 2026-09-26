@@ -22,9 +22,7 @@ class MainShell extends ConsumerStatefulWidget {
   ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends ConsumerState<MainShell>
-    with WidgetsBindingObserver {
-
+class _MainShellState extends ConsumerState<MainShell> {
   // Tab 3 points to /customers — Customers replaces Bills as the primary
   // footer destination (the ledger/udhar view is what shopkeepers reach
   // for most); Bills is still fully there, just one tap further in: from
@@ -49,32 +47,10 @@ class _MainShellState extends ConsumerState<MainShell>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     // Trigger printer auto-reconnect on shell load (after first frame)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(printerProvider);
     });
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  /// Intercepts the Android hardware back button.
-  /// GoRouter's own observer fires first; if it can't handle the pop
-  /// (no shell history), it returns false and we get called here.
-  /// Returning true tells Flutter "handled — don't call SystemNavigator.pop()".
-  @override
-  Future<bool> didPopRoute() async {
-    if (!mounted) return false;
-    final location = GoRouterState.of(context).uri.path;
-    if (!location.startsWith('/home')) {
-      context.go('/home');
-      return true; // consumed — app stays open
-    }
-    return false; // on home — let the system exit the app
   }
 
   @override
@@ -92,10 +68,18 @@ class _MainShellState extends ConsumerState<MainShell>
 
     void onTap(int index) {
       if (index == 4) {
-        context.go('/profile');
+        // Profile isn't a peer tab with its own persistent body like
+        // Home/Items/Customers below — it's a drill-down screen, so it's
+        // pushed (real back-stack entry) rather than go()'d (which would
+        // replace history and leave nothing for Android Back to pop to).
+        context.push('/profile');
         return;
       }
       final route = _routes[index];
+      // Switching between the actual footer tabs stays go() — each tap
+      // replaces the shell's current location rather than stacking, so
+      // repeatedly bouncing between Home/Items/Customers can never build
+      // up a deep or duplicated back stack.
       if (route.isNotEmpty) context.go(route);
     }
 
@@ -259,7 +243,10 @@ class _VoiceFABState extends ConsumerState<_VoiceFAB>
       _showUpgradeMessage();
       return;
     }
-    context.go('/billing');
+    // Pushed (not go()'d) so New Bill gets a real back-stack entry — Android
+    // Back / swipe-back then correctly returns to whichever screen the mic
+    // was tapped from, instead of the app having nothing left to pop to.
+    context.push('/billing');
   }
 
   void _onLongPressStart(LongPressStartDetails _) async {

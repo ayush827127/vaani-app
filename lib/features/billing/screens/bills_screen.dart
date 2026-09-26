@@ -205,7 +205,9 @@ class _BillsScreenState extends State<BillsScreen> {
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/billing'),
+        // Pushed so Android Back / the back arrow returns to Bills, not out
+        // of the app — go() would replace this screen's stack entry.
+        onPressed: () => context.push('/billing'),
         backgroundColor: AppColors.primaryLight,
         foregroundColor: Colors.white,
         elevation: 3,
@@ -218,7 +220,7 @@ class _BillsScreenState extends State<BillsScreen> {
         titleSpacing: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_rounded),
-          onPressed: () => context.go('/home'),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
         ),
         title: Row(
           children: [

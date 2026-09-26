@@ -464,11 +464,65 @@ abstract class AppLocalizations {
   /// **'Recent Bills'**
   String get recentBills;
 
+  /// No description provided for @recentBillsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your latest transactions'**
+  String get recentBillsSubtitle;
+
   /// No description provided for @quickActions.
   ///
   /// In en, this message translates to:
   /// **'Quick Actions'**
   String get quickActions;
+
+  /// No description provided for @quickActionsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything you need, in one place.'**
+  String get quickActionsSubtitle;
+
+  /// No description provided for @appTagline.
+  ///
+  /// In en, this message translates to:
+  /// **'Bolo · Bill Banao · Business Badhao'**
+  String get appTagline;
+
+  /// No description provided for @qaViewManage.
+  ///
+  /// In en, this message translates to:
+  /// **'View & manage'**
+  String get qaViewManage;
+
+  /// No description provided for @qaManageStock.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage stock'**
+  String get qaManageStock;
+
+  /// No description provided for @qaViewAndAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'View & Add'**
+  String get qaViewAndAdd;
+
+  /// No description provided for @qaQuickAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick add'**
+  String get qaQuickAdd;
+
+  /// No description provided for @qaSalesInsights.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales & insights'**
+  String get qaSalesInsights;
+
+  /// No description provided for @qaVoiceSmart.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice & Smart'**
+  String get qaVoiceSmart;
 
   /// No description provided for @all.
   ///
@@ -590,6 +644,12 @@ abstract class AppLocalizations {
   /// **'Today\'s Profit'**
   String get todaysProfit;
 
+  /// No description provided for @todaysLoss.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s Loss'**
+  String get todaysLoss;
+
   /// No description provided for @noBillsToday.
   ///
   /// In en, this message translates to:
@@ -601,6 +661,114 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Voice Bill'**
   String get voiceBill;
+
+  /// No description provided for @collectionsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Collections'**
+  String get collectionsLabel;
+
+  /// No description provided for @moneyAtGlanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Account Summary'**
+  String get moneyAtGlanceLabel;
+
+  /// No description provided for @viewLedgerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'View Ledger'**
+  String get viewLedgerLabel;
+
+  /// No description provided for @youllGetLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ll Get'**
+  String get youllGetLabel;
+
+  /// No description provided for @toCollectLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'To Receive'**
+  String get toCollectLabel;
+
+  /// No description provided for @youllGiveLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ll Give'**
+  String get youllGiveLabel;
+
+  /// No description provided for @toPayLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'To Pay'**
+  String get toPayLabel;
+
+  /// No description provided for @netBalanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Net Balance'**
+  String get netBalanceLabel;
+
+  /// No description provided for @outstandingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Due Amount'**
+  String get outstandingLabel;
+
+  /// No description provided for @inAdvanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'In Advance'**
+  String get inAdvanceLabel;
+
+  /// No description provided for @upgradeToProTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to VAANI Pro'**
+  String get upgradeToProTitle;
+
+  /// No description provided for @upgradeToProSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Get advanced reports, payment reminders, WhatsApp sharing and more.'**
+  String get upgradeToProSubtitle;
+
+  /// No description provided for @viewPlansLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'View Plans'**
+  String get viewPlansLabel;
+
+  /// No description provided for @noRecentActivityYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No recent activity yet'**
+  String get noRecentActivityYet;
+
+  /// No description provided for @activityPaymentReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment received'**
+  String get activityPaymentReceived;
+
+  /// No description provided for @activityBillCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Bill created'**
+  String get activityBillCreated;
+
+  /// No description provided for @activityCreditGiven.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit given'**
+  String get activityCreditGiven;
+
+  /// No description provided for @activityPaymentMade.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment made'**
+  String get activityPaymentMade;
 
   /// No description provided for @addItem.
   ///
@@ -782,6 +950,114 @@ abstract class AppLocalizations {
   /// **'Stock History'**
   String get stockHistory;
 
+  /// No description provided for @retryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get retryLabel;
+
+  /// No description provided for @overviewTabLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Overview'**
+  String get overviewTabLabel;
+
+  /// No description provided for @transactionsTabLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Transactions'**
+  String get transactionsTabLabel;
+
+  /// No description provided for @pricingTabLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pricing'**
+  String get pricingTabLabel;
+
+  /// No description provided for @detailsTabLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get detailsTabLabel;
+
+  /// No description provided for @goodStockLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Good Stock'**
+  String get goodStockLabel;
+
+  /// No description provided for @priceInformationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Price Information'**
+  String get priceInformationLabel;
+
+  /// No description provided for @taxInformationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tax Information'**
+  String get taxInformationLabel;
+
+  /// No description provided for @recentActivityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent Activity'**
+  String get recentActivityLabel;
+
+  /// No description provided for @noRecentActivity.
+  ///
+  /// In en, this message translates to:
+  /// **'No recent activity'**
+  String get noRecentActivity;
+
+  /// No description provided for @noRecentActivitySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add or adjust stock to see activity here.'**
+  String get noRecentActivitySubtitle;
+
+  /// No description provided for @unableToLoadItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load item'**
+  String get unableToLoadItem;
+
+  /// No description provided for @pleaseTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Please try again.'**
+  String get pleaseTryAgain;
+
+  /// No description provided for @filterAllTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'All Transactions'**
+  String get filterAllTransactions;
+
+  /// No description provided for @filterPurchases.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchases'**
+  String get filterPurchases;
+
+  /// No description provided for @filterSales.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales'**
+  String get filterSales;
+
+  /// No description provided for @filterAdjustments.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjustments'**
+  String get filterAdjustments;
+
+  /// No description provided for @copiedToClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied to clipboard'**
+  String get copiedToClipboard;
+
   /// No description provided for @noStockHistoryYet.
   ///
   /// In en, this message translates to:
@@ -917,7 +1193,7 @@ abstract class AppLocalizations {
   /// No description provided for @stockLevel.
   ///
   /// In en, this message translates to:
-  /// **'Stock Level'**
+  /// **'Current Stock'**
   String get stockLevel;
 
   /// No description provided for @unitsLabel.
@@ -1061,7 +1337,7 @@ abstract class AppLocalizations {
   /// No description provided for @skuPhoneCode.
   ///
   /// In en, this message translates to:
-  /// **'SKU / Phone Code'**
+  /// **'SKU / Internal Code'**
   String get skuPhoneCode;
 
   /// No description provided for @costPriceCurrency.
@@ -1087,6 +1363,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Stock Quantity'**
   String get stockQuantity;
+
+  /// No description provided for @stockQuantityRequiredError.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a quantity greater than 0.'**
+  String get stockQuantityRequiredError;
+
+  /// No description provided for @stockExceedsAvailableError.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot remove more than the current stock.'**
+  String get stockExceedsAvailableError;
 
   /// No description provided for @aliasesLabel.
   ///
@@ -1117,6 +1405,114 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Item added'**
   String get itemAdded;
+
+  /// No description provided for @continueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continueLabel;
+
+  /// No description provided for @backLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get backLabel;
+
+  /// No description provided for @basicDetailsStepLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Basic Details'**
+  String get basicDetailsStepLabel;
+
+  /// No description provided for @inventoryStepLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Inventory'**
+  String get inventoryStepLabel;
+
+  /// No description provided for @reviewStepLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get reviewStepLabel;
+
+  /// No description provided for @moreOptionsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'More Options (Optional)'**
+  String get moreOptionsLabel;
+
+  /// No description provided for @additionalInfoLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Additional Information'**
+  String get additionalInfoLabel;
+
+  /// No description provided for @initialStockLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Initial Stock'**
+  String get initialStockLabel;
+
+  /// No description provided for @pricingSummaryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pricing Summary'**
+  String get pricingSummaryLabel;
+
+  /// No description provided for @inventorySummaryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Inventory Summary'**
+  String get inventorySummaryLabel;
+
+  /// No description provided for @lowStockAlertHint.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ll get a low stock alert when stock drops to {count} units.'**
+  String lowStockAlertHint(String count);
+
+  /// No description provided for @serviceNoInventoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Inventory tracking is not required for services.'**
+  String get serviceNoInventoryHint;
+
+  /// No description provided for @itemNameRequiredError.
+  ///
+  /// In en, this message translates to:
+  /// **'Item name is required.'**
+  String get itemNameRequiredError;
+
+  /// No description provided for @sellingPriceInvalidError.
+  ///
+  /// In en, this message translates to:
+  /// **'Selling price must be greater than 0.'**
+  String get sellingPriceInvalidError;
+
+  /// No description provided for @initialStockNegativeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Initial stock cannot be negative.'**
+  String get initialStockNegativeError;
+
+  /// No description provided for @reorderLevelNegativeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Reorder level cannot be negative.'**
+  String get reorderLevelNegativeError;
+
+  /// No description provided for @yesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes'**
+  String get yesLabel;
+
+  /// No description provided for @noLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get noLabel;
 
   /// No description provided for @barcode.
   ///
@@ -1231,6 +1627,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tax: {amount}'**
   String taxLabel(String amount);
+
+  /// No description provided for @editTaxLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Tax'**
+  String get editTaxLabel;
 
   /// No description provided for @youSave.
   ///
@@ -1490,6 +1892,24 @@ abstract class AppLocalizations {
   /// **'Advance'**
   String get advanceLabel;
 
+  /// No description provided for @advanceAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Advance Amount'**
+  String get advanceAmountLabel;
+
+  /// No description provided for @customerBalanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer Balance'**
+  String get customerBalanceLabel;
+
+  /// No description provided for @currentDueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current Due'**
+  String get currentDueLabel;
+
   /// No description provided for @addLabel.
   ///
   /// In en, this message translates to:
@@ -1537,6 +1957,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unpaid amount from previous bills'**
   String get previousDueInfo;
+
+  /// No description provided for @totalPayableLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Payable'**
+  String get totalPayableLabel;
 
   /// No description provided for @receiveAmount.
   ///
@@ -1910,6 +2336,12 @@ abstract class AppLocalizations {
   /// **'This Year'**
   String get periodThisYear;
 
+  /// No description provided for @periodCustomRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom Range'**
+  String get periodCustomRange;
+
   /// No description provided for @totalSales.
   ///
   /// In en, this message translates to:
@@ -1945,6 +2377,228 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Top Items'**
   String get topItems;
+
+  /// No description provided for @tabOverview.
+  ///
+  /// In en, this message translates to:
+  /// **'Overview'**
+  String get tabOverview;
+
+  /// No description provided for @tabSales.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales'**
+  String get tabSales;
+
+  /// No description provided for @tabItems.
+  ///
+  /// In en, this message translates to:
+  /// **'Items'**
+  String get tabItems;
+
+  /// No description provided for @tabPayments.
+  ///
+  /// In en, this message translates to:
+  /// **'Payments'**
+  String get tabPayments;
+
+  /// No description provided for @tabCustomers.
+  ///
+  /// In en, this message translates to:
+  /// **'Customers'**
+  String get tabCustomers;
+
+  /// No description provided for @tabInsights.
+  ///
+  /// In en, this message translates to:
+  /// **'Insights'**
+  String get tabInsights;
+
+  /// No description provided for @salesSummaryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales Summary'**
+  String get salesSummaryLabel;
+
+  /// No description provided for @averageBillValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Average Bill Value'**
+  String get averageBillValueLabel;
+
+  /// No description provided for @pendingAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending Amount'**
+  String get pendingAmountLabel;
+
+  /// No description provided for @amountToCollectLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount To Collect'**
+  String get amountToCollectLabel;
+
+  /// No description provided for @salesTrendLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales Trend'**
+  String get salesTrendLabel;
+
+  /// No description provided for @dailySalesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Sales'**
+  String get dailySalesLabel;
+
+  /// No description provided for @yesterdayLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get yesterdayLabel;
+
+  /// No description provided for @salesByCategoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales by Category'**
+  String get salesByCategoryLabel;
+
+  /// No description provided for @lowStockItemsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Low Stock Items'**
+  String get lowStockItemsLabel;
+
+  /// No description provided for @paymentSummaryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Summary'**
+  String get paymentSummaryLabel;
+
+  /// No description provided for @collectionVsPendingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Collection vs Pending'**
+  String get collectionVsPendingLabel;
+
+  /// No description provided for @collectedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Collected'**
+  String get collectedLabel;
+
+  /// No description provided for @recentPaymentsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent Payments'**
+  String get recentPaymentsLabel;
+
+  /// No description provided for @customerSummaryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer Summary'**
+  String get customerSummaryLabel;
+
+  /// No description provided for @totalCustomersLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Customers'**
+  String get totalCustomersLabel;
+
+  /// No description provided for @customersWithDuesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Customers With Dues'**
+  String get customersWithDuesLabel;
+
+  /// No description provided for @totalDuesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Dues'**
+  String get totalDuesLabel;
+
+  /// No description provided for @topCustomersBySalesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Top Customers by Sales'**
+  String get topCustomersBySalesLabel;
+
+  /// No description provided for @topCustomersByDueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Top Customers by Due Amount'**
+  String get topCustomersByDueLabel;
+
+  /// No description provided for @insightSalesIncreased.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales increased by {percent}% compared with the previous period.'**
+  String insightSalesIncreased(String percent);
+
+  /// No description provided for @insightSalesDecreased.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales decreased by {percent}% compared with the previous period.'**
+  String insightSalesDecreased(String percent);
+
+  /// No description provided for @insightTopItem.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} generated the highest sales.'**
+  String insightTopItem(String name);
+
+  /// No description provided for @insightAvgBillValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Average bill value is {amount}.'**
+  String insightAvgBillValue(String amount);
+
+  /// No description provided for @insightBillCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} bills were created during this period.'**
+  String insightBillCount(String count);
+
+  /// No description provided for @insightPending.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} is still pending from customers.'**
+  String insightPending(String amount);
+
+  /// No description provided for @insightTopCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'The highest-selling category is {category}.'**
+  String insightTopCategory(String category);
+
+  /// No description provided for @noInsightsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not enough data yet for insights.'**
+  String get noInsightsYet;
+
+  /// No description provided for @noSalesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No sales yet'**
+  String get noSalesYet;
+
+  /// No description provided for @noItemSalesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No item sales data'**
+  String get noItemSalesYet;
+
+  /// No description provided for @noPaymentsRecordedYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No payments recorded'**
+  String get noPaymentsRecordedYet;
+
+  /// No description provided for @noCustomerDuesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No customer dues'**
+  String get noCustomerDuesYet;
 
   /// No description provided for @categoryNotFound.
   ///

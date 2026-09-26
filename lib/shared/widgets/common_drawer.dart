@@ -144,47 +144,53 @@ class _CommonDrawerState extends State<CommonDrawer> {
                   current: currentPath,
                   onTap: () { Navigator.pop(context); context.go('/home'); },
                 ),
+                // Everything below Home is pushed, not go()'d — the drawer
+                // is reachable from any screen, and the expectation is that
+                // Android Back / the in-app back arrow returns to wherever
+                // it was opened from, not that it replaces the whole
+                // navigation stack (which would leave nothing to pop back
+                // to and let the system close the app instead).
                 _NavTile(
                   icon: Icons.receipt_long_rounded,
                   label: l10n.billing,
                   route: '/billing',
                   current: currentPath,
-                  onTap: () { Navigator.pop(context); context.go('/billing'); },
+                  onTap: () { Navigator.pop(context); context.push('/billing'); },
                 ),
                 _NavTile(
                   icon: Icons.inventory_2_rounded,
                   label: l10n.items,
                   route: '/inventory',
                   current: currentPath,
-                  onTap: () { Navigator.pop(context); context.go('/inventory'); },
+                  onTap: () { Navigator.pop(context); context.push('/inventory'); },
                 ),
                 _NavTile(
                   icon: Icons.people_rounded,
                   label: l10n.customers,
                   route: '/customers',
                   current: currentPath,
-                  onTap: () { Navigator.pop(context); context.go('/customers'); },
+                  onTap: () { Navigator.pop(context); context.push('/customers'); },
                 ),
                 _NavTile(
                   icon: Icons.receipt_outlined,
                   label: l10n.bills,
                   route: '/bills',
                   current: currentPath,
-                  onTap: () { Navigator.pop(context); context.go('/bills'); },
+                  onTap: () { Navigator.pop(context); context.push('/bills'); },
                 ),
                 _NavTile(
                   icon: Icons.bar_chart_rounded,
                   label: l10n.reports,
                   route: '/reports',
                   current: currentPath,
-                  onTap: () { Navigator.pop(context); context.go('/reports'); },
+                  onTap: () { Navigator.pop(context); context.push('/reports'); },
                 ),
                 _NavTile(
                   icon: Icons.smart_toy_rounded,
                   label: l10n.aiManager,
                   route: '/ai-manager',
                   current: currentPath,
-                  onTap: () { Navigator.pop(context); context.go('/ai-manager'); },
+                  onTap: () { Navigator.pop(context); context.push('/ai-manager'); },
                 ),
                 Divider(color: cs.outlineVariant, indent: 16, endIndent: 16, height: 24),
                 _NavTile(
@@ -192,7 +198,7 @@ class _CommonDrawerState extends State<CommonDrawer> {
                   label: l10n.profile,
                   route: '/profile',
                   current: currentPath,
-                  onTap: () { Navigator.pop(context); context.go('/profile'); },
+                  onTap: () { Navigator.pop(context); context.push('/profile'); },
                 ),
                 _NavTile(
                   icon: Icons.help_outline_rounded,

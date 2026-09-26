@@ -31,6 +31,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
   String? _selectedCategory;
   String _stockFilter = 'all'; // all | low | out
   String _sortOption = 'name_az';
+  // Guards against a double-tap firing two deletes for the same item while
+  // the first is still in flight (e.g. a slow device, or a slow DB write).
+  final Set<int> _deletingIds = {};
 
   final _searchCtrl = TextEditingController();
 
@@ -41,6 +44,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _loadItems() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     final prefs = await SharedPreferences.getInstance();
     _shopId = prefs.getInt(AppConstants.keyShopId) ?? 1;
@@ -205,7 +209,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
         children: [
           IconButton(
             icon: const Icon(Icons.arrow_back_ios_rounded),
-            onPressed: () => context.go('/home'),
+            onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
           ),
           Expanded(
             child: Text(
@@ -487,8 +491,18 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _confirmDelete(Item item) async {
+    final itemId = item.id;
+    if (itemId == null) return;
+    // Already mid-delete for this item (double-tap on the menu action, or a
+    // slow write still in flight) — the confirm dialog would just queue up
+    // a second delete behind the first.
+    if (_deletingIds.contains(itemId)) return;
+
     final c = context.colors;
     final l10n = context.l10n;
+    // showDialog's own Navigator.pop calls close *only* this dialog route —
+    // they never touch the screen underneath, so there's nothing further to
+    // do here to "properly close" it beyond letting this await resolve.
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -515,9 +529,35 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ],
       ),
     );
-    if (confirmed == true && item.id != null) {
-      await getIt<ItemRepository>().deleteItem(item.id!);
-      _loadItems();
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deletingIds.add(itemId));
+    try {
+      // A soft delete (is_active = 0) — see ItemRepository.deleteItem's own
+      // doc comment. Nothing else (item_images, item_aliases, stock
+      // history, past bills that reference this item) needs a separate
+      // cleanup step: they stay attached to the now-inactive row exactly
+      // like every other soft-deleted item's history already does, so past
+      // invoices/reports referencing this item stay intact.
+      await getIt<ItemRepository>().deleteItem(itemId);
+      if (!mounted) return;
+      await _loadItems();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.itemDeleted), backgroundColor: c.success),
+      );
+    } catch (e, st) {
+      // Never swallowed — logged with its real stack trace so a real bug
+      // here is diagnosable, with a plain-language message on screen
+      // instead of the app just going quiet (or, worse, uuncaught and
+      // taking the frame down with it).
+      debugPrint('[InventoryScreen] delete failed for item $itemId: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.errorGeneric('$e')), backgroundColor: c.danger),
+      );
+    } finally {
+      if (mounted) setState(() => _deletingIds.remove(itemId));
     }
   }
 

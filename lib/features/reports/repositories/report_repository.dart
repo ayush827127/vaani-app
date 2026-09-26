@@ -36,8 +36,30 @@ class DailyData {
   final String date;
   final double sales;
   final double profit;
+  final int bills;
 
-  const DailyData({required this.date, required this.sales, required this.profit});
+  const DailyData({required this.date, required this.sales, required this.profit, this.bills = 0});
+}
+
+class CategorySales {
+  final String category;
+  final double revenue;
+
+  const CategorySales({required this.category, required this.revenue});
+}
+
+class CustomerSales {
+  final int? customerId;
+  final String customerName;
+  final int totalBills;
+  final double totalSales;
+
+  const CustomerSales({
+    required this.customerId,
+    required this.customerName,
+    required this.totalBills,
+    required this.totalSales,
+  });
 }
 
 class ReportRepository {
@@ -119,6 +141,101 @@ class ReportRepository {
               imagePath: r['image_path'] as String?,
               totalQty: r['total_qty'] as int? ?? 0,
               totalRevenue: (r['total_revenue'] as num?)?.toDouble() ?? 0,
+            ))
+        .toList();
+  }
+
+  /// Per-day sales/profit/bill-count across [startDate]..[endDate], computed
+  /// directly from `invoices`/`invoice_items` the same way [getPeriodSales]
+  /// is — unlike [getLast7DaysSales]/[getMonthSales] below, which read a
+  /// separate `sales_summary` rollup table for a fixed window. Used by the
+  /// Sales tab's trend chart and daily breakdown, which both need an
+  /// arbitrary caller-chosen range (Today/Week/Month/Custom), not just the
+  /// last 7 days or the current calendar month.
+  Future<List<DailyData>> getDailySales(int shopId, String startDate, String endDate) async {
+    final db = await _db.database;
+    final salesRows = await db.rawQuery('''
+      SELECT DATE(created_at) as day,
+             COALESCE(SUM(grand_total), 0) as sales,
+             COUNT(*) as bills
+      FROM invoices
+      WHERE shop_id = ? AND $_liveInvoiceFilter
+        AND DATE(created_at) BETWEEN ? AND ?
+      GROUP BY day
+    ''', [shopId, startDate, endDate]);
+    final profitRows = await db.rawQuery('''
+      SELECT DATE(i.created_at) as day,
+             COALESCE(SUM(ii.line_total - ii.quantity * ii.cost_price), 0) as profit
+      FROM invoice_items ii
+      JOIN invoices i ON i.id = ii.invoice_id
+      WHERE i.shop_id = ? AND $_liveInvoiceFilter
+        AND DATE(i.created_at) BETWEEN ? AND ?
+      GROUP BY day
+    ''', [shopId, startDate, endDate]);
+    final profitByDay = {
+      for (final r in profitRows) r['day'] as String: (r['profit'] as num?)?.toDouble() ?? 0,
+    };
+    final days = salesRows
+        .map((r) => DailyData(
+              date: r['day'] as String,
+              sales: (r['sales'] as num?)?.toDouble() ?? 0,
+              profit: profitByDay[r['day'] as String] ?? 0,
+              bills: r['bills'] as int? ?? 0,
+            ))
+        .toList();
+    days.sort((a, b) => a.date.compareTo(b.date));
+    return days;
+  }
+
+  /// Revenue per item category within the period, for the Items tab's
+  /// "Sales by Category" breakdown. Items with no category are grouped
+  /// under a null key — the caller decides how to label that bucket.
+  Future<List<CategorySales>> getCategorySales(int shopId, String startDate, String endDate) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery('''
+      SELECT COALESCE(p.category, '') as category,
+             COALESCE(SUM(ii.line_total), 0) as revenue
+      FROM invoice_items ii
+      JOIN items p ON p.id = ii.item_id
+      JOIN invoices i ON i.id = ii.invoice_id
+      WHERE i.shop_id = ? AND $_liveInvoiceFilter
+        AND DATE(i.created_at) BETWEEN ? AND ?
+      GROUP BY category
+      ORDER BY revenue DESC
+    ''', [shopId, startDate, endDate]);
+    return rows
+        .map((r) => CategorySales(
+              category: r['category'] as String,
+              revenue: (r['revenue'] as num?)?.toDouble() ?? 0,
+            ))
+        .toList();
+  }
+
+  /// Per-customer bill count and total sales within the period, for the
+  /// Customers tab's "Top Customers by Sales". Grouped on the invoice's own
+  /// denormalized customer_id/customer_name (same snapshot pattern as
+  /// invoice_items.item_name) rather than joining `customers`, so a
+  /// customer later renamed still shows their sales under the name they
+  /// actually had at the time.
+  Future<List<CustomerSales>> getTopCustomers(int shopId, String startDate, String endDate, {int limit = 10}) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery('''
+      SELECT customer_id, customer_name,
+             COUNT(*) as total_bills,
+             COALESCE(SUM(grand_total), 0) as total_sales
+      FROM invoices
+      WHERE shop_id = ? AND $_liveInvoiceFilter
+        AND DATE(created_at) BETWEEN ? AND ?
+      GROUP BY customer_id, customer_name
+      ORDER BY total_sales DESC
+      LIMIT ?
+    ''', [shopId, startDate, endDate, limit]);
+    return rows
+        .map((r) => CustomerSales(
+              customerId: r['customer_id'] as int?,
+              customerName: r['customer_name'] as String? ?? 'Walk-in Customer',
+              totalBills: r['total_bills'] as int? ?? 0,
+              totalSales: (r['total_sales'] as num?)?.toDouble() ?? 0,
             ))
         .toList();
   }

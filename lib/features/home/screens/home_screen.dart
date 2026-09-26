@@ -3,19 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/di/injector.dart';
-import '../../../shared/models/invoice.dart';
-import '../../../shared/models/customer.dart';
-import '../../../shared/widgets/customer_avatar.dart';
 import '../../../shared/widgets/shop_logo_image.dart';
 import '../../reports/repositories/report_repository.dart';
 import '../../inventory/repositories/item_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
+import '../../customers/customer_ledger.dart';
 import '../../billing/repositories/invoice_repository.dart';
+import '../../billing/repositories/payment_transaction_repository.dart';
 import '../../auth/repositories/shop_repository.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../../shared/widgets/hamburger_icon.dart';
@@ -40,11 +38,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   SalesSummary? _todaySummary;
   SalesSummary? _yesterdaySummary;
   int _todayBills = 0;
-  int _newCustomers = 0;
-  List<DailyData> _chartData = [];
+  double _todayCollections = 0;
   int _lowStockCount = 0;
-  List<Invoice> _recentBills = [];
-  Map<int, Customer> _customersById = {};
+  LedgerSummary _ledgerSummary = const LedgerSummary(totalDue: 0, dueCount: 0, totalAdvance: 0, advanceCount: 0);
+  List<_ActivityEntry> _recentActivity = [];
 
   @override
   void initState() {
@@ -67,15 +64,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final itemRepo = getIt<ItemRepository>();
     final customerRepo = getIt<CustomerRepository>();
     final invoiceRepo = getIt<InvoiceRepository>();
+    final paymentRepo = getIt<PaymentTransactionRepository>();
 
     final today = await reportRepo.getTodaySummary(_shopId);
     final yesterday = await reportRepo.getYesterdaySummary(_shopId);
-    final chart = await reportRepo.getLast7DaysSales(_shopId);
     final bills = await invoiceRepo.getTodayBillCount(_shopId);
-    final newCustomers = await customerRepo.getNewCustomersThisMonth(_shopId);
+    final collections = await paymentRepo.getTodayCollections(_shopId);
     final lowStock = await itemRepo.getLowStockItems(_shopId);
-    final recentBills = await invoiceRepo.getInvoicesByShopWithItemCounts(_shopId, limit: 3);
     final customers = await customerRepo.getAllCustomers(_shopId);
+    final ledger = summarize(customers);
+
+    // Recent Activity merges two existing event sources — new bills, and
+    // standalone ledger movements that aren't just a bill's own payment
+    // (see getRecentByShop's doc comment for why 'bill_payment' is left
+    // out: it would just duplicate the bill's own "Bill created" entry).
+    final customersById = {for (final c in customers) if (c.id != null) c.id!: c};
+    final recentInvoices = await invoiceRepo.getInvoicesByShopWithItemCounts(_shopId, limit: 5);
+    final recentTxns = await paymentRepo.getRecentByShop(
+      _shopId,
+      types: const ['outstanding_collection', 'advance_deposit', 'manual_credit', 'refund'],
+      limit: 5,
+    );
+    final activity = <_ActivityEntry>[
+      for (final inv in recentInvoices)
+        _ActivityEntry(
+          type: _ActivityType.billCreated,
+          customerName: inv.customerName,
+          amount: inv.grandTotal,
+          createdAt: inv.createdAt,
+        ),
+      for (final txn in recentTxns)
+        _ActivityEntry(
+          type: switch (txn.type) {
+            'manual_credit' => _ActivityType.creditGiven,
+            'refund' => _ActivityType.paymentMade,
+            _ => _ActivityType.paymentReceived,
+          },
+          customerName: customersById[txn.customerId]?.name,
+          amount: txn.amount,
+          createdAt: txn.createdAt,
+        ),
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     if (!mounted) return;
     setState(() {
@@ -85,12 +114,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _logoUrl = shop?.logoUrl;
       _todaySummary = today;
       _yesterdaySummary = yesterday;
-      _chartData = chart;
       _todayBills = bills;
-      _newCustomers = newCustomers;
+      _todayCollections = collections;
       _lowStockCount = lowStock.length;
-      _recentBills = recentBills;
-      _customersById = {for (final c in customers) if (c.id != null) c.id!: c};
+      _ledgerSummary = ledger;
+      _recentActivity = activity.take(4).toList();
       _isLoading = false;
     });
   }
@@ -109,6 +137,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
       );
     }
+    // Free/Basic plan (or not yet fetched) → worth showing the upgrade
+    // prompt; already on a paid plan → skip it entirely rather than
+    // promoting an upgrade the shop already has.
+    final planName = ref.watch(subscriptionProvider)?.effectivePlanName;
+    final showUpgradeCard = planName == null || planName == 'Basic';
+
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
@@ -120,17 +154,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     _buildSalesCard(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
                     _buildMetricsRow(),
-                    const SizedBox(height: 16),
-                    _buildRecentBills(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
+                    _buildMoneyAtGlance(),
+                    if (showUpgradeCard) ...[
+                      const SizedBox(height: 12),
+                      _buildPlansCard(),
+                    ],
+                    const SizedBox(height: 14),
                     _buildQuickActions(),
-                    const SizedBox(height: 16),
-                    _buildChart(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 14),
+                    _buildRecentActivity(),
+                    const SizedBox(height: 20),
                   ]),
                 ),
               ),
@@ -147,9 +185,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final c = context.colors;
     final l10n = context.l10n;
     final initial = _ownerName.isNotEmpty ? _ownerName[0].toUpperCase() : 'U';
+
+    Widget avatar(double size) => Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight.withValues(alpha: 0.2),
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.primaryLight, width: 1.5),
+          ),
+          child: ClipOval(
+            child: resolveShopLogoImage(
+                  logoPath: _logoPath,
+                  logoUrl: _logoUrl,
+                  size: size,
+                  errorBuilder: (_, __, ___) => Center(
+                    child: Text(initial,
+                        style: TextStyle(fontSize: size * 0.42, fontWeight: FontWeight.bold, color: AppColors.primaryLight)),
+                  ),
+                ) ??
+                Center(
+                    child: Text(initial,
+                        style: TextStyle(fontSize: size * 0.42, fontWeight: FontWeight.bold, color: AppColors.primaryLight)),
+                  ),
+          ),
+        );
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 16, 8, 0),
+      padding: const EdgeInsets.fromLTRB(4, 14, 12, 0),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Hamburger menu
           IconButton(
@@ -157,78 +222,97 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onPressed: () => shellScaffoldKey.currentState?.openDrawer(),
             padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
-          // Greeting
+          // Brand wordmark + tagline
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${AppFormatters.getGreeting(morning: l10n.greetingMorning, afternoon: l10n.greetingAfternoon, evening: l10n.greetingEvening)}, '
-                  '${_ownerName.isNotEmpty ? _ownerName.split(' ').first : l10n.greetingFallbackName} '
-                  '${AppFormatters.getGreetingEmoji()}',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: c.textPrimary,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.appName.toUpperCase(),
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                      color: c.textPrimary,
+                      letterSpacing: 2.5,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  _shopName.isNotEmpty ? _shopName : l10n.homeSubtitleFallback,
-                  style: TextStyle(fontSize: 12, color: c.textSecondary),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    l10n.appTagline,
+                    style: TextStyle(fontSize: 10.5, color: c.textSecondary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
           ),
-          // Low-stock badge
-          if (_lowStockCount > 0)
-            Container(
-              margin: const EdgeInsets.only(right: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: c.danger.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: c.danger.withValues(alpha: 0.5)),
-              ),
-              child: Row(children: [
-                Icon(Icons.warning_rounded, size: 14, color: c.danger),
-                const SizedBox(width: 4),
-                Text(l10n.lowStockBadge('$_lowStockCount'),
-                    style: TextStyle(fontSize: 11, color: c.danger)),
-              ]),
-            ),
-          IconButton(
-            icon: Icon(Icons.notifications_outlined, color: c.textSecondary),
-            onPressed: () => context.push('/notifications'),
-          ),
-          GestureDetector(
-            onTap: () => context.push('/profile').then((_) => _loadData()),
-            child: Container(
-              width: 38,
-              height: 38,
-              margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(
-                color: AppColors.primaryLight.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.primaryLight, width: 1.5),
-              ),
-              child: ClipOval(
-                child: resolveShopLogoImage(
-                      logoPath: _logoPath,
-                      logoUrl: _logoUrl,
-                      size: 38,
-                      errorBuilder: (_, __, ___) => Center(
-                        child: Text(initial,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryLight)),
+          // Notification bell + avatar, with the shop name (tap → Profile)
+          // underneath — the low-stock alert that used to be its own pill
+          // badge is now a small dot on the bell instead, to keep this
+          // header compact.
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.notifications_outlined, color: c.textSecondary),
+                        onPressed: () => context.push('/notifications'),
+                        tooltip: _lowStockCount > 0 ? l10n.lowStockBadge('$_lowStockCount') : null,
                       ),
-                    ) ??
-                    Center(
-                        child: Text(initial,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryLight)),
-                      ),
+                      if (_lowStockCount > 0)
+                        Positioned(
+                          top: 9,
+                          right: 9,
+                          child: Container(
+                            width: 9,
+                            height: 9,
+                            decoration: BoxDecoration(
+                              color: c.danger,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: c.surface, width: 1.5),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 2),
+                  GestureDetector(
+                    onTap: () => context.push('/profile').then((_) => _loadData()),
+                    child: avatar(34),
+                  ),
+                ],
               ),
-            ),
+              const SizedBox(height: 4),
+              GestureDetector(
+                onTap: () => context.push('/profile').then((_) => _loadData()),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 120),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _shopName.isNotEmpty ? _shopName : l10n.myShopFallback,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.textPrimary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Icon(Icons.keyboard_arrow_down_rounded, size: 15, color: c.textSecondary),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -238,12 +322,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // ── Today's Sales Card ────────────────────────────────────────────────────
 
   Widget _buildSalesCard() {
+    final l10n = context.l10n;
     final growth = _growthPercent;
     final isPositive = growth >= 0;
+    final profit = _todaySummary?.totalProfit ?? 0;
+    final isProfit = profit >= 0;
+
     return Container(
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: context.colors.heroGradient,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -253,44 +339,125 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(context.l10n.todaysSales, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-          const SizedBox(height: 8),
-          Text(
-            AppFormatters.formatCurrency(_todaySummary?.totalSales ?? 0),
-            style: const TextStyle(
-                fontFamily: 'Poppins', fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-          const SizedBox(height: 8),
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: (isPositive ? AppColors.success : AppColors.error).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(children: [
-                Icon(
-                  isPositive ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                  size: 14,
-                  color: isPositive ? AppColors.successLight : AppColors.errorLight,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  AppFormatters.formatGrowth(growth),
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: isPositive ? AppColors.successLight : AppColors.errorLight,
-                      fontWeight: FontWeight.w600),
-                ),
-              ]),
+      // The banner artwork (tagline + bill illustration) lives on the right
+      // side of assets/icon/banner.jpeg — left untouched here. The scrim and
+      // all coded content are confined to the left ~55% so nothing coded
+      // ever sits on top of that artwork.
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Image.asset('assets/icon/banner.jpeg', fit: BoxFit.cover),
             ),
-            const SizedBox(width: 8),
-            Text(context.l10n.fromYesterday, style: const TextStyle(fontSize: 12, color: Colors.white60)),
-          ]),
-        ],
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      AppColors.primary.withValues(alpha: 0.82),
+                      AppColors.primary.withValues(alpha: 0.45),
+                      AppColors.primary.withValues(alpha: 0.0),
+                    ],
+                    stops: const [0.0, 0.32, 0.52],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: 0.56,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Today's Sales leads, largest and boldest — the one
+                      // figure a shopkeeper glances at first.
+                      Text(l10n.todaysSales,
+                          style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      const SizedBox(height: 4),
+                      Text(
+                        AppFormatters.formatCurrency(_todaySummary?.totalSales ?? 0),
+                        style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      // Growth-vs-yesterday sits directly under Sales, on one
+                      // line, since it's a qualifier on that figure — not a
+                      // separate metric competing for attention.
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(
+                          isPositive ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                          size: 12,
+                          color: isPositive ? AppColors.successLight : AppColors.errorLight,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          '${AppFormatters.formatGrowth(growth)} ${l10n.fromYesterday}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: isPositive ? AppColors.successLight : AppColors.errorLight,
+                              fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ]),
+                      const SizedBox(height: 12),
+                      // Today's Profit — a clearly secondary, smaller block
+                      // beneath Sales, same figure the Metrics Row below
+                      // shows as a small tile, surfaced here too since this
+                      // banner is the first thing a shopkeeper sees.
+                      Text(isProfit ? l10n.todaysProfit : l10n.todaysLoss,
+                          style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: (isProfit ? AppColors.success : AppColors.error)
+                              .withValues(alpha: 0.22),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isProfit ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                              size: 13,
+                              color: isProfit ? AppColors.successLight : AppColors.errorLight,
+                            ),
+                            const SizedBox(width: 3),
+                            Flexible(
+                              child: Text(
+                                AppFormatters.formatCurrency(profit.abs()),
+                                style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: isProfit ? AppColors.successLight : AppColors.errorLight),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -303,31 +470,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Row(children: [
       Expanded(
           child: _MetricTile(
-              title: l10n.bills, value: '$_todayBills', icon: Icons.receipt_rounded, color: c.info)),
+              title: l10n.bills,
+              value: '$_todayBills',
+              icon: Icons.receipt_rounded,
+              color: c.info,
+              onTap: () => context.push('/bills'))),
       const SizedBox(width: 12),
       Expanded(
           child: _MetricTile(
-              title: l10n.newCustomers,
-              value: '$_newCustomers',
-              icon: Icons.person_add_rounded,
-              color: c.success)),
+              title: l10n.collectionsLabel,
+              value: AppFormatters.formatCurrencyCompact(_todayCollections),
+              icon: Icons.account_balance_wallet_rounded,
+              color: c.success,
+              onTap: () => context.push('/customers'))),
       const SizedBox(width: 12),
       Expanded(
           child: _MetricTile(
               title: l10n.todaysProfit,
               value: AppFormatters.formatCurrencyCompact(_todaySummary?.totalProfit ?? 0),
               icon: Icons.trending_up_rounded,
-              color: c.warning)),
+              color: c.warning,
+              onTap: () => context.push('/reports'))),
     ]);
   }
 
-  // ── Recent Bills ──────────────────────────────────────────────────────────
+  // ── Money at a Glance ─────────────────────────────────────────────────────
 
-  Widget _buildRecentBills() {
+  Widget _buildMoneyAtGlance() {
     final c = context.colors;
     final l10n = context.l10n;
+    final net = _ledgerSummary.totalDue - _ledgerSummary.totalAdvance;
+    // Net Balance's own color/tag flips with its sign, so it never claims a
+    // payable balance is a "Due Amount" (receivable) or vice-versa.
+    final netIsReceivable = net >= 0;
+    final netColor = netIsReceivable ? c.success : c.warning;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: c.surface,
         borderRadius: BorderRadius.circular(16),
@@ -339,37 +517,136 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(l10n.recentBills,
+              Text(l10n.moneyAtGlanceLabel,
                   style: TextStyle(
-                      fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                      fontFamily: 'Poppins', fontSize: 15.5, fontWeight: FontWeight.w600, color: c.textPrimary)),
               TextButton(
-                onPressed: () => context.go('/bills'),
+                onPressed: () => context.push('/customers'),
                 style: TextButton.styleFrom(
                     padding: EdgeInsets.zero, minimumSize: const Size(0, 0), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                child: Text(l10n.viewAll,
-                    style: const TextStyle(color: AppColors.primaryLight, fontSize: 12, fontWeight: FontWeight.w600)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(l10n.viewLedgerLabel,
+                      style: const TextStyle(color: AppColors.primaryLight, fontSize: 12, fontWeight: FontWeight.w600)),
+                  const Icon(Icons.arrow_forward_rounded, size: 13, color: AppColors.primaryLight),
+                ]),
               ),
             ],
           ),
-          if (_recentBills.isEmpty) ...[
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+                child: _LedgerStat(
+                    label: l10n.toCollectLabel,
+                    value: AppFormatters.formatCurrencyCompact(_ledgerSummary.totalDue),
+                    color: c.success)),
+            Container(width: 1, height: 36, color: c.divider, margin: const EdgeInsets.symmetric(horizontal: 6)),
+            Expanded(
+                child: _LedgerStat(
+                    label: l10n.toPayLabel,
+                    value: AppFormatters.formatCurrencyCompact(_ledgerSummary.totalAdvance),
+                    color: c.warning)),
+            Container(width: 1, height: 36, color: c.divider, margin: const EdgeInsets.symmetric(horizontal: 6)),
+            Expanded(
+                child: _LedgerStat(
+                    label: l10n.netBalanceLabel,
+                    value: AppFormatters.formatCurrencyCompact(net.abs()),
+                    color: netColor,
+                    tag: netIsReceivable ? l10n.outstandingLabel : l10n.inAdvanceLabel)),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  // ── Plans / Upgrade ───────────────────────────────────────────────────────
+
+  Widget _buildPlansCard() {
+    final c = context.colors;
+    final l10n = context.l10n;
+    return InkWell(
+      onTap: () => context.push('/profile/subscription'),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.primaryLight.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                  color: AppColors.primaryLight.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(9)),
+              child: const Icon(Icons.workspace_premium_rounded, color: AppColors.primaryLight, size: 16),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(l10n.upgradeToProTitle,
+                  style: TextStyle(color: c.textPrimary, fontSize: 12.5, fontWeight: FontWeight.w700),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: 6),
+            Text(l10n.viewPlansLabel,
+                style: const TextStyle(color: AppColors.primaryLight, fontSize: 12, fontWeight: FontWeight.w700)),
+            const Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.primaryLight),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Recent Activity ───────────────────────────────────────────────────────
+
+  Widget _buildRecentActivity() {
+    final c = context.colors;
+    final l10n = context.l10n;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: c.surfaceBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(l10n.recentActivityLabel,
+                  style: TextStyle(
+                      fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary)),
+              TextButton(
+                onPressed: () => context.push('/customers'),
+                style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero, minimumSize: const Size(0, 0), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(l10n.viewAll,
+                      style: const TextStyle(color: AppColors.primaryLight, fontSize: 12, fontWeight: FontWeight.w600)),
+                  const Icon(Icons.arrow_forward_rounded, size: 13, color: AppColors.primaryLight),
+                ]),
+              ),
+            ],
+          ),
+          if (_recentActivity.isEmpty) ...[
             const SizedBox(height: 16),
             Center(
               child: Column(children: [
-                Icon(Icons.receipt_long_outlined, size: 36, color: c.textSecondary),
+                Icon(Icons.history_rounded, size: 36, color: c.textSecondary),
                 const SizedBox(height: 8),
-                Text(l10n.noBillsToday,
+                Text(l10n.noRecentActivityYet,
                     style: TextStyle(color: c.textSecondary, fontSize: 13)),
               ]),
             ),
             const SizedBox(height: 8),
           ] else
-            ...(_recentBills.asMap().entries.map((entry) => _BillTile(
-                  bill: entry.value,
-                  customer: entry.value.customerId != null
-                      ? _customersById[entry.value.customerId]
-                      : null,
+            ...(_recentActivity.asMap().entries.map((entry) => _ActivityTile(
+                  entry: entry.value,
                   showDivider: entry.key > 0,
-                  onTap: () => context.push('/bills/${entry.value.id}'),
                 ))),
         ],
       ),
@@ -387,6 +664,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Widget gated({
       required String moduleKey,
       required String label,
+      required String subtitle,
       required IconData icon,
       required VoidCallback onTap,
       Color? color,
@@ -395,6 +673,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return _QuickAction(
         icon: icon,
         label: label,
+        subtitle: subtitle,
         color: color,
         enabled: enabled,
         onTap: enabled
@@ -409,23 +688,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         Text(l10n.quickActions,
             style: TextStyle(
                 fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary)),
+        const SizedBox(height: 2),
+        Text(l10n.quickActionsSubtitle, style: TextStyle(fontSize: 11.5, color: c.textSecondary)),
         const SizedBox(height: 12),
         GridView(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            mainAxisExtent: 92,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            mainAxisExtent: 88,
           ),
           children: [
-            gated(moduleKey: 'billing',    icon: Icons.receipt_long_rounded, label: l10n.newBill,   onTap: () => context.go('/billing')),
-            gated(moduleKey: 'inventory',  icon: Icons.inventory_2_rounded,  label: l10n.items,  onTap: () => context.go('/inventory')),
-            gated(moduleKey: 'customers',  icon: Icons.people_rounded,       label: l10n.customers, onTap: () => context.go('/customers')),
-            gated(moduleKey: 'inventory',  icon: Icons.add_box_rounded,      label: l10n.addItem, onTap: () => context.push('/inventory/add')),
-            gated(moduleKey: 'reports',    icon: Icons.bar_chart_rounded,    label: l10n.reports,    onTap: () => context.go('/reports')),
-            gated(moduleKey: 'ai_manager', icon: Icons.smart_toy_rounded,    label: l10n.aiManager,  color: AppColors.primaryLight, onTap: () => context.go('/ai-manager')),
+            // First action is Bills (view/manage existing bills) — this is
+            // deliberately NOT "New Bill"; bill creation stays reachable via
+            // the mic button and the Bills screen's own create action.
+            gated(moduleKey: 'billing',    icon: Icons.receipt_long_rounded, label: l10n.bills,     subtitle: l10n.qaViewManage,    onTap: () => context.push('/bills')),
+            gated(moduleKey: 'inventory',  icon: Icons.inventory_2_rounded,  label: l10n.items,     subtitle: l10n.qaManageStock,   onTap: () => context.push('/inventory')),
+            gated(moduleKey: 'customers',  icon: Icons.people_rounded,       label: l10n.customers, subtitle: l10n.qaViewAndAdd,    onTap: () => context.push('/customers')),
+            gated(moduleKey: 'inventory',  icon: Icons.add_box_rounded,      label: l10n.addItem,   subtitle: l10n.qaQuickAdd,      onTap: () => context.push('/inventory/add')),
+            gated(moduleKey: 'reports',    icon: Icons.bar_chart_rounded,    label: l10n.reports,   subtitle: l10n.qaSalesInsights, onTap: () => context.push('/reports')),
+            gated(moduleKey: 'ai_manager', icon: Icons.smart_toy_rounded,    label: l10n.aiManager, subtitle: l10n.qaVoiceSmart,    color: AppColors.primaryLight, onTap: () => context.push('/ai-manager')),
           ],
         ),
       ],
@@ -441,106 +725,68 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // ── 7-Day Revenue Chart ───────────────────────────────────────────────────
+}
 
-  Widget _buildChart() {
-    if (_chartData.isEmpty) return const SizedBox.shrink();
-    final spots = _chartData
-        .asMap()
-        .entries
-        .map((e) => FlSpot(e.key.toDouble(), e.value.sales))
-        .toList();
+// ── Ledger Stat (Money at a Glance) ─────────────────────────────────────────
 
+class _LedgerStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  // Small colored word under the value — only Net Balance uses this, to say
+  // whether that balance is currently receivable ("Due Amount") or payable
+  // ("In Advance") instead of one ambiguous "Outstanding" for either case.
+  final String? tag;
+  const _LedgerStat({required this.label, required this.value, required this.color, this.tag});
+
+  @override
+  Widget build(BuildContext context) {
     final c = context.colors;
-    final l10n = context.l10n;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: c.surfaceBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(l10n.sevenDayRevenue,
-                  style: TextStyle(
-                      fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary)),
-              TextButton(
-                onPressed: () => context.go('/reports'),
-                style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 0),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                child: Text(l10n.viewReports,
-                    style: const TextStyle(color: AppColors.primaryLight, fontSize: 12, fontWeight: FontWeight.w600)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 108, // reduced ~23% from 140
-            child: LineChart(
-              LineChartData(
-                gridData: const FlGridData(show: false),
-                titlesData: const FlTitlesData(show: false),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    color: AppColors.primaryLight,
-                    barWidth: 2.5,
-                    isStrokeCapRound: true,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: AppColors.primaryLight.withValues(alpha: 0.1),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 10.5, color: c.textSecondary, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text(value,
+            style: TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.bold, color: color),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis),
+        if (tag != null) ...[
+          const SizedBox(height: 2),
+          Text(tag!, style: TextStyle(fontSize: 9.5, color: color, fontWeight: FontWeight.w600)),
         ],
-      ),
+      ],
     );
   }
 }
 
-// ── Recent Bill Tile ──────────────────────────────────────────────────────────
+// ── Recent Activity ──────────────────────────────────────────────────────────
 //
-// Customer-first layout matching bills_screen.dart's list rows — an avatar
-// (photo if the customer has one, initial otherwise, a generic person icon
-// for a walk-in sale with no linked customer) leads with the customer's
-// name, item count, and time; the payment *status* (paid/partial/pending),
-// not payment method, trails with the amount — this is the "what's the
-// state of this bill" summary a shopkeeper scans Home for, while the
-// Bills screen's own rows show payment *method* since that list is for
-// looking a specific bill up, not a status check.
+// Merges two existing event sources — new bills, and standalone ledger
+// movements (collections against a due, advance deposits, "You Gave"
+// credit entries) — into one chronological feed, in place of the old
+// bills-only "Recent Bills" list. See _HomeScreenState._loadData for how
+// the list is built and which payment_transaction types are included.
 
-class _BillTile extends StatelessWidget {
-  final Invoice bill;
-  final Customer? customer;
+enum _ActivityType { billCreated, paymentReceived, creditGiven, paymentMade }
+
+class _ActivityEntry {
+  final _ActivityType type;
+  final String? customerName;
+  final double amount;
+  final DateTime createdAt;
+  const _ActivityEntry({
+    required this.type,
+    required this.customerName,
+    required this.amount,
+    required this.createdAt,
+  });
+}
+
+class _ActivityTile extends StatelessWidget {
+  final _ActivityEntry entry;
   final bool showDivider;
-  final VoidCallback? onTap;
-  const _BillTile({required this.bill, this.customer, this.showDivider = false, this.onTap});
-
-  (Color, String) _statusMeta(AppSemanticColors c, AppLocalizations l10n) {
-    switch (bill.status) {
-      case 'paid':
-        return (c.success, l10n.paid);
-      case 'partial_paid':
-        return (c.warning, l10n.partialPaid);
-      case 'cancelled':
-        return (c.textHint, 'Voided');
-      default:
-        return (c.danger, l10n.unpaid);
-    }
-  }
+  const _ActivityTile({required this.entry, required this.showDivider});
 
   String _formatTime(DateTime dt, String todayLabel) {
     final now = DateTime.now();
@@ -557,59 +803,68 @@ class _BillTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
-    final (statusColor, statusLabel) = _statusMeta(c, l10n);
-    final items = bill.itemCount ?? bill.items.length;
-    final itemLabel = items == 1 ? '1 item' : '$items items';
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: showDivider
-            ? BoxDecoration(border: Border(top: BorderSide(color: c.divider, width: 1)))
-            : null,
-        child: Row(children: [
-          customer != null
-              ? CustomerAvatar(customer: customer!, size: 40, color: AppColors.primary)
-              : Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.person_rounded, size: 20, color: AppColors.primaryLight),
-                ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(bill.customerName,
-                  style: TextStyle(color: c.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 2),
-              Text(
-                '$itemLabel · ${_formatTime(bill.createdAt, l10n.today)}',
-                style: TextStyle(color: c.textSecondary, fontSize: 11.5),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ]),
-          ),
-          const SizedBox(width: 8),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+    final String label;
+    final IconData icon;
+    final Color color;
+    final bool isPositive;
+    switch (entry.type) {
+      case _ActivityType.paymentReceived:
+        label = l10n.activityPaymentReceived;
+        icon = Icons.arrow_upward_rounded;
+        color = c.success;
+        isPositive = true;
+      case _ActivityType.billCreated:
+        label = l10n.activityBillCreated;
+        icon = Icons.receipt_rounded;
+        color = AppColors.primaryLight;
+        isPositive = true;
+      case _ActivityType.creditGiven:
+        label = l10n.activityCreditGiven;
+        icon = Icons.arrow_outward_rounded;
+        color = c.warning;
+        isPositive = false;
+      case _ActivityType.paymentMade:
+        label = l10n.activityPaymentMade;
+        icon = Icons.keyboard_return_rounded;
+        color = c.danger;
+        isPositive = false;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: showDivider
+          ? BoxDecoration(border: Border(top: BorderSide(color: c.divider, width: 1)))
+          : null,
+      child: Row(children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+          child: Icon(icon, size: 16, color: color),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label,
+                style: TextStyle(color: c.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 2),
             Text(
-              AppFormatters.formatCurrency(bill.grandTotal),
-              style: TextStyle(color: c.textPrimary, fontSize: 13.5, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              statusLabel,
-              style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600),
+              '${entry.customerName ?? l10n.walkInCustomer} · ${_formatTime(entry.createdAt, l10n.today)}',
+              style: TextStyle(color: c.textSecondary, fontSize: 11.5),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ]),
-        ]),
-      ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '${isPositive ? '+' : '-'}${AppFormatters.formatCurrency(entry.amount)}',
+          style: TextStyle(color: color, fontSize: 13.5, fontWeight: FontWeight.bold),
+        ),
+      ]),
     );
   }
 }
@@ -621,35 +876,52 @@ class _MetricTile extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color color;
-  const _MetricTile({required this.title, required this.value, required this.icon, required this.color});
+  final VoidCallback? onTap;
+  const _MetricTile({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.color,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: c.surfaceBorder),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Icon(icon, size: 17, color: color),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: c.surfaceBorder),
         ),
-        const SizedBox(height: 10),
-        Text(value,
-            style: TextStyle(
-                fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.bold, color: c.textPrimary)),
-        const SizedBox(height: 1),
-        Text(title, style: TextStyle(fontSize: 11, color: c.textSecondary)),
-      ]),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, size: 17, color: color),
+              ),
+              if (onTap != null) Icon(Icons.chevron_right_rounded, size: 16, color: c.textHint),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(value,
+              style: TextStyle(
+                  fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.bold, color: c.textPrimary)),
+          const SizedBox(height: 1),
+          Text(title, style: TextStyle(fontSize: 11, color: c.textSecondary)),
+        ]),
+      ),
     );
   }
 }
@@ -659,12 +931,14 @@ class _MetricTile extends StatelessWidget {
 class _QuickAction extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String subtitle;
   final VoidCallback onTap;
   final Color? color;
   final bool enabled;
   const _QuickAction({
     required this.icon,
     required this.label,
+    required this.subtitle,
     required this.onTap,
     this.color,
     this.enabled = true,
@@ -682,30 +956,40 @@ class _QuickAction extends StatelessWidget {
             Container(
               width: double.infinity,
               height: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+              padding: const EdgeInsets.fromLTRB(10, 10, 8, 8),
               decoration: BoxDecoration(
                 color: c.surface,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(13),
                 border: Border.all(color: c.surfaceBorder),
               ),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: (color ?? AppColors.primaryLight).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(icon, size: 19, color: color ?? AppColors.primaryLight),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: (color ?? AppColors.primaryLight).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(icon, size: 15, color: color ?? AppColors.primaryLight),
+                      ),
+                      Icon(Icons.chevron_right_rounded, size: 15, color: c.textHint),
+                    ],
                   ),
-                  const SizedBox(height: 8),
+                  const Spacer(),
                   Text(label,
                       style: TextStyle(
-                          fontSize: 11, color: c.textPrimary, fontWeight: FontWeight.w500),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
+                          fontSize: 12, color: c.textPrimary, fontWeight: FontWeight.w700),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 1),
+                  Text(subtitle,
+                      style: TextStyle(fontSize: 9, color: c.textSecondary),
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                 ],
               ),

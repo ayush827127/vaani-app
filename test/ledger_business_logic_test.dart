@@ -68,6 +68,7 @@ void main() {
       grandTotal: total,
       receivedAmount: invoiceReceived,
       pendingAmount: pending,
+      previousDue: c.totalOutstanding,
       paymentMode: 'cash',
       status: status,
       createdAt: DateTime.now(),
@@ -183,6 +184,16 @@ void main() {
       await outstandingEquals(700, '500 old + 200 new');
       expect(await sumInvoicePending(), 700);
       await ledgerReconciles();
+    });
+
+    test('each bill snapshots previousDue as it stood before that bill, '
+        'not the customer\'s balance after it', () async {
+      final first = await checkout(total: 500, received: 0, qty: 5);
+      expect(first.previousDue, 0, reason: 'nothing was owed before the very first bill');
+
+      final second = await checkout(total: 300, received: 100, qty: 3);
+      expect(second.previousDue, 500,
+          reason: 'the 500 left owing by the first bill, not the 700 the customer owes after this one');
     });
 
     test('stock is deducted for credit sales too', () async {
@@ -528,6 +539,39 @@ void main() {
       expect(history, hasLength(2));
       expect(history.first['type'], 'damage', reason: 'newest movement first');
       expect(history.last['type'], 'sale');
+    });
+
+    test('Add Stock: 49 -> +10 -> 59, with the movement recording previous and new stock', () async {
+      await items.adjustStock(water.id!, -951, 'adjustment'); // 1000 -> 49
+      await items.adjustStock(water.id!, 10, 'restock', reason: 'Purchase');
+      expect((await items.getItemById(water.id!))!.stockQuantity, 59);
+
+      final history = await items.getStockHistory(water.id!);
+      expect(history.first['stock_before'], 49);
+      expect(history.first['stock_after'], 59);
+      expect(history.first['quantity_change'], 10);
+    });
+
+    test('Adjust Stock down: 49 -> -5 -> 44', () async {
+      await items.adjustStock(water.id!, -951, 'adjustment'); // 1000 -> 49
+      await items.adjustStock(water.id!, -5, 'adjustment', reason: 'Stock Correction');
+      expect((await items.getItemById(water.id!))!.stockQuantity, 44);
+
+      final history = await items.getStockHistory(water.id!);
+      expect(history.first['stock_before'], 49);
+      expect(history.first['stock_after'], 44);
+      expect(history.first['quantity_change'], -5);
+    });
+
+    test('Adjust Stock up: 49 -> +10 -> 59', () async {
+      await items.adjustStock(water.id!, -951, 'adjustment'); // 1000 -> 49
+      await items.adjustStock(water.id!, 10, 'adjustment', reason: 'Stock Correction');
+      expect((await items.getItemById(water.id!))!.stockQuantity, 59);
+
+      final history = await items.getStockHistory(water.id!);
+      expect(history.first['stock_before'], 49);
+      expect(history.first['stock_after'], 59);
+      expect(history.first['quantity_change'], 10);
     });
   });
 

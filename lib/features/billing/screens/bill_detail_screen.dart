@@ -83,6 +83,7 @@ class _BillDetailScreenState extends State<BillDetailScreen> {
         gstAmount: _invoice!.gstAmount,
         discountAmount: _invoice!.discountAmount,
         grandTotal: _invoice!.grandTotal,
+        previousDue: _invoice!.previousDue,
       );
 
   bool get _hasReturnableItems =>

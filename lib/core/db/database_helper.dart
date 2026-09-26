@@ -37,6 +37,15 @@ class DatabaseHelper {
     return _database!;
   }
 
+  /// Test-only: runs the real upgrade path against an already-open database
+  /// — lets a test reproduce "a device already at some older version opens
+  /// the app after an update" without needing path_provider/a real device,
+  /// by opening a temp-file database at an old version, closing it, then
+  /// reopening at the new version through this.
+  @visibleForTesting
+  static Future<void> upgradeForTesting(Database db, int oldVersion, int newVersion) =>
+      instance._onUpgrade(db, oldVersion, newVersion);
+
   Future<Database> _initDatabase() async {
     final dir = await getApplicationDocumentsDirectory();
     final path = p.join(dir.path, AppConstants.dbName);
@@ -220,12 +229,27 @@ class DatabaseHelper {
           "ALTER TABLE items ADD COLUMN item_type TEXT NOT NULL DEFAULT 'PRODUCT'");
       await db.execute(
           'ALTER TABLE items ADD COLUMN inventory_enabled INTEGER NOT NULL DEFAULT 1');
-
+    }
+    if (oldVersion < 15) {
       // One item, many images — items.image_path/image_url stay as a
       // denormalized cache of the primary image (see the table's own doc
       // comment in _createTables). Every item that already had a single
       // image gets it carried over as that first, primary image — nothing
       // existing is lost.
+      //
+      // This used to be folded into the v14 block above instead of its own
+      // version bump — harmless for anyone upgrading from <14 in one jump
+      // (both blocks just run in sequence), but any device that had
+      // *already* reached v14 on an earlier build (before item_images
+      // existed) would never re-run it: sqflite only calls onUpgrade when
+      // the stored version is strictly less than the target, so "already
+      // at 14" looked identical to "fully migrated" and left those
+      // installs permanently missing the table ("no such table:
+      // item_images"). Splitting it into its own version, and making both
+      // statements idempotent (IF NOT EXISTS, and an INSERT guarded so it
+      // can't double-run for a device that already got this correctly),
+      // fixes that for anyone caught by the old version and is a safe
+      // no-op for anyone who wasn't.
       await db.execute('''
         CREATE TABLE IF NOT EXISTS item_images (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -241,8 +265,50 @@ class DatabaseHelper {
       await db.rawInsert('''
         INSERT INTO item_images (item_id, image_path, image_url, sort_order, is_primary, created_at)
         SELECT id, image_path, image_url, 0, 1, datetime('now')
-        FROM items WHERE image_path IS NOT NULL OR image_url IS NOT NULL
+        FROM items
+        WHERE (image_path IS NOT NULL OR image_url IS NOT NULL)
+          AND id NOT IN (SELECT DISTINCT item_id FROM item_images)
       ''');
+    }
+    if (oldVersion < 16) {
+      // invoice_items.inventory_tracked and inventory_transactions.reason
+      // were both added into the *v14* block above in a later change that
+      // did not bump dbVersion (the same mistake the v15 split above this
+      // comment already fixes once, for item_images). Any device that had
+      // already reached v14 before that change shipped — including, after
+      // the v15 split, every device that got auto-upgraded straight to v15
+      // for item_images — permanently skips `if (oldVersion < 14)` on every
+      // future upgrade (sqflite only replays a block when the stored
+      // version is strictly less than it), so it never received either
+      // column. That is exactly the "table invoice_items has no column
+      // named inventory_tracked" crash on bill creation.
+      //
+      // Both ALTERs are guarded by checking the column really is missing
+      // first, since devices that upgraded straight from <14 in one jump
+      // already have both (added correctly by the v14 block moments
+      // earlier in the same upgrade run) — for them this is a safe no-op.
+      final invoiceItemCols = await db.rawQuery("PRAGMA table_info(invoice_items)");
+      final hasInventoryTracked = invoiceItemCols.any((c) => c['name'] == 'inventory_tracked');
+      if (!hasInventoryTracked) {
+        await db.execute(
+            'ALTER TABLE invoice_items ADD COLUMN inventory_tracked INTEGER NOT NULL DEFAULT 1');
+      }
+      final inventoryTxnCols = await db.rawQuery("PRAGMA table_info(inventory_transactions)");
+      final hasReason = inventoryTxnCols.any((c) => c['name'] == 'reason');
+      if (!hasReason) {
+        await db.execute('ALTER TABLE inventory_transactions ADD COLUMN reason TEXT');
+      }
+    }
+    if (oldVersion < 17) {
+      // A customer's previous due (their total_outstanding before this bill)
+      // was only ever shown live in the payment sheet during checkout and
+      // never persisted anywhere — so the generated bill/receipt had no way
+      // to show it afterwards. Existing invoices default to 0 since there's
+      // no way to recover what it actually was at the time.
+      final invoiceCols = await db.rawQuery("PRAGMA table_info(invoices)");
+      if (!invoiceCols.any((c) => c['name'] == 'previous_due')) {
+        await db.execute('ALTER TABLE invoices ADD COLUMN previous_due REAL NOT NULL DEFAULT 0');
+      }
     }
   }
 
@@ -361,6 +427,13 @@ class DatabaseHelper {
         status TEXT NOT NULL DEFAULT 'paid',
         notes TEXT,
         is_voice_created INTEGER NOT NULL DEFAULT 0,
+        -- Snapshot of the customer's total_outstanding at the moment this
+        -- bill was created, BEFORE this bill's own due was added to it —
+        -- same "record history as it was, not as it later becomes" reasoning
+        -- as invoice_items.cost_price. 0 for a walk-in sale (no customer to
+        -- owe anything) and for every invoice created before this column
+        -- existed (no way to know what it was retroactively).
+        previous_due REAL NOT NULL DEFAULT 0,
         deleted_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT,

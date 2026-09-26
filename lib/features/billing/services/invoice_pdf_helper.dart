@@ -61,6 +61,7 @@ class InvoicePdfHelper {
       gstAmount: invoice.gstAmount,
       discountAmount: invoice.discountAmount,
       grandTotal: invoice.grandTotal,
+      previousDue: invoice.previousDue,
     );
 
     await _share(bytes, invoice.invoiceNumber);
@@ -90,6 +91,7 @@ class InvoicePdfHelper {
     required double gstAmount,
     required double discountAmount,
     required double grandTotal,
+    double previousDue = 0,
   }) async {
     final doc = pw.Document();
 
@@ -317,6 +319,16 @@ class InvoicePdfHelper {
         pw.Divider(thickness: 1, color: PdfColors.grey500),
         summaryRow(l10n.grandTotal, 'Rs.${grandTotal.toStringAsFixed(2)}',
             isBold: true, fontSize: 13),
+        // Only shown when the customer actually owed something before this
+        // bill — omitted entirely for a walk-in sale or a customer with no
+        // prior due, same "don't show an unnecessary Rs.0.00 row" rule used
+        // elsewhere in the app.
+        if (previousDue > 0) ...[
+          summaryRow(l10n.previousDue, 'Rs.${previousDue.toStringAsFixed(2)}'),
+          summaryRow(l10n.totalPayableLabel,
+              'Rs.${(grandTotal + previousDue).toStringAsFixed(2)}',
+              isBold: true, fontSize: 13),
+        ],
         pw.SizedBox(height: 6),
         pw.Divider(thickness: 1.5, color: PdfColors.grey700),
         if (qrImage != null) ...[

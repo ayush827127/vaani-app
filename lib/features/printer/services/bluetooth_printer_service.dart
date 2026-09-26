@@ -12,7 +12,14 @@ class BluetoothPrinterService {
 
   Future<bool> requestPermissions() async {
     try {
-      // Android 12+ requires BLUETOOTH_CONNECT + BLUETOOTH_SCAN
+      // Android 12+ requires BLUETOOTH_CONNECT + BLUETOOTH_SCAN — checked
+      // first so an already-granted pair (the common case on every launch
+      // after the first, since this runs on every app start via
+      // PrinterNotifier's auto-reconnect) never calls .request() at all.
+      final connectGranted = await Permission.bluetoothConnect.status;
+      final scanGranted = await Permission.bluetoothScan.status;
+      if (connectGranted.isGranted && scanGranted.isGranted) return true;
+
       final results = await [
         Permission.bluetoothConnect,
         Permission.bluetoothScan,
@@ -22,7 +29,9 @@ class BluetoothPrinterService {
           results.values.every((s) => s.isGranted || s.isRestricted);
       if (allOk) return true;
 
-      // Older Android (<12) needs fine location for BT scan discovery
+      // Older Android (<12) needs fine location for BT scan discovery —
+      // same check-first treatment.
+      if ((await Permission.location.status).isGranted) return true;
       final loc = await Permission.location.request();
       return loc.isGranted;
     } catch (_) {

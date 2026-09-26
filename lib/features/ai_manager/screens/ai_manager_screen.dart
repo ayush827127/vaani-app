@@ -221,7 +221,12 @@ class _AIManagerScreenState extends State<AIManagerScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_rounded),
-          onPressed: () => context.go('/home'),
+          // Pop back to wherever this was opened from — a real back-stack
+          // entry now exists whenever this was reached via push() (Home's
+          // Quick Actions, the drawer, ...); go('/home') is only the
+          // fallback for the rare case there's nothing left to pop (e.g.
+          // this was somehow the first screen after a deep link).
+          onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
         ),
         title: Row(
           children: [

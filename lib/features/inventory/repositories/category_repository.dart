@@ -67,46 +67,39 @@ class CategoryRepository {
     });
   }
 
-  /// Replaces the whole category list for [shopId] with [names] — used when
-  /// merging a cloud-pulled shopProfile.categories snapshot. Categories
-  /// aren't independently timestamped, so there's no incremental diff to
-  /// apply; the cloud's list is always treated as the full authoritative set
-  /// whenever a shop-profile change is pulled at all.
-  Future<void> replaceCategories(int shopId, List<String> names) async {
+  /// Merges a cloud-pulled shopProfile.categories snapshot into the local
+  /// category list for [shopId] — adds any category the cloud has that
+  /// isn't already stored locally. Deliberately never deletes a local
+  /// category just because it's absent from the cloud list.
+  ///
+  /// Categories have no id/UUID, created_at-only (no updated_at) and no
+  /// deleted_at/tombstone of their own — see the table's schema in
+  /// database_helper.dart — so there is no reliable way to tell "an admin
+  /// removed this on the web" apart from "this was created locally a
+  /// moment ago and hasn't reached the cloud yet". `syncNow()` always pulls
+  /// before it pushes (see DataSyncRepository), so a category created
+  /// right before tapping Cloud Sync is, at pull time, *by definition* not
+  /// in the cloud's list yet — a destructive replace-with-cloud here
+  /// deleted it before the push a few lines later ever got a chance to
+  /// upload it, which was the actual bug: a newly created category
+  /// vanishing the moment Cloud Sync ran. Treating the cloud list as
+  /// additive-only, the same "never treat a partial/empty snapshot as
+  /// authoritative" reasoning this method already used for the
+  /// empty-list case, fixes that for the non-empty case too.
+  ///
+  /// `INSERT OR IGNORE` plus the table's `UNIQUE(shop_id, name)` constraint
+  /// make this naturally idempotent and duplicate-proof no matter how many
+  /// times sync runs against the same or overlapping snapshots.
+  Future<void> mergeCategories(int shopId, List<String> names) async {
     final db = await _db.database;
     final incoming = names.map((n) => n.trim()).where((n) => n.isNotEmpty).toSet();
-    // An empty snapshot means the cloud simply has no category list yet (a
-    // shop that never pushed one), not that an admin deleted every
-    // category — treating it as authoritative would wipe the local list
-    // and null every item's category.
     if (incoming.isEmpty) return;
-    await db.transaction((txn) async {
-      final existingRows =
-          await txn.query('categories', columns: ['name'], where: 'shop_id = ?', whereArgs: [shopId]);
-      final existingNames = existingRows.map((r) => r['name'] as String).toSet();
-      final removed = existingNames.difference(incoming);
-
-      await txn.delete('categories', where: 'shop_id = ?', whereArgs: [shopId]);
-      final now = DateTime.now().toIso8601String();
-      for (final name in incoming) {
-        await txn.rawInsert(
-          'INSERT OR IGNORE INTO categories (shop_id, name, created_at) VALUES (?, ?, ?)',
-          [shopId, name, now],
-        );
-      }
-
-      // Same reasoning as deleteCategory() — an admin removing a category
-      // via the web panel drove this same code path (cloud pull → replace)
-      // with no item-side cleanup, orphaning any item still holding
-      // that category name.
-      for (final removedName in removed) {
-        await txn.update(
-          'items',
-          {'category': null, 'updated_at': now},
-          where: 'shop_id = ? AND category = ?',
-          whereArgs: [shopId, removedName],
-        );
-      }
-    });
+    final now = DateTime.now().toIso8601String();
+    for (final name in incoming) {
+      await db.rawInsert(
+        'INSERT OR IGNORE INTO categories (shop_id, name, created_at) VALUES (?, ?, ?)',
+        [shopId, name, now],
+      );
+    }
   }
 }

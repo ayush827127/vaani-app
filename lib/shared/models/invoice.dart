@@ -92,6 +92,12 @@ class Invoice {
   final double grandTotal;
   final double receivedAmount;
   final double pendingAmount;
+  // The customer's total_outstanding at the moment this bill was created,
+  // BEFORE this bill's own due was added to it — snapshotted so the
+  // generated bill/receipt can show it, since it changes over time and the
+  // live figure shown during checkout would otherwise be lost. 0 for a
+  // walk-in sale and for any invoice created before this field existed.
+  final double previousDue;
   final String paymentMode;
   final String status;
   final String? notes;
@@ -126,6 +132,7 @@ class Invoice {
     required this.grandTotal,
     this.receivedAmount = 0,
     this.pendingAmount = 0,
+    this.previousDue = 0,
     this.paymentMode = 'cash',
     this.status = 'paid',
     this.notes,
@@ -153,6 +160,7 @@ class Invoice {
         'grand_total': grandTotal,
         'received_amount': receivedAmount,
         'pending_amount': pendingAmount,
+        'previous_due': previousDue,
         'payment_mode': paymentMode,
         'status': status,
         'notes': notes,
@@ -175,6 +183,7 @@ class Invoice {
         grandTotal: (map['grand_total'] as num).toDouble(),
         receivedAmount: (map['received_amount'] as num?)?.toDouble() ?? 0,
         pendingAmount: (map['pending_amount'] as num?)?.toDouble() ?? 0,
+        previousDue: (map['previous_due'] as num?)?.toDouble() ?? 0,
         paymentMode: map['payment_mode'] as String? ?? 'cash',
         status: map['status'] as String? ?? 'paid',
         notes: map['notes'] as String?,

@@ -67,7 +67,7 @@ class ShopRepository {
   /// ItemRepository.upsertFromCloud() and image_url). Always an UPDATE of
   /// the single existing local shop row, never an insert (a device only
   /// ever has one shop). Categories live in a separate table — see
-  /// CategoryRepository.replaceCategories().
+  /// CategoryRepository.mergeCategories().
   Future<void> mergeFromCloud({
     required int shopId,
     required String name,

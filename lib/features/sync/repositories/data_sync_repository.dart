@@ -475,9 +475,15 @@ class DataSyncRepository {
           logoUrl: shopProfile['logoUrl'] as String?,
           updatedAt: cloudUpdatedAt,
         );
+        // Merge, never replace — a category created locally moments before
+        // this sync's pull step is, by definition, not in the cloud's list
+        // yet (pull always runs before push in this same cycle; see
+        // mergeCategories' doc comment for the full reasoning). Replacing
+        // wholesale here was deleting it before the push below ever got a
+        // chance to upload it.
         final categories = (shopProfile['categories'] as List?)?.cast<String>();
         if (categories != null) {
-          await _categoryRepo.replaceCategories(shopId, categories);
+          await _categoryRepo.mergeCategories(shopId, categories);
         }
       }
     }

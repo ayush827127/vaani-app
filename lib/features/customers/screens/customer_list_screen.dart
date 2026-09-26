@@ -192,7 +192,10 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         titleSpacing: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_rounded),
-          onPressed: () => context.go('/home'),
+          // Pop when there's a real stack entry to return to (pushed from
+          // Home/the drawer); only go('/home') when there genuinely isn't
+          // one — reached directly via the bottom nav's Customers tab.
+          onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
         ),
         title: Row(
           children: [

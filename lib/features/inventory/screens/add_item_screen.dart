@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/utils/permission_service.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/item.dart';
@@ -69,6 +70,13 @@ class _AddItemScreenState extends State<AddItemScreen> {
   List<String> _categories = [];
   int _shopId = 1;
 
+  // ── Wizard state ──────────────────────────────────────────────────────
+  // All three steps read/write the *same* controllers/fields above — moving
+  // between steps only changes which of them are built on screen, so
+  // nothing entered is ever lost switching back and forth.
+  int _currentStep = 0;
+  bool _moreOptionsExpanded = false;
+
   final _picker = ImagePicker();
 
   @override
@@ -89,30 +97,43 @@ class _AddItemScreenState extends State<AddItemScreen> {
   }
 
   Future<void> _loadItem() async {
-    final repo = getIt<ItemRepository>();
-    final item = await repo.getItemById(widget.itemId!);
-    if (item == null || !mounted) return;
-    final gallery = await repo.getImages(widget.itemId!);
-    if (!mounted) return;
-    setState(() {
-      _existingItem = item;
-      _nameCtrl.text = item.name;
-      _skuCtrl.text = item.sku ?? '';
-      _barcodeCtrl.text = item.barcode ?? '';
-      _costCtrl.text = item.costPrice.toString();
-      _priceCtrl.text = item.sellingPrice.toString();
-      _stockCtrl.text = item.stockQuantity.toString();
-      _reorderCtrl.text = item.reorderLevel.toString();
-      _aliasCtrl.text = item.aliases.join(', ');
-      _category = item.category;
-      _gstRate = item.gstRate;
-      _itemType = item.itemType;
-      _inventoryEnabled = item.inventoryEnabled;
-      _images = gallery
-          .map((g) => _GalleryEntry(existingId: g.id, imagePath: g.imagePath, imageUrl: g.imageUrl))
-          .toList();
-      _primaryIndex = gallery.isEmpty ? 0 : gallery.indexWhere((g) => g.isPrimary).clamp(0, gallery.length - 1);
-    });
+    try {
+      final repo = getIt<ItemRepository>();
+      final item = await repo.getItemById(widget.itemId!);
+      if (item == null || !mounted) return;
+      final gallery = await repo.getImages(widget.itemId!);
+      if (!mounted) return;
+      setState(() {
+        _existingItem = item;
+        _nameCtrl.text = item.name;
+        _skuCtrl.text = item.sku ?? '';
+        _barcodeCtrl.text = item.barcode ?? '';
+        _costCtrl.text = item.costPrice.toString();
+        _priceCtrl.text = item.sellingPrice.toString();
+        _stockCtrl.text = item.stockQuantity.toString();
+        _reorderCtrl.text = item.reorderLevel.toString();
+        _aliasCtrl.text = item.aliases.join(', ');
+        _category = item.category;
+        _gstRate = item.gstRate;
+        _itemType = item.itemType;
+        _inventoryEnabled = item.inventoryEnabled;
+        _images = gallery
+            .map((g) => _GalleryEntry(existingId: g.id, imagePath: g.imagePath, imageUrl: g.imageUrl))
+            .toList();
+        _primaryIndex = gallery.isEmpty ? 0 : gallery.indexWhere((g) => g.isPrimary).clamp(0, gallery.length - 1);
+      });
+    } catch (e, st) {
+      // Never swallowed — logged with its real stack trace. A failure here
+      // (e.g. a database error) previously left the form silently blank
+      // with no explanation; this at least tells the user something went
+      // wrong instead of the screen just quietly not working.
+      debugPrint('[AddItemScreen] failed to load item ${widget.itemId}: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.l10n.errorGeneric('$e')),
+        backgroundColor: context.colors.danger,
+      ));
+    }
   }
 
   /// Copies a picked file into the app's documents directory (same
@@ -153,6 +174,12 @@ class _AddItemScreenState extends State<AddItemScreen> {
   }
 
   Future<void> _pickFromCamera() async {
+    // Routed through the shared permission check (same one the barcode
+    // scanner already uses below) instead of relying on image_picker's own
+    // internal handling — that path never told the user why nothing
+    // happened if camera access had been permanently denied.
+    final granted = await PermissionService.requestCamera(context);
+    if (!granted || !mounted) return;
     final picked =
         await _picker.pickImage(source: ImageSource.camera, maxWidth: 800, maxHeight: 800, imageQuality: 85);
     if (picked != null) await _addPickedFile(picked);
@@ -236,6 +263,22 @@ class _AddItemScreenState extends State<AddItemScreen> {
         ),
       ),
     );
+  }
+
+  // ── Wizard navigation ────────────────────────────────────────────────
+
+  void _goToStep(int step) => setState(() => _currentStep = step);
+
+  void _goNextStep() {
+    // Only the fields belonging to the step currently on screen are mounted
+    // as FormFields at any given time, so validate() here only checks
+    // those — it can't fail on a field the user hasn't reached yet.
+    if (!_formKey.currentState!.validate()) return;
+    if (_currentStep < 2) setState(() => _currentStep += 1);
+  }
+
+  void _goBackStep() {
+    if (_currentStep > 0) setState(() => _currentStep -= 1);
   }
 
   Future<void> _save() async {
@@ -418,105 +461,555 @@ class _AddItemScreenState extends State<AddItemScreen> {
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+        child: Column(
           children: [
-            // Item image gallery — no image is valid, one is valid, several
-            // are valid. The starred badge marks the primary (used anywhere
-            // a single image is needed: item list/detail, invoice PDFs).
-            _buildImageGallery(c, l10n),
-            const SizedBox(height: 20),
-            _buildField(l10n.itemName, _nameCtrl,
-                validator: (v) => v?.trim().isEmpty == true ? l10n.required : null),
-            _buildField(l10n.skuPhoneCode, _skuCtrl),
-            const SizedBox(height: 4),
-            _buildTypeSelector(c, l10n),
-            const SizedBox(height: 16),
-            _buildInventoryToggle(c, l10n),
-            const SizedBox(height: 16),
-            // Category — tappable picker
-            _buildCategoryField(c, l10n),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                    child: _buildField(l10n.costPriceCurrency, _costCtrl,
-                        type: TextInputType.number)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildField(l10n.sellingPriceCurrency, _priceCtrl,
-                      type: TextInputType.number,
-                      validator: (v) {
-                        if (v?.trim().isEmpty == true) return l10n.required;
-                        if ((double.tryParse(v!) ?? 0) <= 0) return l10n.mustBeGreaterThanZero;
-                        return null;
-                      }),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // GST Rate
-            DropdownButtonFormField<double>(
-              initialValue: _gstRate,
-              dropdownColor: c.surface,
-              style: TextStyle(color: c.textPrimary),
-              decoration: InputDecoration(
-                labelText: l10n.gstRate,
-                filled: true,
-                fillColor: c.surface,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: c.inputBorder),
-                ),
+            _buildStepIndicator(c, l10n),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: switch (_currentStep) {
+                  0 => _buildStep1(c, l10n),
+                  1 => _buildStep2(c, l10n),
+                  _ => _buildStep3(c, l10n),
+                },
               ),
-              items: AppConstants.gstRates
-                  .map((r) =>
-                      DropdownMenuItem(value: r, child: Text('${r.toInt()}%')))
-                  .toList(),
-              onChanged: (v) => setState(() => _gstRate = v ?? 5.0),
             ),
-            if (_inventoryEnabled) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                      child: _buildField(l10n.stockQuantity, _stockCtrl,
-                          type: TextInputType.number)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                      child: _buildField(l10n.reorderLevel, _reorderCtrl,
-                          type: TextInputType.number)),
-                ],
-              ),
-            ],
-            _buildField(
-              l10n.aliasesLabel,
-              _aliasCtrl,
-              hint: 'coke, cola, cold drink',
-            ),
-            // ── Barcode section ───────────────────────────────────────────
-            _buildBarcodeSection(l10n, c),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _save,
-              child: _isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2),
-                    )
-                  : Text(_isEditing ? l10n.updateItem : l10n.saveItem),
-            ),
-            const SizedBox(height: 40),
+            _buildStepActions(c, l10n),
           ],
         ),
       ),
     );
   }
+
+  // ── Step indicator ───────────────────────────────────────────────────
+
+  Widget _buildStepIndicator(AppSemanticColors c, AppLocalizations l10n) {
+    final labels = [l10n.basicDetailsStepLabel, l10n.inventoryStepLabel, l10n.reviewStepLabel];
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(bottom: BorderSide(color: c.divider)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: List.generate(labels.length * 2 - 1, (i) {
+          if (i.isOdd) {
+            final connectorDone = (i ~/ 2) < _currentStep;
+            return Expanded(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12),
+                height: 2,
+                color: connectorDone ? AppColors.primaryLight : c.divider,
+              ),
+            );
+          }
+          final stepIndex = i ~/ 2;
+          final isDone = stepIndex < _currentStep;
+          final isActive = stepIndex == _currentStep;
+          final active = isDone || isActive;
+          return SizedBox(
+            width: 72,
+            child: Column(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: active ? AppColors.primaryLight : c.surface,
+                    border: Border.all(color: active ? AppColors.primaryLight : c.inputBorder, width: 1.5),
+                  ),
+                  child: isDone
+                      ? const Icon(Icons.check_rounded, size: 15, color: Colors.white)
+                      : Text('${stepIndex + 1}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isActive ? Colors.white : c.textHint)),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  labels[stepIndex],
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: isActive ? AppColors.primaryLight : c.textHint,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500),
+                ),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildStepActions(AppSemanticColors c, AppLocalizations l10n) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.of(context).padding.bottom),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(top: BorderSide(color: c.divider)),
+      ),
+      child: Row(
+        children: [
+          if (_currentStep > 0) ...[
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _isLoading ? null : _goBackStep,
+                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                label: Text(l10n.backLabel),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: BorderSide(color: c.inputBorder),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            flex: 2,
+            child: ElevatedButton.icon(
+              onPressed: _isLoading ? null : (_currentStep < 2 ? _goNextStep : _save),
+              icon: _isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : Icon(_currentStep < 2 ? Icons.arrow_forward_rounded : Icons.check_rounded, size: 18),
+              label: Text(_currentStep < 2 ? l10n.continueLabel : (_isEditing ? l10n.updateItem : l10n.saveItem)),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Step 1 — Basic Details ───────────────────────────────────────────
+
+  Widget _buildStep1(AppSemanticColors c, AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildImageGallery(c, l10n),
+        const SizedBox(height: 20),
+        _buildField(l10n.itemName, _nameCtrl,
+            validator: (v) => v?.trim().isEmpty == true ? l10n.itemNameRequiredError : null),
+        const SizedBox(height: 4),
+        _buildTypeSelector(c, l10n),
+        const SizedBox(height: 16),
+        _buildCategoryField(c, l10n),
+        const SizedBox(height: 20),
+        Text(l10n.priceInformationLabel,
+            style: TextStyle(color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 10),
+        _buildPricingCard(c, l10n),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<double>(
+          initialValue: _gstRate,
+          dropdownColor: c.surface,
+          style: TextStyle(color: c.textPrimary),
+          decoration: InputDecoration(
+            labelText: l10n.gstRate,
+            filled: true,
+            fillColor: c.surface,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: c.inputBorder),
+            ),
+          ),
+          items: AppConstants.gstRates.map((r) => DropdownMenuItem(value: r, child: Text('${r.toInt()}%'))).toList(),
+          onChanged: (v) => setState(() => _gstRate = v ?? 5.0),
+        ),
+        const SizedBox(height: 20),
+        _buildBarcodeSection(l10n, c),
+      ],
+    );
+  }
+
+  Widget _buildPricingCard(AppSemanticColors c, AppLocalizations l10n) {
+    final cost = double.tryParse(_costCtrl.text) ?? 0;
+    final price = double.tryParse(_priceCtrl.text) ?? 0;
+    final profit = price - cost;
+    // Guarded against a zero selling price — otherwise this divides by zero
+    // and would render NaN/Infinity while the user is still mid-typing.
+    final margin = price > 0 ? (profit / price) * 100 : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.surfaceBorder),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildField(l10n.costPriceCurrency, _costCtrl,
+                    type: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setState(() {})),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildField(l10n.sellingPriceCurrency, _priceCtrl,
+                    type: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setState(() {}),
+                    validator: (v) {
+                      if (v?.trim().isEmpty == true) return l10n.required;
+                      if ((double.tryParse(v!) ?? 0) <= 0) return l10n.sellingPriceInvalidError;
+                      return null;
+                    }),
+              ),
+            ],
+          ),
+          Divider(height: 20, color: c.divider),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _calcStat(c, l10n.profit, AppFormatters.formatCurrency(profit), profit >= 0 ? c.success : c.danger),
+              _calcStat(c, l10n.profitMargin, '${margin.toStringAsFixed(1)}%', margin >= 20 ? c.success : c.warning),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _calcStat(AppSemanticColors c, String label, String value, Color valueColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: c.textHint, fontSize: 11)),
+        const SizedBox(height: 3),
+        Text(value,
+            style: TextStyle(
+                color: valueColor, fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Poppins')),
+      ],
+    );
+  }
+
+  // ── Step 2 — Inventory ───────────────────────────────────────────────
+
+  Widget _buildStep2(AppSemanticColors c, AppLocalizations l10n) {
+    final reorder = int.tryParse(_reorderCtrl.text) ?? 10;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildInventoryToggle(c, l10n),
+        if (_inventoryEnabled) ...[
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildField(l10n.initialStockLabel, _stockCtrl,
+                    type: TextInputType.number,
+                    onChanged: (_) => setState(() {}),
+                    validator: (v) {
+                      final n = int.tryParse(v ?? '');
+                      if (n != null && n < 0) return l10n.initialStockNegativeError;
+                      return null;
+                    }),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildField(l10n.reorderLevel, _reorderCtrl,
+                    type: TextInputType.number,
+                    onChanged: (_) => setState(() {}),
+                    validator: (v) {
+                      final n = int.tryParse(v ?? '');
+                      if (n != null && n < 0) return l10n.reorderLevelNegativeError;
+                      return null;
+                    }),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          _buildLowStockHint(c, l10n, reorder),
+        ] else if (_itemType == ItemType.service) ...[
+          const SizedBox(height: 12),
+          _buildServiceInventoryHint(c, l10n),
+        ],
+        const SizedBox(height: 20),
+        _buildMoreOptionsSection(c, l10n),
+      ],
+    );
+  }
+
+  Widget _buildLowStockHint(AppSemanticColors c, AppLocalizations l10n, int reorder) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.primaryLight),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(l10n.lowStockAlertHint('$reorder'),
+                style: TextStyle(color: c.textSecondary, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServiceInventoryHint(AppSemanticColors c, AppLocalizations l10n) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.surfaceBorder),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.design_services_rounded, color: c.textHint, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(l10n.serviceNoInventoryHint, style: TextStyle(color: c.textSecondary, fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMoreOptionsSection(AppSemanticColors c, AppLocalizations l10n) {
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.surfaceBorder),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _moreOptionsExpanded = !_moreOptionsExpanded),
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(l10n.moreOptionsLabel,
+                        style: TextStyle(color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+                  ),
+                  Icon(_moreOptionsExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                      color: c.textHint),
+                ],
+              ),
+            ),
+          ),
+          if (_moreOptionsExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: Column(
+                children: [
+                  _buildField(l10n.skuPhoneCode, _skuCtrl),
+                  _buildField(l10n.aliasesLabel, _aliasCtrl, hint: 'coke, cola, cold drink'),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Step 3 — Review ──────────────────────────────────────────────────
+
+  Widget _buildStep3(AppSemanticColors c, AppLocalizations l10n) {
+    final cost = double.tryParse(_costCtrl.text) ?? 0;
+    final price = double.tryParse(_priceCtrl.text) ?? 0;
+    final profit = price - cost;
+    final margin = price > 0 ? (profit / price) * 100 : 0.0;
+    final stock = int.tryParse(_stockCtrl.text) ?? 0;
+    final reorder = int.tryParse(_reorderCtrl.text) ?? 10;
+    final sku = _skuCtrl.text.trim();
+    final aliases = _aliasCtrl.text.trim();
+    final barcode = _barcodeCtrl.text.trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildReviewPreviewCard(c, l10n),
+        const SizedBox(height: 18),
+        _sectionLabel(c, l10n.pricingSummaryLabel, onEdit: () => _goToStep(0)),
+        const SizedBox(height: 8),
+        _buildSummaryCard(c, [
+          (l10n.costPrice, AppFormatters.formatCurrency(cost), null),
+          (l10n.sellingPrice, AppFormatters.formatCurrency(price), null),
+          (l10n.profit, AppFormatters.formatCurrency(profit), profit >= 0 ? c.success : c.danger),
+          (l10n.profitMargin, '${margin.toStringAsFixed(1)}%', margin >= 20 ? c.success : c.warning),
+          (l10n.gstRate, '${_gstRate.toInt()}%', null),
+        ]),
+        if (_inventoryEnabled) ...[
+          const SizedBox(height: 18),
+          _sectionLabel(c, l10n.inventorySummaryLabel, onEdit: () => _goToStep(1)),
+          const SizedBox(height: 8),
+          _buildSummaryCard(c, [
+            (l10n.trackInventoryLabel, l10n.yesLabel, null),
+            (l10n.initialStockLabel, '$stock ${l10n.unitsLabel}', null),
+            (l10n.reorderLevel, '$reorder ${l10n.unitsLabel}', null),
+          ]),
+        ],
+        if (sku.isNotEmpty || aliases.isNotEmpty || barcode.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          // Barcode lives on Step 1, SKU/Aliases in Step 2's More Options —
+          // Step 1 is the sensible edit target either way, since Continue
+          // from there reaches Step 2 with everything already filled in.
+          _sectionLabel(c, l10n.additionalInfoLabel, onEdit: () => _goToStep(0)),
+          const SizedBox(height: 8),
+          _buildSummaryCard(c, [
+            if (barcode.isNotEmpty) (l10n.barcode, barcode, null),
+            if (sku.isNotEmpty) (l10n.skuPhoneCode, sku, null),
+            if (aliases.isNotEmpty) (l10n.voiceAliases, aliases, null),
+          ]),
+        ],
+      ],
+    );
+  }
+
+  Widget _sectionLabel(AppSemanticColors c, String label, {VoidCallback? onEdit}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+        if (onEdit != null)
+          GestureDetector(
+            onTap: onEdit,
+            child: Text(context.l10n.edit,
+                style: const TextStyle(color: AppColors.primaryLight, fontSize: 12.5, fontWeight: FontWeight.w600)),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryCard(AppSemanticColors c, List<(String, String, Color?)> rows) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.surfaceBorder),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < rows.length; i++)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              decoration:
+                  i > 0 ? BoxDecoration(border: Border(top: BorderSide(color: c.divider))) : null,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(rows[i].$1, style: TextStyle(color: c.textSecondary, fontSize: 13)),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      rows[i].$2,
+                      textAlign: TextAlign.right,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: rows[i].$3 ?? c.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReviewPreviewCard(AppSemanticColors c, AppLocalizations l10n) {
+    final hasImage = _images.isNotEmpty;
+    final primaryImage = hasImage ? _images[_primaryIndex.clamp(0, _images.length - 1)] : null;
+
+    Widget avatar;
+    if (primaryImage?.imagePath != null && File(primaryImage!.imagePath!).existsSync()) {
+      avatar = Image.file(File(primaryImage.imagePath!), fit: BoxFit.cover, width: 56, height: 56);
+    } else if (primaryImage?.imageUrl != null) {
+      avatar = Image.network(primaryImage!.imageUrl!, fit: BoxFit.cover, width: 56, height: 56);
+    } else {
+      final initial = _nameCtrl.text.trim().isNotEmpty ? _nameCtrl.text.trim()[0].toUpperCase() : '?';
+      avatar = Container(
+        width: 56,
+        height: 56,
+        color: c.divider,
+        alignment: Alignment.center,
+        child: Text(initial, style: TextStyle(color: c.textHint, fontWeight: FontWeight.bold, fontSize: 20)),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.surfaceBorder),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(borderRadius: BorderRadius.circular(12), child: avatar),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _nameCtrl.text.trim().isEmpty ? l10n.itemName.replaceAll(' *', '') : _nameCtrl.text.trim(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: c.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _category != null ? localizedCategory(l10n, _category!) : l10n.uncategorized,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: c.textSecondary, fontSize: 12.5),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _itemType == ItemType.service ? l10n.itemTypeService : l10n.itemTypeProduct,
+                    style: const TextStyle(color: AppColors.primaryLight, fontSize: 11.5, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => _goToStep(0),
+            child: Text(l10n.edit,
+                style: const TextStyle(color: AppColors.primaryLight, fontSize: 12.5, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Shared building blocks (unchanged from the previous single-page form) ─
 
   Widget _buildTypeSelector(AppSemanticColors c, AppLocalizations l10n) {
     Widget segment(ItemType type, String label, IconData icon) {
@@ -904,6 +1397,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
     TextInputType type = TextInputType.text,
     String? hint,
     String? Function(String?)? validator,
+    ValueChanged<String>? onChanged,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -916,6 +1410,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
           hintText: hint,
         ),
         validator: validator,
+        onChanged: onChanged,
       ),
     );
   }

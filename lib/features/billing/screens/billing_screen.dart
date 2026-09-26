@@ -125,6 +125,12 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
   String _discountType = 'none';
   double _discountValue = 0;
+  // Manual override for this bill's tax — 'none' means use the auto-computed
+  // GST from each item's own rate (_calcGst), same as always. Set only via
+  // _showTaxSheet; mirrors _discountType/_discountValue exactly, including
+  // being reset after a successful checkout and left alone by "Clear Cart".
+  String _taxOverrideType = 'none';
+  double _taxOverrideValue = 0;
   String _paymentMode = 'upi';
   bool _isGridView = true;
   String? _selectedCategory;
@@ -308,6 +314,20 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final discountRatio = discount / subtotal;
     return items.fold<double>(
         0, (s, c) => s + c.lineTotal * (1 - discountRatio) * c.item.gstRate / 100);
+  }
+
+  // The actual tax charged on this bill — the auto-computed GST above,
+  // unless the seller has manually overridden it via the Tax control next to
+  // Add Discount (same percent-or-flat shape as a discount, applied to the
+  // post-discount taxable value). Item GST rates themselves are never
+  // changed by this — only what this one bill charges.
+  double _effectiveGst(List<CartItem> items, double subtotal, double discount) {
+    if (_taxOverrideType == 'none') return _calcGst(items, subtotal, discount);
+    final taxable = subtotal - discount;
+    final raw = _taxOverrideType == 'percent'
+        ? taxable * _taxOverrideValue / 100
+        : _taxOverrideValue;
+    return raw < 0 ? 0 : raw;
   }
 
   void _showCartSheet() {
@@ -665,6 +685,23 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     );
   }
 
+  void _showTaxSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _TaxSheet(
+        type: _taxOverrideType,
+        value: _taxOverrideValue,
+        onApply: (type, val) => setState(() {
+          _taxOverrideType = type;
+          _taxOverrideValue = val;
+        }),
+      ),
+    );
+  }
+
   Future<void> _showPaymentSheet() async {
     final cart = ref.read(cartProvider);
     if (cart.isEmpty) {
@@ -676,7 +713,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final n = ref.read(cartProvider.notifier);
     final subtotal = n.subtotal;
     final discount = _calcDiscount(subtotal);
-    final gst = _calcGst(cart, subtotal, discount);
+    final gst = _effectiveGst(cart, subtotal, discount);
     final grandTotal = subtotal - discount + gst;
 
     // _selectedCustomer (and _customers) are snapshots from when the screen
@@ -720,6 +757,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           _selectedCustomer = null;
           _discountType = 'none';
           _discountValue = 0;
+          _taxOverrideType = 'none';
+          _taxOverrideValue = 0;
           _paymentMode = 'upi';
         });
       },
@@ -834,7 +873,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final n = ref.read(cartProvider.notifier);
     final subtotal = n.subtotal;
     final discount = _calcDiscount(subtotal);
-    final gst = _calcGst(cart, subtotal, discount);
+    final gst = _effectiveGst(cart, subtotal, discount);
     final total = subtotal - discount + gst;
     final cartQtyMap = {for (final c in cart) c.item.id!: c.quantity};
     final cartOverrideMap = {
@@ -1258,10 +1297,23 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                       ),
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      l10n.taxLabel(AppFormatters.formatCurrency(gst)),
-                      style: TextStyle(
-                          color: c.textSecondary, fontSize: 11),
+                    GestureDetector(
+                      onTap: _showTaxSheet,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            l10n.taxLabel(AppFormatters.formatCurrency(gst)),
+                            style: TextStyle(
+                                color: _taxOverrideType == 'none' ? c.textSecondary : AppColors.primaryLight,
+                                fontSize: 11),
+                          ),
+                          const SizedBox(width: 3),
+                          Icon(Icons.edit_rounded,
+                              size: 10,
+                              color: _taxOverrideType == 'none' ? c.textSecondary : AppColors.primaryLight),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -2879,6 +2931,125 @@ class _DiscountSheetState extends State<_DiscountSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(l10n.addDiscount,
+              style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: c.textPrimary)),
+          const SizedBox(height: 16),
+          Row(
+            children: ['percent', 'flat'].map((t) {
+              return GestureDetector(
+                onTap: () => setState(() => _type = t),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _type == t
+                        ? cs.primary
+                        : c.divider,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    t == 'percent' ? l10n.percentageOption : l10n.flatAmountOption,
+                    style: TextStyle(
+                        color: _type == t ? Colors.white : c.textSecondary),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _ctrl,
+            keyboardType: TextInputType.number,
+            style: TextStyle(
+                color: c.textPrimary,
+                fontSize: 24,
+                fontWeight: FontWeight.bold),
+            decoration: InputDecoration(
+              prefixText: _type == 'flat' ? '₹ ' : '',
+              suffixText: _type == 'percent' ? '%' : '',
+              hintText: '0',
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () {
+                  widget.onApply('none', 0);
+                  Navigator.pop(context);
+                },
+                child: Text(l10n.remove),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () {
+                  widget.onApply(_type, double.tryParse(_ctrl.text) ?? 0);
+                  Navigator.pop(context);
+                },
+                child: Text(l10n.apply),
+              ),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+}
+
+// ── Tax Override Sheet ────────────────────────────────────────────────────
+//
+// Same shape as _DiscountSheet above (percent-or-flat toggle + value), just
+// for overriding this one bill's tax instead of adding a discount to it —
+// "Remove" clears the override and falls back to each item's own GST rate
+// again (_effectiveGst's 'none' case), it does not zero out the tax.
+
+class _TaxSheet extends StatefulWidget {
+  final String type;
+  final double value;
+  final Function(String, double) onApply;
+
+  const _TaxSheet({required this.type, required this.value, required this.onApply});
+
+  @override
+  State<_TaxSheet> createState() => _TaxSheetState();
+}
+
+class _TaxSheetState extends State<_TaxSheet> {
+  late String _type;
+  final _ctrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _type = widget.type == 'none' ? 'percent' : widget.type;
+    _ctrl.text = widget.value > 0 ? widget.value.toString() : '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final l10n = context.l10n;
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.editTaxLabel,
               style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 18,
