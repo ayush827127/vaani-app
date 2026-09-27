@@ -14,6 +14,7 @@ import '../services/otp_service.dart';
 import '../../demo/demo_data_seeder.dart';
 import '../../subscription/repositories/subscription_repository.dart';
 import '../../sync/repositories/data_sync_repository.dart';
+import '../../members/repositories/member_repository.dart';
 import '../../../l10n/l10n_extensions.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -220,6 +221,9 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _isLoading = false);
         unawaited(getIt<SubscriptionRepository>().refreshStatus(otpToken: otpToken));
         unawaited(getIt<DataSyncRepository>().syncNow());
+        // Best-effort — never blocks or surfaces an error on this existing
+        // flow. See MemberRepository.ensureUserSession's doc comment.
+        unawaited(getIt<MemberRepository>().ensureUserSession(phone, otpToken));
         if (!mounted) return;
         context.go('/home');
         return;
@@ -258,6 +262,7 @@ class _LoginScreenState extends State<LoginScreen> {
         // device, so the user shouldn't land on an empty dashboard while it
         // happens invisibly in the background.
         final syncResult = await getIt<DataSyncRepository>().syncNow();
+        unawaited(getIt<MemberRepository>().ensureUserSession(phone, otpToken));
         if (!mounted) return;
         setState(() => _isLoading = false);
         if (!syncResult.success) {

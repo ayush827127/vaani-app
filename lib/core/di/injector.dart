@@ -13,6 +13,8 @@ import '../../features/subscription/repositories/subscription_repository.dart';
 import '../../features/sync/services/sync_api_client.dart';
 import '../../features/sync/services/cloudinary_upload_service.dart';
 import '../../features/sync/repositories/data_sync_repository.dart';
+import '../../features/members/services/member_api_client.dart';
+import '../../features/members/repositories/member_repository.dart';
 
 final GetIt getIt = GetIt.instance;
 
@@ -32,6 +34,10 @@ void setupDI() {
       () => SubscriptionRepository(getIt<SubscriptionApiClient>(), getIt<ShopRepository>()));
   getIt.registerLazySingleton<SyncApiClient>(
       () => SyncApiClient(dotenv.env['BACKEND_API_BASE_URL'] ?? ''));
+  getIt.registerLazySingleton<MemberApiClient>(
+      () => MemberApiClient(dotenv.env['BACKEND_API_BASE_URL'] ?? ''));
+  getIt.registerLazySingleton<MemberRepository>(
+      () => MemberRepository(getIt<MemberApiClient>()));
   getIt.registerLazySingleton<CloudinaryUploadService>(() => CloudinaryUploadService(
         dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '',
         dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? '',

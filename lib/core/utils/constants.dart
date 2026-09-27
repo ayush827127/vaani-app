@@ -19,6 +19,10 @@ class AppConstants {
   static const String keyShopId = 'shop_id';
   static const String keyIsDemoMode = 'is_demo_mode';
   static const String keyShopBackendToken = 'shop_backend_token';
+  // The new User-scoped token (dormant alongside the legacy shop token —
+  // see MemberRepository.ensureUserSession) and the shop it auto-selected.
+  static const String keyUserBackendToken = 'user_backend_token';
+  static const String keyActiveShopId = 'active_shop_id';
   static const String keySubscriptionStatusJson = 'subscription_status_json';
   static const String keyLastFullSyncAt = 'last_full_sync_at';
   // Separate from keyLastFullSyncAt (the push cursor, phone-clock-based) —

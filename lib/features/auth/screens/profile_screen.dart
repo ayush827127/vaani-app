@@ -478,6 +478,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ]),
                     const SizedBox(height: 12),
 
+                    // Team
+                    _SettingsCard(children: [
+                      _SectionHeader('Team'),
+                      _SettingsTile(
+                        icon: Icons.group_rounded,
+                        title: 'Manage Members',
+                        onTap: () => context.push('/profile/members'),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+
                     // App
                     _SettingsCard(children: [
                       _SectionHeader('App'),
