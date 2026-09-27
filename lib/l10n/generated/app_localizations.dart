@@ -3841,6 +3841,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Resend OTP in {seconds}s'**
   String resendOtpIn(String seconds);
+
+  /// No description provided for @team.
+  ///
+  /// In en, this message translates to:
+  /// **'Team'**
+  String get team;
+
+  /// No description provided for @manageMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Members'**
+  String get manageMembers;
+
+  /// No description provided for @inviteMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite Member'**
+  String get inviteMember;
+
+  /// No description provided for @phoneNumberLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone number'**
+  String get phoneNumberLabel;
+
+  /// No description provided for @roleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Role'**
+  String get roleLabel;
+
+  /// No description provided for @sendInvite.
+  ///
+  /// In en, this message translates to:
+  /// **'Send Invite'**
+  String get sendInvite;
+
+  /// No description provided for @changeRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Change Role'**
+  String get changeRole;
+
+  /// No description provided for @removeMemberTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Member'**
+  String get removeMemberTitle;
+
+  /// No description provided for @removeMemberConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {name} from this business?'**
+  String removeMemberConfirm(String name);
+
+  /// No description provided for @leaveBusinessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave Business'**
+  String get leaveBusinessTitle;
+
+  /// No description provided for @leaveBusinessConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to leave this business?'**
+  String get leaveBusinessConfirm;
+
+  /// No description provided for @leave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave'**
+  String get leave;
+
+  /// No description provided for @leaveThisBusiness.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave this business'**
+  String get leaveThisBusiness;
+
+  /// No description provided for @noUserSessionMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Log out and log back in to enable member management.'**
+  String get noUserSessionMessage;
+
+  /// No description provided for @retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get retry;
+
+  /// No description provided for @invalidPhoneNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid 10-digit phone number'**
+  String get invalidPhoneNumber;
+
+  /// No description provided for @invitationSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Invitation sent'**
+  String get invitationSent;
+
+  /// No description provided for @joinBusinessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Join a Business'**
+  String get joinBusinessTitle;
+
+  /// No description provided for @noInvitationsFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No pending invitations found.'**
+  String get noInvitationsFound;
+
+  /// No description provided for @roleValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Role: {role}'**
+  String roleValue(String role);
+
+  /// No description provided for @reject.
+  ///
+  /// In en, this message translates to:
+  /// **'Reject'**
+  String get reject;
+
+  /// No description provided for @join.
+  ///
+  /// In en, this message translates to:
+  /// **'Join'**
+  String get join;
+
+  /// No description provided for @createBusinessInstead.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a new business instead'**
+  String get createBusinessInstead;
+
+  /// No description provided for @joinedSyncPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Joined — couldn\'t reach the server to pull shop data yet, will retry automatically.'**
+  String get joinedSyncPending;
 }
 
 class _AppLocalizationsDelegate

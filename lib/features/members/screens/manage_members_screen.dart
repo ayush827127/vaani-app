@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/di/injector.dart';
+import '../../../l10n/l10n_extensions.dart';
 import '../models/member.dart';
 import '../repositories/member_repository.dart';
 
@@ -65,6 +66,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
   }
 
   Future<void> _invite() async {
+    final l10n = context.l10n;
     final phoneCtrl = TextEditingController();
     String role = 'CASHIER';
     final result = await showDialog<bool>(
@@ -75,7 +77,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
           return AlertDialog(
             backgroundColor: c.surface,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Text('Invite Member', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold)),
+            title: Text(l10n.inviteMember, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold)),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -83,12 +85,12 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                   controller: phoneCtrl,
                   keyboardType: TextInputType.phone,
                   maxLength: 10,
-                  decoration: const InputDecoration(labelText: 'Phone number', counterText: ''),
+                  decoration: InputDecoration(labelText: l10n.phoneNumberLabel, counterText: ''),
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   initialValue: role,
-                  decoration: const InputDecoration(labelText: 'Role'),
+                  decoration: InputDecoration(labelText: l10n.roleLabel),
                   items: _roles
                       .map((r) => DropdownMenuItem(value: r, child: Text(r)))
                       .toList(),
@@ -99,11 +101,11 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
+                child: Text(l10n.cancel, style: TextStyle(color: c.textSecondary)),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Send Invite'),
+                child: Text(l10n.sendInvite),
               ),
             ],
           );
@@ -113,14 +115,14 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
     if (result != true) return;
     final phone = phoneCtrl.text.trim();
     if (phone.length != 10) {
-      _showError('Enter a valid 10-digit phone number');
+      _showError(l10n.invalidPhoneNumber);
       return;
     }
     try {
       await getIt<MemberRepository>().inviteMember(phone, role);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invitation sent'), backgroundColor: AppColors.success),
+        SnackBar(content: Text(l10n.invitationSent), backgroundColor: AppColors.success),
       );
     } catch (e) {
       _showError(e);
@@ -128,6 +130,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
   }
 
   Future<void> _changeRole(Member member) async {
+    final l10n = context.l10n;
     String role = member.role;
     final result = await showDialog<bool>(
       context: context,
@@ -137,7 +140,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
           return AlertDialog(
             backgroundColor: c.surface,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Text('Change Role', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold)),
+            title: Text(l10n.changeRole, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold)),
             content: DropdownButtonFormField<String>(
               initialValue: role,
               items: _roles.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
@@ -146,11 +149,11 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
+                child: Text(l10n.cancel, style: TextStyle(color: c.textSecondary)),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Save'),
+                child: Text(l10n.save),
               ),
             ],
           );
@@ -168,22 +171,23 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
 
   Future<void> _removeMember(Member member) async {
     final c = context.colors;
+    final l10n = context.l10n;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: c.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Remove Member', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold)),
-        content: Text('Remove ${member.name} from this business?', style: TextStyle(color: c.textSecondary)),
+        title: Text(l10n.removeMemberTitle, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold)),
+        content: Text(l10n.removeMemberConfirm(member.name), style: TextStyle(color: c.textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
+            child: Text(l10n.cancel, style: TextStyle(color: c.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: c.danger),
-            child: const Text('Remove'),
+            child: Text(l10n.remove),
           ),
         ],
       ),
@@ -198,6 +202,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
   }
 
   void _openMemberActions(Member member) {
+    final l10n = context.l10n;
     showModalBottomSheet(
       context: context,
       builder: (sheetContext) {
@@ -208,7 +213,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
             children: [
               ListTile(
                 leading: Icon(Icons.swap_horiz_rounded, color: c.textPrimary),
-                title: const Text('Change Role'),
+                title: Text(l10n.changeRole),
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _changeRole(member);
@@ -216,7 +221,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
               ),
               ListTile(
                 leading: Icon(Icons.person_remove_rounded, color: c.danger),
-                title: Text('Remove', style: TextStyle(color: c.danger)),
+                title: Text(l10n.remove, style: TextStyle(color: c.danger)),
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _removeMember(member);
@@ -231,22 +236,23 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
 
   Future<void> _leaveShop() async {
     final c = context.colors;
+    final l10n = context.l10n;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: c.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Leave Business', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to leave this business?', style: TextStyle(color: c.textSecondary)),
+        title: Text(l10n.leaveBusinessTitle, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold)),
+        content: Text(l10n.leaveBusinessConfirm, style: TextStyle(color: c.textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
+            child: Text(l10n.cancel, style: TextStyle(color: c.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: c.danger),
-            child: const Text('Leave'),
+            child: Text(l10n.leave),
           ),
         ],
       ),
@@ -262,8 +268,9 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(title: const Text('Manage Members')),
+      appBar: AppBar(title: Text(l10n.manageMembers)),
       floatingActionButton: _hasSession && !_loading
           ? FloatingActionButton(onPressed: _invite, child: const Icon(Icons.person_add_rounded))
           : null,
@@ -274,7 +281,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(
-                      'Log out and log back in to enable member management.',
+                      l10n.noUserSessionMessage,
                       textAlign: TextAlign.center,
                       style: TextStyle(color: c.textSecondary),
                     ),
@@ -289,7 +296,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                           children: [
                             Text(_loadError!, textAlign: TextAlign.center, style: TextStyle(color: c.textSecondary)),
                             const SizedBox(height: 12),
-                            ElevatedButton(onPressed: _load, child: const Text('Retry')),
+                            ElevatedButton(onPressed: _load, child: Text(l10n.retry)),
                           ],
                         ),
                       ),
@@ -305,7 +312,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                               padding: const EdgeInsets.only(top: 16),
                               child: TextButton(
                                 onPressed: _leaveShop,
-                                child: Text('Leave this business', style: TextStyle(color: c.danger)),
+                                child: Text(l10n.leaveThisBusiness, style: TextStyle(color: c.danger)),
                               ),
                             );
                           }

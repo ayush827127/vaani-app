@@ -2056,4 +2056,83 @@ class AppLocalizationsHi extends AppLocalizations {
   String resendOtpIn(String seconds) {
     return '$secondsसेकंड में OTP फिर भेजें';
   }
+
+  @override
+  String get team => 'टीम';
+
+  @override
+  String get manageMembers => 'सदस्य प्रबंधित करें';
+
+  @override
+  String get inviteMember => 'सदस्य आमंत्रित करें';
+
+  @override
+  String get phoneNumberLabel => 'फ़ोन नंबर';
+
+  @override
+  String get roleLabel => 'भूमिका';
+
+  @override
+  String get sendInvite => 'आमंत्रण भेजें';
+
+  @override
+  String get changeRole => 'भूमिका बदलें';
+
+  @override
+  String get removeMemberTitle => 'सदस्य हटाएं';
+
+  @override
+  String removeMemberConfirm(String name) {
+    return '$name को इस व्यवसाय से हटाएं?';
+  }
+
+  @override
+  String get leaveBusinessTitle => 'व्यवसाय छोड़ें';
+
+  @override
+  String get leaveBusinessConfirm =>
+      'क्या आप वाकई इस व्यवसाय को छोड़ना चाहते हैं?';
+
+  @override
+  String get leave => 'छोड़ें';
+
+  @override
+  String get leaveThisBusiness => 'यह व्यवसाय छोड़ें';
+
+  @override
+  String get noUserSessionMessage =>
+      'सदस्य प्रबंधन सक्षम करने के लिए लॉग आउट करें और फिर से लॉग इन करें।';
+
+  @override
+  String get retry => 'पुनः प्रयास करें';
+
+  @override
+  String get invalidPhoneNumber => 'एक मान्य 10-अंकीय फ़ोन नंबर दर्ज करें';
+
+  @override
+  String get invitationSent => 'आमंत्रण भेजा गया';
+
+  @override
+  String get joinBusinessTitle => 'व्यवसाय से जुड़ें';
+
+  @override
+  String get noInvitationsFound => 'कोई लंबित आमंत्रण नहीं मिला।';
+
+  @override
+  String roleValue(String role) {
+    return 'भूमिका: $role';
+  }
+
+  @override
+  String get reject => 'अस्वीकार करें';
+
+  @override
+  String get join => 'जुड़ें';
+
+  @override
+  String get createBusinessInstead => 'इसके बजाय नया व्यवसाय बनाएं';
+
+  @override
+  String get joinedSyncPending =>
+      'शामिल हो गए — दुकान डेटा प्राप्त करने के लिए सर्वर तक नहीं पहुंच सके, यह अपने आप फिर से प्रयास करेगा।';
 }

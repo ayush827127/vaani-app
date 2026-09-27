@@ -134,8 +134,16 @@ class DataSyncRepository {
     final isDemoMode = prefs.getBool(AppConstants.keyIsDemoMode) ?? false;
     if (isDemoMode) return const SyncResult(success: false);
 
-    final token = prefs.getString(AppConstants.keyShopBackendToken);
+    // Falls back to the new User-token when no legacy Shop-token is cached
+    // — the case for an invited member's device, which can never obtain a
+    // legacy token at all (that's only ever issued to Shop.phone itself).
+    // The backend's requireShopOrUserContext already accepts either type
+    // transparently; this is the one place the phone-side needs to pick.
+    final legacyToken = prefs.getString(AppConstants.keyShopBackendToken);
+    final userToken = prefs.getString(AppConstants.keyUserBackendToken);
+    final token = legacyToken ?? userToken;
     if (token == null) return const SyncResult(success: false);
+    final usingUserToken = legacyToken == null;
 
     try {
       final shop = await _shopRepo.getShop();
@@ -239,11 +247,12 @@ class DataSyncRepository {
         paymentTransactions: received['paymentTransactions'] as int? ?? 0,
       );
     } on UnauthorizedException {
-      // Dead token — clear it so the app stops silently retrying something
-      // that can never succeed without a fresh login. There's no refresh-
-      // token flow, so this can only be resolved by the user logging out
-      // and back in (which requires an SMS OTP) — never by retrying.
-      await prefs.remove(AppConstants.keyShopBackendToken);
+      // Dead token — clear whichever one was actually used, so the app
+      // stops silently retrying something that can never succeed without a
+      // fresh login. There's no refresh-token flow, so this can only be
+      // resolved by the user logging out and back in (which requires an
+      // SMS OTP) — never by retrying.
+      await prefs.remove(usingUserToken ? AppConstants.keyUserBackendToken : AppConstants.keyShopBackendToken);
       return const SyncResult(success: false, sessionExpired: true);
     } catch (e, st) {
       // Full stack goes to the device log; only the top frame (where the

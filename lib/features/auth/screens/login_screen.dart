@@ -291,11 +291,24 @@ class _LoginScreenState extends State<LoginScreen> {
         }
         context.go('/home');
       } else {
-        // Backend confirmed: no shop exists for this phone anywhere.
-        await prefs.setString(AppConstants.keyPendingOtpToken, otpToken);
+        // Backend confirmed: no legacy shop exists for this phone anywhere.
+        // Before assuming "genuinely new, go create a shop", best-effort
+        // check whether this phone has a pending invitation instead — see
+        // MemberRepository.checkForPendingInvitations's doc comment. Any
+        // failure here (or simply no invitations) falls straight through to
+        // today's exact existing behavior.
+        final invitations =
+            await getIt<MemberRepository>().checkForPendingInvitations(phone, otpToken);
+        if (invitations.isEmpty) {
+          await prefs.setString(AppConstants.keyPendingOtpToken, otpToken);
+        }
         if (!mounted) return;
         setState(() => _isLoading = false);
-        context.go('/setup');
+        if (invitations.isNotEmpty) {
+          context.go('/join-business', extra: {'phone': phone, 'otpToken': otpToken});
+        } else {
+          context.go('/setup');
+        }
       }
     } catch (e) {
       if (!mounted) return;

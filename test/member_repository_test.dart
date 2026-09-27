@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vaani/core/utils/constants.dart';
 import 'package:vaani/features/members/models/member.dart';
+import 'package:vaani/features/members/models/invitation.dart';
 import 'package:vaani/features/members/repositories/member_repository.dart';
 import 'package:vaani/features/members/services/member_api_client.dart';
 
@@ -12,6 +13,9 @@ class _FakeMemberApiClient implements MemberApiClient {
   UserAuthResult? loginResult;
   Object? loginError;
   List<Member> members = const [];
+  List<Invitation> invitations = const [];
+  AcceptedMembership? acceptResult;
+  String selectShopTokenReturned = 'refreshed-token';
 
   @override
   Future<UserAuthResult> loginAsUser(String phone, String otpToken) async {
@@ -32,6 +36,18 @@ class _FakeMemberApiClient implements MemberApiClient {
   Future<void> removeMember(String token, String shopUserId) async {}
   @override
   Future<void> leaveShop(String token) async {}
+
+  @override
+  Future<List<Invitation>> listMyInvitations(String token) async => invitations;
+
+  @override
+  Future<AcceptedMembership> acceptInvitation(String token, String invitationId) async => acceptResult!;
+
+  @override
+  Future<void> rejectInvitation(String token, String invitationId) async {}
+
+  @override
+  Future<String> selectShop(String token, String shopId) async => selectShopTokenReturned;
 }
 
 void main() {
@@ -80,5 +96,59 @@ void main() {
     final members = await repo.listMembers();
     expect(members, hasLength(1));
     expect(members.single.name, 'Ravi');
+  });
+
+  test('checkForPendingInvitations caches the session and returns the invitation list', () async {
+    fakeClient.loginResult =
+        const UserAuthResult(token: 'user-token-1', activeShopId: null, memberships: []);
+    fakeClient.invitations = const [
+      Invitation(id: 'inv-1', shopId: 'shop-1', shopName: 'ABC Store', role: 'CASHIER'),
+    ];
+
+    final invitations = await repo.checkForPendingInvitations('9876543210', 'otp-token');
+
+    expect(invitations, hasLength(1));
+    expect(await repo.hasUserSession(), isTrue);
+  });
+
+  test('checkForPendingInvitations returns an empty list (never throws) on failure', () async {
+    fakeClient.loginError = Exception('network down');
+
+    final invitations = await repo.checkForPendingInvitations('9876543210', 'otp-token');
+
+    expect(invitations, isEmpty);
+  });
+
+  test('selectShopAndRefresh caches the fresh token and the new activeShopId', () async {
+    fakeClient.loginResult =
+        const UserAuthResult(token: 'user-token-1', activeShopId: null, memberships: []);
+    await repo.ensureUserSession('9876543210', 'otp-token');
+    fakeClient.selectShopTokenReturned = 'user-token-2';
+
+    await repo.selectShopAndRefresh('shop-1');
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(AppConstants.keyUserBackendToken), 'user-token-2');
+    expect(prefs.getString(AppConstants.keyActiveShopId), 'shop-1');
+  });
+
+  test('acceptInvitation requires a session and returns the enriched membership', () async {
+    fakeClient.loginResult =
+        const UserAuthResult(token: 'user-token-1', activeShopId: null, memberships: []);
+    await repo.ensureUserSession('9876543210', 'otp-token');
+    fakeClient.acceptResult = const AcceptedMembership(
+      shopId: 'shop-1',
+      shopName: 'ABC Store',
+      ownerName: 'Ramesh',
+      address: null,
+      gstNumber: null,
+      currency: 'INR',
+      gstEnabled: true,
+      defaultGstRate: 5.0,
+      upiId: null,
+    );
+
+    final result = await repo.acceptInvitation('inv-1');
+    expect(result.shopName, 'ABC Store');
   });
 }

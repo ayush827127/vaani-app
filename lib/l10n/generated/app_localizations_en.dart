@@ -2059,4 +2059,83 @@ class AppLocalizationsEn extends AppLocalizations {
   String resendOtpIn(String seconds) {
     return 'Resend OTP in ${seconds}s';
   }
+
+  @override
+  String get team => 'Team';
+
+  @override
+  String get manageMembers => 'Manage Members';
+
+  @override
+  String get inviteMember => 'Invite Member';
+
+  @override
+  String get phoneNumberLabel => 'Phone number';
+
+  @override
+  String get roleLabel => 'Role';
+
+  @override
+  String get sendInvite => 'Send Invite';
+
+  @override
+  String get changeRole => 'Change Role';
+
+  @override
+  String get removeMemberTitle => 'Remove Member';
+
+  @override
+  String removeMemberConfirm(String name) {
+    return 'Remove $name from this business?';
+  }
+
+  @override
+  String get leaveBusinessTitle => 'Leave Business';
+
+  @override
+  String get leaveBusinessConfirm =>
+      'Are you sure you want to leave this business?';
+
+  @override
+  String get leave => 'Leave';
+
+  @override
+  String get leaveThisBusiness => 'Leave this business';
+
+  @override
+  String get noUserSessionMessage =>
+      'Log out and log back in to enable member management.';
+
+  @override
+  String get retry => 'Retry';
+
+  @override
+  String get invalidPhoneNumber => 'Enter a valid 10-digit phone number';
+
+  @override
+  String get invitationSent => 'Invitation sent';
+
+  @override
+  String get joinBusinessTitle => 'Join a Business';
+
+  @override
+  String get noInvitationsFound => 'No pending invitations found.';
+
+  @override
+  String roleValue(String role) {
+    return 'Role: $role';
+  }
+
+  @override
+  String get reject => 'Reject';
+
+  @override
+  String get join => 'Join';
+
+  @override
+  String get createBusinessInstead => 'Create a new business instead';
+
+  @override
+  String get joinedSyncPending =>
+      'Joined — couldn\'t reach the server to pull shop data yet, will retry automatically.';
 }

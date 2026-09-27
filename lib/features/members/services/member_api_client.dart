@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/member.dart';
+import '../models/invitation.dart';
 
 class UserAuthResult {
   final String token;
@@ -133,6 +134,46 @@ class MemberApiClient {
         .post(Uri.parse('$_baseUrl/api/shop/members/leave'), headers: _authHeaders(token))
         .timeout(const Duration(seconds: 60));
     _unwrap(response);
+  }
+
+  /// requireUser only on the backend — no active membership needed, since
+  /// the whole point is someone who isn't a member yet needs to see this.
+  Future<List<Invitation>> listMyInvitations(String token) async {
+    final response = await _sendWithRetry(() => _client
+        .get(Uri.parse('$_baseUrl/api/shop/invitations'), headers: _authHeaders(token))
+        .timeout(const Duration(seconds: 60)));
+    final data = _unwrap(response) as List;
+    return data.map((e) => Invitation.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<AcceptedMembership> acceptInvitation(String token, String invitationId) async {
+    final response = await _client
+        .post(Uri.parse('$_baseUrl/api/shop/invitations/$invitationId/accept'), headers: _authHeaders(token))
+        .timeout(const Duration(seconds: 60));
+    return AcceptedMembership.fromJson(_unwrap(response) as Map<String, dynamic>);
+  }
+
+  Future<void> rejectInvitation(String token, String invitationId) async {
+    final response = await _client
+        .post(Uri.parse('$_baseUrl/api/shop/invitations/$invitationId/reject'), headers: _authHeaders(token))
+        .timeout(const Duration(seconds: 60));
+    _unwrap(response);
+  }
+
+  /// Fresh token carrying [shopId] as the active business — needed after
+  /// accepting an invitation, since the token obtained when first checking
+  /// for invitations was issued before any membership existed, so it could
+  /// never carry the new shop by itself.
+  Future<String> selectShop(String token, String shopId) async {
+    final response = await _client
+        .post(
+          Uri.parse('$_baseUrl/api/user/auth/select-shop'),
+          headers: _authHeaders(token),
+          body: jsonEncode({'shopId': shopId}),
+        )
+        .timeout(const Duration(seconds: 60));
+    final data = _unwrap(response) as Map<String, dynamic>;
+    return data['token'] as String;
   }
 
   dynamic _unwrap(http.Response response) {

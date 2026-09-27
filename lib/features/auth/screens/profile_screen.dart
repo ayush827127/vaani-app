@@ -480,10 +480,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                     // Team
                     _SettingsCard(children: [
-                      _SectionHeader('Team'),
+                      _SectionHeader(l10n.team),
                       _SettingsTile(
                         icon: Icons.group_rounded,
-                        title: 'Manage Members',
+                        title: l10n.manageMembers,
                         onTap: () => context.push('/profile/members'),
                       ),
                     ]),
