@@ -38,20 +38,33 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen>
   // Guards against a double-tap on Delete firing two deletes for the same
   // item while the first is still in flight.
   bool _isDeleting = false;
-  late final TabController _tabController;
+  // Created (and recreated, if the tab count itself changes — e.g. editing
+  // an item from Product to Service) lazily in build(), once the item is
+  // loaded and its tab count is actually known — a service has no
+  // Transactions tab at all, not just an empty one, so the tab count isn't
+  // a fixed 4 the way it used to be.
+  TabController? _tabController;
   String _txnFilter = 'all'; // all | purchases | sales | adjustments
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
     _load();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
+  }
+
+  /// (Re)creates the tab controller only when the tab count actually needs
+  /// to change, so switching tabs elsewhere in the widget doesn't reset the
+  /// user's current tab on every rebuild.
+  void _ensureTabController(int length) {
+    if (_tabController != null && _tabController!.length == length) return;
+    _tabController?.dispose();
+    _tabController = TabController(length: length, vsync: this);
   }
 
   Future<void> _load() async {
@@ -531,6 +544,34 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen>
     final headerStockLabel = isOut ? l10n.outOfStock : (isLow ? l10n.lowStock : l10n.inStock);
     final stockCardLabel = isOut ? l10n.outOfStock : (isLow ? l10n.lowStock : l10n.goodStockLabel);
 
+    // A service (or a Product with tracking off) has no stock movements at
+    // all, ever — so Transactions isn't just empty for it, it isn't shown
+    // as a tab in the first place. Every item still gets the same 3 tabs
+    // (Overview, Pricing, Details) either way.
+    final tabLabels = [
+      l10n.overviewTabLabel,
+      if (showInventory) l10n.transactionsTabLabel,
+      l10n.pricingTabLabel,
+      l10n.detailsTabLabel,
+    ];
+    final tabViews = [
+      _OverviewTab(
+        history: _stockHistory,
+        showInventory: showInventory,
+        onViewAll: () => _tabController?.animateTo(1),
+      ),
+      if (showInventory)
+        _TransactionsTab(
+          history: _stockHistory,
+          showInventory: showInventory,
+          filter: _txnFilter,
+          onFilterChanged: (f) => setState(() => _txnFilter = f),
+        ),
+      _PricingTab(item: p, margin: margin, profitAmount: profitAmount),
+      _DetailsTab(item: p, onCopyBarcode: _copyBarcode),
+    ];
+    _ensureTabController(tabLabels.length);
+
     return Scaffold(
       appBar: _buildHeader(context, p, headerStockLabel, stockColor, isServiceType, showInventory),
       // NestedScrollView is what makes the tab bar pin at the top only once
@@ -583,12 +624,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen>
                   unselectedLabelColor: c.textSecondary,
                   labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                  tabs: [
-                    Tab(text: l10n.overviewTabLabel, height: 52),
-                    Tab(text: l10n.transactionsTabLabel, height: 52),
-                    Tab(text: l10n.pricingTabLabel, height: 52),
-                    Tab(text: l10n.detailsTabLabel, height: 52),
-                  ],
+                  tabs: [for (final label in tabLabels) Tab(text: label, height: 52)],
                 ),
                 backgroundColor: c.surface,
                 borderColor: c.divider,
@@ -598,21 +634,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen>
         ],
         body: TabBarView(
           controller: _tabController,
-          children: [
-            _OverviewTab(
-              history: _stockHistory,
-              showInventory: showInventory,
-              onViewAll: () => _tabController.animateTo(1),
-            ),
-            _TransactionsTab(
-              history: _stockHistory,
-              showInventory: showInventory,
-              filter: _txnFilter,
-              onFilterChanged: (f) => setState(() => _txnFilter = f),
-            ),
-            _PricingTab(item: p, margin: margin, profitAmount: profitAmount),
-            _DetailsTab(item: p, onCopyBarcode: _copyBarcode),
-          ],
+          children: tabViews,
         ),
       ),
     );

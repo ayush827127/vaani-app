@@ -10,6 +10,7 @@ import '../../billing/repositories/payment_transaction_repository.dart';
 import '../../inventory/repositories/category_repository.dart';
 import '../../subscription/repositories/subscription_repository.dart';
 import '../../../shared/models/item.dart';
+import '../../../shared/models/item_image.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/models/invoice.dart';
 import '../../../shared/models/payment_transaction.dart';
@@ -184,6 +185,14 @@ class DataSyncRepository {
       final customersWithImages = await _withUploadedCustomerImages(customers);
       final logoUrl = await _withUploadedShopLogo(refreshedShop);
 
+      // Every item's full gallery rides alongside it in the same payload —
+      // see _itemJson's 'images' field and _mergeItems on the pull side.
+      final itemPayloads = <Map<String, dynamic>>[];
+      for (final p in itemsWithImages) {
+        final gallery = p.id != null ? await _itemRepo.getImages(p.id!) : const <ItemImage>[];
+        itemPayloads.add(_itemJson(p, gallery));
+      }
+
       final payload = {
         'shopProfile': {
           'name': refreshedShop.name,
@@ -205,7 +214,7 @@ class DataSyncRepository {
           // logging back in — this was a real, confirmed data-loss bug.
           if (logoUrl != null) 'logoUrl': logoUrl,
         },
-        'items': itemsWithImages.map(_itemJson).toList(),
+        'items': itemPayloads,
         'customers': customersWithImages.map(_customerJson).toList(),
         'invoices': invoices.map(_invoiceJson).toList(),
         'inventoryTransactions': inventoryTx.map(_inventoryTransactionJson).toList(),
@@ -248,25 +257,37 @@ class DataSyncRepository {
 
   /// Uploads any item image that hasn't made it to Cloudinary yet
   /// (imageUrl still null locally) and persists the result, so future syncs
-  /// skip it. Items whose upload fails (offline, misconfigured) are sent
-  /// as-is — image sync is best-effort and never blocks the rest of the sync.
+  /// skip it — every image in the gallery, not just the primary one,
+  /// otherwise a second/third photo never left the device. Items whose
+  /// upload fails (offline, misconfigured) are sent as-is — image sync is
+  /// best-effort and never blocks the rest of the sync.
   Future<List<Item>> _withUploadedItemImages(List<Item> items) async {
     if (!_cloudinary.isConfigured) return items;
     final result = <Item>[];
     for (final p in items) {
-      if (p.imageUrl == null &&
-          p.imagePath != null &&
-          p.imagePath!.isNotEmpty &&
-          p.id != null &&
-          await File(p.imagePath!).exists()) {
-        final url = await _cloudinary.uploadImage(p.imagePath!);
-        if (url != null) {
-          await _itemRepo.setImageUrl(p.id!, url);
-          result.add(p.copyWith(imageUrl: url));
-          continue;
+      if (p.id == null) {
+        result.add(p);
+        continue;
+      }
+      var anyUploaded = false;
+      final gallery = await _itemRepo.getImages(p.id!);
+      for (final img in gallery) {
+        if (img.imageUrl == null &&
+            img.imagePath != null &&
+            img.imagePath!.isNotEmpty &&
+            img.id != null &&
+            await File(img.imagePath!).exists()) {
+          final url = await _cloudinary.uploadImage(img.imagePath!);
+          if (url != null) {
+            await _itemRepo.setImageImageUrl(img.id!, url);
+            anyUploaded = true;
+          }
         }
       }
-      result.add(p);
+      // The item's own imageUrl/imagePath cache only changes when the
+      // primary row got uploaded above (setImageImageUrl re-syncs the
+      // cache itself) — re-reading picks that up for _itemJson.
+      result.add(anyUploaded ? (await _itemRepo.getItemById(p.id!)) ?? p : p);
     }
     return result;
   }
@@ -353,7 +374,10 @@ class DataSyncRepository {
           cloudUpdatedAt: cloudUpdatedAt)) {
         continue;
       }
-      await _itemRepo.upsertFromCloud(_itemFromCloudJson(json, shopId, isDeleted: isDeleted));
+      await _itemRepo.upsertFromCloud(
+        _itemFromCloudJson(json, shopId, isDeleted: isDeleted),
+        images: (json['images'] as List?)?.cast<Map<String, dynamic>>() ?? const [],
+      );
       touched.add(localId);
     }
     return touched;
@@ -603,7 +627,7 @@ class DataSyncRepository {
     );
   }
 
-  Map<String, dynamic> _itemJson(Item p) => {
+  Map<String, dynamic> _itemJson(Item p, List<ItemImage> images) => {
         'localId': p.id,
         'name': p.name,
         'sku': p.sku,
@@ -619,6 +643,19 @@ class DataSyncRepository {
         'itemType': p.itemType.dbValue,
         'inventoryEnabled': p.inventoryEnabled,
         'aliases': p.aliases,
+        // The full gallery, so every item behaves identically after a sync
+        // round-trip instead of only its primary image surviving. A local
+        // file path is never sent (meaningless off-device) — an image not
+        // yet uploaded to Cloudinary is simply skipped, same as the single
+        // imagePath/imageUrl pair above.
+        'images': images
+            .where((img) => img.imageUrl != null)
+            .map((img) => {
+                  'imageUrl': img.imageUrl,
+                  'sortOrder': img.sortOrder,
+                  'isPrimary': img.isPrimary,
+                })
+            .toList(),
         'isActive': p.isActive,
         'createdAt': p.createdAt.toIso8601String(),
         'updatedAt': p.updatedAt.toIso8601String(),

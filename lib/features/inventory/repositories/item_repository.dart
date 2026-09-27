@@ -243,11 +243,28 @@ class ItemRepository {
   ///   column is just whichever device last pushed it, a file path
   ///   meaningless on any other device, so it must never overwrite this
   ///   device's own reference to its own locally cached file.
-  Future<void> upsertFromCloud(Item item) async {
+  ///
+  /// [images] is the cloud's full gallery for this item (see _insertCloudImages)
+  /// — kept separate from [item] because the wire format carries it
+  /// alongside the item JSON rather than on the Item model itself.
+  Future<void> upsertFromCloud(Item item, {List<Map<String, dynamic>> images = const []}) async {
     final db = await _db.database;
     final existing = await db.query('items',
         columns: ['image_path'], where: 'id = ?', whereArgs: [item.id]);
     final localImagePath = existing.isNotEmpty ? existing.first['image_path'] as String? : null;
+
+    // Captured before the items REPLACE below — item_images has
+    // ON DELETE CASCADE on item_id, and conflictAlgorithm.replace performs a
+    // real delete-then-insert under the hood, so by the time a merge step
+    // ran its own query afterwards, every existing gallery row for this item
+    // (and with it, this device's own local file paths) was already gone.
+    final existingImages =
+        await db.query('item_images', where: 'item_id = ?', whereArgs: [item.id]);
+    final localPathByUrl = <String, String>{
+      for (final row in existingImages)
+        if (row['image_url'] != null && row['image_path'] != null)
+          row['image_url'] as String: row['image_path'] as String,
+    };
 
     final map = item.toMap();
     map['image_path'] = localImagePath;
@@ -268,6 +285,40 @@ class ItemRepository {
         });
       }
     }
+
+    await _insertCloudImages(item.id!, images, localPathByUrl);
+  }
+
+  /// Rebuilds this item's gallery from the cloud's list (any pre-existing
+  /// rows are already gone — see the cascade-delete note in
+  /// [upsertFromCloud]). Every pulled image carries only a URL (never a
+  /// local file path — meaningless off-device), so [localPathByUrl] —
+  /// captured from this device's own rows before they were cascade-deleted —
+  /// is used to re-attach a local file to any URL this device already had,
+  /// otherwise a device would lose its own direct file reference to an image
+  /// it uploaded itself moments earlier, forcing it back onto the network to
+  /// redisplay a photo it already has on disk.
+  Future<void> _insertCloudImages(
+      int itemId, List<Map<String, dynamic>> images, Map<String, String> localPathByUrl) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      // Explicit, not just relying on the items REPLACE's cascade — belt and
+      // braces in case foreign_keys enforcement is ever off for a
+      // connection (WAL/pragma settings vary by platform).
+      await txn.delete('item_images', where: 'item_id = ?', whereArgs: [itemId]);
+      for (var i = 0; i < images.length; i++) {
+        final url = images[i]['imageUrl'] as String?;
+        await txn.insert('item_images', {
+          'item_id': itemId,
+          'image_path': url != null ? localPathByUrl[url] : null,
+          'image_url': url,
+          'sort_order': images[i]['sortOrder'] as int? ?? i,
+          'is_primary': (images[i]['isPrimary'] as bool? ?? i == 0) ? 1 : 0,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      }
+      await _syncPrimaryCache(txn, itemId);
+    });
   }
 
   Future<void> deleteItem(int id) async {
@@ -426,6 +477,16 @@ class ItemRepository {
     );
   }
 
+  /// Every gallery mutation must bump this so the item is picked up by
+  /// [getItemsUpdatedSince] (push) and wins freshness comparisons on pull —
+  /// without it, adding a second/third (non-primary) image never changed any
+  /// column on `items` itself, so the item was never queued for push at all
+  /// and that image silently never reached the cloud.
+  Future<void> _touchItemUpdatedAt(DatabaseExecutor txn, int itemId) async {
+    await txn.update('items', {'updated_at': DateTime.now().toIso8601String()},
+        where: 'id = ?', whereArgs: [itemId]);
+  }
+
   /// Adds one image to the item's gallery. The very first image an item
   /// gets is automatically primary (there's nothing to choose between yet);
   /// later ones are added non-primary — the caller uses [setPrimaryImage]
@@ -447,7 +508,25 @@ class ItemRepository {
         'created_at': DateTime.now().toIso8601String(),
       });
       if (isFirst) await _syncPrimaryCache(txn, itemId);
+      await _touchItemUpdatedAt(txn, itemId);
       return id;
+    });
+  }
+
+  /// Persists a Cloudinary URL for one already-added image — the per-image
+  /// counterpart of [setImageUrl], called by cloud sync's push step once it
+  /// uploads a not-yet-uploaded gallery image (every image, not just the
+  /// primary one).
+  Future<void> setImageImageUrl(int imageId, String url) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      final rows = await txn.query('item_images',
+          columns: ['item_id', 'is_primary'], where: 'id = ?', whereArgs: [imageId]);
+      if (rows.isEmpty) return;
+      await txn.update('item_images', {'image_url': url}, where: 'id = ?', whereArgs: [imageId]);
+      if ((rows.first['is_primary'] as int? ?? 0) == 1) {
+        await _syncPrimaryCache(txn, rows.first['item_id'] as int);
+      }
     });
   }
 
@@ -470,6 +549,7 @@ class ItemRepository {
         }
         await _syncPrimaryCache(txn, itemId);
       }
+      await _touchItemUpdatedAt(txn, itemId);
     });
   }
 
@@ -479,6 +559,7 @@ class ItemRepository {
       await txn.update('item_images', {'is_primary': 0}, where: 'item_id = ?', whereArgs: [itemId]);
       await txn.update('item_images', {'is_primary': 1}, where: 'id = ?', whereArgs: [imageId]);
       await _syncPrimaryCache(txn, itemId);
+      await _touchItemUpdatedAt(txn, itemId);
     });
   }
 
@@ -491,6 +572,7 @@ class ItemRepository {
         await txn.update('item_images', {'sort_order': i},
             where: 'id = ?', whereArgs: [orderedImageIds[i]]);
       }
+      await _touchItemUpdatedAt(txn, itemId);
     });
   }
 }

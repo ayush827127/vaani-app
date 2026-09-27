@@ -51,7 +51,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
   final _aliasCtrl = TextEditingController();
 
   String? _category;
-  double _gstRate = 5.0;
+  double _gstRate = 0.0;
   ItemType _itemType = ItemType.product;
   // Independently overridable from _itemType (see the note on
   // Item.inventoryEnabled) — but new items default it from the type picked,
@@ -630,7 +630,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
             ),
           ),
           items: AppConstants.gstRates.map((r) => DropdownMenuItem(value: r, child: Text('${r.toInt()}%'))).toList(),
-          onChanged: (v) => setState(() => _gstRate = v ?? 5.0),
+          onChanged: (v) => setState(() => _gstRate = v ?? 0.0),
         ),
         const SizedBox(height: 20),
         _buildBarcodeSection(l10n, c),
