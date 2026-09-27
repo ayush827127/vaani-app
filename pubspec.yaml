@@ -1,7 +1,7 @@
 name: vaani
 description: "Vaani - AI Store Manager. Voice Billing, Inventory, Invoice, Reports."
 publish_to: 'none'
-version: 1.0.0+2
+version: 1.0.0+4
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -62,7 +62,7 @@ dependencies:
   barcode_widget: ^2.0.4
 
   # Barcode / QR scanner
-  mobile_scanner: ^5.2.3
+  mobile_scanner: ^7.4.0
 
   # Thermal printer support
   esc_pos_utils_plus: ^2.0.4
