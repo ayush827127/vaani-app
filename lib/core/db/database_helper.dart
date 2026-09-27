@@ -310,6 +310,26 @@ class DatabaseHelper {
         await db.execute('ALTER TABLE invoices ADD COLUMN previous_due REAL NOT NULL DEFAULT 0');
       }
     }
+    if (oldVersion < 18) {
+      // Snapshots the customer's totalOutstanding/advanceBalance immediately
+      // before this transaction, captured once at insert time (see
+      // PaymentTransactionRepository.insert()) — lets the backend detect a
+      // real concurrent-write conflict on a customer's balance, the same way
+      // inventory transactions already let it detect one on stock. Existing
+      // rows have no way to recover what the balance actually was at the
+      // time, so they stay NULL — never invented.
+      final paymentTxnTable = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='payment_transactions'");
+      if (paymentTxnTable.isNotEmpty) {
+        final paymentTxnCols = await db.rawQuery("PRAGMA table_info(payment_transactions)");
+        if (!paymentTxnCols.any((c) => c['name'] == 'customer_outstanding_before')) {
+          await db.execute('ALTER TABLE payment_transactions ADD COLUMN customer_outstanding_before REAL');
+        }
+        if (!paymentTxnCols.any((c) => c['name'] == 'customer_advance_before')) {
+          await db.execute('ALTER TABLE payment_transactions ADD COLUMN customer_advance_before REAL');
+        }
+      }
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -517,6 +537,8 @@ class DatabaseHelper {
         deleted_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT,
+        customer_outstanding_before REAL,
+        customer_advance_before REAL,
         FOREIGN KEY (customer_id) REFERENCES customers(id),
         FOREIGN KEY (invoice_id) REFERENCES invoices(id)
       )

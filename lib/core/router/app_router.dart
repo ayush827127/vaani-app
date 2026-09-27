@@ -30,6 +30,8 @@ import '../../features/printer/screens/printer_settings_screen.dart';
 import '../../features/subscription/screens/subscription_screen.dart';
 import '../../features/members/screens/manage_members_screen.dart';
 import '../../features/members/screens/join_business_screen.dart';
+import '../../features/members/screens/select_business_screen.dart';
+import '../../features/members/models/membership.dart';
 import '../../shared/widgets/main_shell.dart';
 import '../utils/constants.dart';
 
@@ -61,6 +63,16 @@ GoRouter createRouter() => GoRouter(
           builder: (context, state) {
             final extra = state.extra as Map<String, String>;
             return JoinBusinessScreen(phone: extra['phone']!, otpToken: extra['otpToken']!);
+          },
+        ),
+        GoRoute(
+          path: '/select-business',
+          builder: (context, state) {
+            final extra = state.extra as Map<String, dynamic>;
+            return SelectBusinessScreen(
+              phone: extra['phone'] as String,
+              memberships: extra['memberships'] as List<Membership>,
+            );
           },
         ),
 

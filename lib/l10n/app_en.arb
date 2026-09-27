@@ -746,5 +746,7 @@
   "reject": "Reject",
   "join": "Join",
   "createBusinessInstead": "Create a new business instead",
-  "joinedSyncPending": "Joined — couldn't reach the server to pull shop data yet, will retry automatically."
+  "joinedSyncPending": "Joined — couldn't reach the server to pull shop data yet, will retry automatically.",
+  "selectBusinessTitle": "Select a Business",
+  "selectBusinessSubtitle": "You belong to more than one business. Pick one to continue."
 }

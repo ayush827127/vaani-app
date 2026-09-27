@@ -3985,6 +3985,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Joined — couldn\'t reach the server to pull shop data yet, will retry automatically.'**
   String get joinedSyncPending;
+
+  /// No description provided for @selectBusinessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a Business'**
+  String get selectBusinessTitle;
+
+  /// No description provided for @selectBusinessSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You belong to more than one business. Pick one to continue.'**
+  String get selectBusinessSubtitle;
 }
 
 class _AppLocalizationsDelegate

@@ -2135,4 +2135,11 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get joinedSyncPending =>
       'शामिल हो गए — दुकान डेटा प्राप्त करने के लिए सर्वर तक नहीं पहुंच सके, यह अपने आप फिर से प्रयास करेगा।';
+
+  @override
+  String get selectBusinessTitle => 'व्यवसाय चुनें';
+
+  @override
+  String get selectBusinessSubtitle =>
+      'आप एक से अधिक व्यवसायों से जुड़े हैं। जारी रखने के लिए एक चुनें।';
 }

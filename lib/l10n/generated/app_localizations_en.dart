@@ -2138,4 +2138,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get joinedSyncPending =>
       'Joined — couldn\'t reach the server to pull shop data yet, will retry automatically.';
+
+  @override
+  String get selectBusinessTitle => 'Select a Business';
+
+  @override
+  String get selectBusinessSubtitle =>
+      'You belong to more than one business. Pick one to continue.';
 }

@@ -106,6 +106,29 @@ class DataSyncRepository {
     this._cloudinary,
   );
 
+  /// Fetches just the shop's profile fields via the pull endpoint's
+  /// `shopProfile` — for the one moment before any local Shop row exists
+  /// yet, when every other pull path in this class assumes one already
+  /// does (see [_syncNow]'s early `shop?.id == null` return above). Used
+  /// only by the multi-business picker, right after
+  /// MemberRepository.selectShopAndRefresh has cached a token carrying the
+  /// newly chosen shopId — a full pull always includes shopProfile
+  /// (pullData's `shopChanged` is unconditionally true when `since` is
+  /// null). Returns null on any failure; the caller decides how to react.
+  Future<Map<String, dynamic>?> fetchShopProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(AppConstants.keyShopBackendToken) ??
+        prefs.getString(AppConstants.keyUserBackendToken);
+    if (token == null) return null;
+    try {
+      final response = await _api.pull(token, null);
+      return response['shopProfile'] as Map<String, dynamic>?;
+    } catch (e) {
+      debugPrint('[Sync] fetchShopProfile failed: $e');
+      return null;
+    }
+  }
+
   Future<DateTime?> getLastSyncedAt() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(AppConstants.keyLastFullSyncAt);
@@ -633,6 +656,8 @@ class DataSyncRepository {
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'] as String)
           : DateTime.parse(json['createdAt'] as String),
+      customerOutstandingBefore: (json['customerOutstandingBefore'] as num?)?.toDouble(),
+      customerAdvanceBefore: (json['customerAdvanceBefore'] as num?)?.toDouble(),
     );
   }
 
@@ -743,5 +768,13 @@ class DataSyncRepository {
         'notes': p.notes,
         'createdAt': p.createdAt.toIso8601String(),
         'updatedAt': (p.updatedAt ?? p.createdAt).toIso8601String(),
+        // Lets the backend detect a real concurrent-write conflict on this
+        // customer's balance — see PaymentTransactionRepository.insert()'s
+        // doc comment for where this gets captured. Omitted (not sent as
+        // null) when absent, so an older local row from before this field
+        // existed is simply never checked, never treated as a mismatch.
+        if (p.customerOutstandingBefore != null)
+          'customerOutstandingBefore': p.customerOutstandingBefore,
+        if (p.customerAdvanceBefore != null) 'customerAdvanceBefore': p.customerAdvanceBefore,
       };
 }

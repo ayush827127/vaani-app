@@ -5,9 +5,39 @@ import '../../../shared/models/payment_transaction.dart';
 class PaymentTransactionRepository {
   final DatabaseHelper _db = DatabaseHelper.instance;
 
+  /// The single choke point every payment/ledger mutation already goes
+  /// through (see PaymentTransaction's own doc comment listing every
+  /// transaction type) — so capturing the customer's balance immediately
+  /// before this insert, here, covers every call site with no changes
+  /// needed anywhere else. A caller-supplied snapshot (if [txn] already has
+  /// one) is respected as-is rather than overwritten, but no current call
+  /// site sets one — this always ends up being the freshly-read value.
   Future<int> insert(PaymentTransaction txn) async {
     final db = await _db.database;
-    final map = txn.toMap()..remove('id');
+    var toInsert = txn;
+    if (txn.customerOutstandingBefore == null && txn.customerAdvanceBefore == null) {
+      final rows = await db.query('customers',
+          columns: ['total_outstanding', 'advance_balance'],
+          where: 'id = ?',
+          whereArgs: [txn.customerId]);
+      if (rows.isNotEmpty) {
+        toInsert = PaymentTransaction(
+          shopId: txn.shopId,
+          customerId: txn.customerId,
+          invoiceId: txn.invoiceId,
+          type: txn.type,
+          amount: txn.amount,
+          paymentMode: txn.paymentMode,
+          notes: txn.notes,
+          deletedAt: txn.deletedAt,
+          createdAt: txn.createdAt,
+          updatedAt: txn.updatedAt,
+          customerOutstandingBefore: (rows.first['total_outstanding'] as num).toDouble(),
+          customerAdvanceBefore: (rows.first['advance_balance'] as num).toDouble(),
+        );
+      }
+    }
+    final map = toInsert.toMap()..remove('id');
     return db.insert('payment_transactions', map);
   }
 

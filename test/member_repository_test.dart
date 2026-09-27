@@ -105,18 +105,33 @@ void main() {
       Invitation(id: 'inv-1', shopId: 'shop-1', shopName: 'ABC Store', role: 'CASHIER'),
     ];
 
-    final invitations = await repo.checkForPendingInvitations('9876543210', 'otp-token');
+    final check = await repo.checkForPendingInvitations('9876543210', 'otp-token');
 
-    expect(invitations, hasLength(1));
+    expect(check.invitations, hasLength(1));
+    expect(check.memberships, isEmpty);
     expect(await repo.hasUserSession(), isTrue);
   });
 
-  test('checkForPendingInvitations returns an empty list (never throws) on failure', () async {
+  test('checkForPendingInvitations also surfaces 2+ active memberships for the select-business picker', () async {
+    fakeClient.loginResult = const UserAuthResult(token: 'user-token-1', activeShopId: null, memberships: [
+      {'shopId': 'shop-1', 'shopName': 'ABC Store', 'role': 'CASHIER', 'status': 'ACTIVE'},
+      {'shopId': 'shop-2', 'shopName': 'XYZ Store', 'role': 'MANAGER', 'status': 'ACTIVE'},
+    ]);
+
+    final check = await repo.checkForPendingInvitations('9876543210', 'otp-token');
+
+    expect(check.memberships, hasLength(2));
+    expect(check.memberships.first.shopName, 'ABC Store');
+    expect(check.invitations, isEmpty);
+  });
+
+  test('checkForPendingInvitations returns empty (never throws) on failure', () async {
     fakeClient.loginError = Exception('network down');
 
-    final invitations = await repo.checkForPendingInvitations('9876543210', 'otp-token');
+    final check = await repo.checkForPendingInvitations('9876543210', 'otp-token');
 
-    expect(invitations, isEmpty);
+    expect(check.invitations, isEmpty);
+    expect(check.memberships, isEmpty);
   });
 
   test('selectShopAndRefresh caches the fresh token and the new activeShopId', () async {

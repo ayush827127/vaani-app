@@ -6,10 +6,9 @@ import '../../../core/utils/constants.dart';
 import '../../../core/di/injector.dart';
 import '../../../l10n/l10n_extensions.dart';
 import '../../../shared/models/shop.dart';
-import '../../auth/repositories/shop_repository.dart';
-import '../../sync/repositories/data_sync_repository.dart';
 import '../models/invitation.dart';
 import '../repositories/member_repository.dart';
+import '../utils/complete_shop_join.dart';
 
 /// Shown instead of ShopSetupScreen when a brand-new phone (no local shop,
 /// no legacy cloud shop) turns out to have one or more pending invitations
@@ -78,26 +77,8 @@ class _JoinBusinessScreenState extends State<JoinBusinessScreen> {
         createdAt: now,
         updatedAt: now,
       );
-      final shopId = await getIt<ShopRepository>().createShop(shop);
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(AppConstants.keyIsLoggedIn, true);
-      await prefs.setBool(AppConstants.keyIsSetupComplete, true);
-      await prefs.setString(AppConstants.keyShopPhone, widget.phone);
-      await prefs.setInt(AppConstants.keyShopId, shopId);
-
-      // Await (don't fire-and-forget), same reasoning as the "returning
-      // shop, new device" branch in login_screen.dart — this is what
-      // actually pulls the shop's data down, so the user shouldn't land on
-      // an empty dashboard while it happens invisibly in the background.
-      final syncResult = await getIt<DataSyncRepository>().syncNow();
       if (!mounted) return;
-      if (!syncResult.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.joinedSyncPending)),
-        );
-      }
-      context.go('/home');
+      await completeShopJoin(context, shop: shop, phone: widget.phone);
     } catch (e) {
       if (!mounted) return;
       setState(() => _actingOnId = null);

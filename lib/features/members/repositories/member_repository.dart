@@ -3,7 +3,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/constants.dart';
 import '../models/member.dart';
 import '../models/invitation.dart';
+import '../models/membership.dart';
 import '../services/member_api_client.dart';
+
+/// What checkForPendingInvitations found for a phone with no local shop and
+/// no legacy cloud shop — everything the login screen needs to decide
+/// between "genuinely new" (/setup), "one pending invite" (/join-business),
+/// or "already belongs to 2+ businesses" (/select-business).
+class PendingInvitationsCheck {
+  final List<Invitation> invitations;
+  final List<Membership> memberships;
+  const PendingInvitationsCheck({required this.invitations, required this.memberships});
+  static const empty = PendingInvitationsCheck(invitations: [], memberships: []);
+}
 
 /// Thrown by every pass-through method below when no user session has ever
 /// been cached — there's no way to silently recover this outside the login
@@ -46,17 +58,20 @@ class MemberRepository {
 
   /// Same login call as [ensureUserSession], but for the login screen's
   /// "no local shop, no cloud shop" branch — also checks for pending
-  /// invitations before that branch assumes "genuinely new, go create a
-  /// shop". Returns an empty list (never throws) on any failure, so the
-  /// caller can simply fall through to today's existing behavior.
-  Future<List<Invitation>> checkForPendingInvitations(String phone, String otpToken) async {
+  /// invitations and existing active memberships before that branch assumes
+  /// "genuinely new, go create a shop". Returns [PendingInvitationsCheck.empty]
+  /// (never throws) on any failure, so the caller can simply fall through to
+  /// today's existing behavior.
+  Future<PendingInvitationsCheck> checkForPendingInvitations(String phone, String otpToken) async {
     try {
       final result = await _client.loginAsUser(phone, otpToken);
       await _cacheSession(result.token, result.activeShopId);
-      return await _client.listMyInvitations(result.token);
+      final invitations = await _client.listMyInvitations(result.token);
+      final memberships = result.memberships.map(Membership.fromJson).toList();
+      return PendingInvitationsCheck(invitations: invitations, memberships: memberships);
     } catch (e) {
       debugPrint('[MemberRepository] checkForPendingInvitations failed (non-fatal): $e');
-      return const [];
+      return PendingInvitationsCheck.empty;
     }
   }
 

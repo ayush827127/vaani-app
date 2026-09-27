@@ -297,16 +297,19 @@ class _LoginScreenState extends State<LoginScreen> {
         // MemberRepository.checkForPendingInvitations's doc comment. Any
         // failure here (or simply no invitations) falls straight through to
         // today's exact existing behavior.
-        final invitations =
+        final check =
             await getIt<MemberRepository>().checkForPendingInvitations(phone, otpToken);
-        if (invitations.isEmpty) {
-          await prefs.setString(AppConstants.keyPendingOtpToken, otpToken);
-        }
         if (!mounted) return;
         setState(() => _isLoading = false);
-        if (invitations.isNotEmpty) {
+        if (check.memberships.length >= 2) {
+          // Already an accepted member of 2+ businesses (e.g. a fresh
+          // install/new device) — let them pick which one to load, instead
+          // of silently guessing.
+          context.go('/select-business', extra: {'phone': phone, 'memberships': check.memberships});
+        } else if (check.invitations.isNotEmpty) {
           context.go('/join-business', extra: {'phone': phone, 'otpToken': otpToken});
         } else {
+          await prefs.setString(AppConstants.keyPendingOtpToken, otpToken);
           context.go('/setup');
         }
       }

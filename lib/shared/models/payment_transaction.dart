@@ -29,6 +29,15 @@ class PaymentTransaction {
   final DateTime? deletedAt;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  // The customer's totalOutstanding/advanceBalance immediately before this
+  // transaction — captured once by PaymentTransactionRepository.insert(),
+  // never by any other call site. Nullable: a row created before this field
+  // existed has no way to recover what the balance actually was at the
+  // time, and stays null rather than inventing a value. Lets the backend
+  // detect a real concurrent-write conflict on a customer's balance, the
+  // same way inventory transactions already let it detect one on stock.
+  final double? customerOutstandingBefore;
+  final double? customerAdvanceBefore;
 
   const PaymentTransaction({
     this.id,
@@ -42,6 +51,8 @@ class PaymentTransaction {
     this.deletedAt,
     required this.createdAt,
     this.updatedAt,
+    this.customerOutstandingBefore,
+    this.customerAdvanceBefore,
   });
 
   // deleted_at is deliberately excluded — see the matching note on
@@ -58,6 +69,8 @@ class PaymentTransaction {
         'notes': notes,
         'created_at': createdAt.toIso8601String(),
         'updated_at': (updatedAt ?? createdAt).toIso8601String(),
+        'customer_outstanding_before': customerOutstandingBefore,
+        'customer_advance_before': customerAdvanceBefore,
       };
 
   factory PaymentTransaction.fromMap(Map<String, dynamic> map) =>
@@ -75,5 +88,7 @@ class PaymentTransaction {
         updatedAt: map['updated_at'] != null
             ? DateTime.tryParse(map['updated_at'] as String)
             : null,
+        customerOutstandingBefore: (map['customer_outstanding_before'] as num?)?.toDouble(),
+        customerAdvanceBefore: (map['customer_advance_before'] as num?)?.toDouble(),
       );
 }
