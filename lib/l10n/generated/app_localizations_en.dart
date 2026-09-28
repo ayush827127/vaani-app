@@ -1786,20 +1786,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get verifyLogin => 'Verify & Login';
 
   @override
-  String get exploreDemoStore => 'Explore with Demo Store';
-
-  @override
   String get termsPrivacyNotice =>
       'By continuing, you agree to our Terms of Service\nand Privacy Policy.';
-
-  @override
-  String get settingUpDemoStore =>
-      'Setting up demo store...\nThis may take 30–60 seconds.';
-
-  @override
-  String demoSetupFailed(String error) {
-    return 'Demo setup failed: $error';
-  }
 
   @override
   String loginError(String error) {

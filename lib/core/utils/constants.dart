@@ -17,7 +17,6 @@ class AppConstants {
   static const String keyThemeMode = 'theme_mode';
   static const String keyShopPhone = 'shop_phone';
   static const String keyShopId = 'shop_id';
-  static const String keyIsDemoMode = 'is_demo_mode';
   static const String keyShopBackendToken = 'shop_backend_token';
   // The new User-scoped token (dormant alongside the legacy shop token —
   // see MemberRepository.ensureUserSession) and the shop it auto-selected.

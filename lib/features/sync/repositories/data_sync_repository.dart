@@ -136,8 +136,8 @@ class DataSyncRepository {
   }
 
   /// Pushes everything changed since the last successful sync to the
-  /// backend. Demo shops are never synced. Never throws — failures (offline,
-  /// not yet linked to the backend, backend unreachable) return
+  /// backend. Never throws — failures (offline, not yet linked to the
+  /// backend, backend unreachable) return
   /// `SyncResult(success: false)` so callers can always call this safely.
   /// An expired/rejected shop token instead returns
   /// `SyncResult(success: false, sessionExpired: true)` — see
@@ -154,8 +154,6 @@ class DataSyncRepository {
 
   Future<SyncResult> _syncNow() async {
     final prefs = await SharedPreferences.getInstance();
-    final isDemoMode = prefs.getBool(AppConstants.keyIsDemoMode) ?? false;
-    if (isDemoMode) return const SyncResult(success: false);
 
     // Falls back to the new User-token when no legacy Shop-token is cached
     // — the case for an invited member's device, which can never obtain a

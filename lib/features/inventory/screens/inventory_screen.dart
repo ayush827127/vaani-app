@@ -603,6 +603,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
               backgroundColor: AppColors.primaryLight,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
+              // The app theme's ElevatedButtonThemeData defaults every
+              // button to a full-width minimumSize (right for a form's
+              // primary CTA) — this one sits centered in an empty state, not
+              // a form, so it must opt back out of that or it stretches
+              // edge-to-edge here instead of hugging its own content.
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             ),
           ),
         ],

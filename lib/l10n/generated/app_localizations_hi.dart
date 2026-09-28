@@ -1785,20 +1785,8 @@ class AppLocalizationsHi extends AppLocalizations {
   String get verifyLogin => 'सत्यापित करें और लॉगिन करें';
 
   @override
-  String get exploreDemoStore => 'डेमो स्टोर के साथ देखें';
-
-  @override
   String get termsPrivacyNotice =>
       'जारी रखकर, आप हमारी सेवा की शर्तों\nऔर गोपनीयता नीति से सहमत होते हैं।';
-
-  @override
-  String get settingUpDemoStore =>
-      'डेमो स्टोर सेट किया जा रहा है...\nइसमें 30–60 सेकंड लग सकते हैं।';
-
-  @override
-  String demoSetupFailed(String error) {
-    return 'डेमो सेटअप विफल: $error';
-  }
 
   @override
   String loginError(String error) {

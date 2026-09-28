@@ -69,7 +69,6 @@ Future<void> performLogout(
   await prefs.setBool(AppConstants.keyIsSetupComplete, false);
   await prefs.remove(AppConstants.keyShopPhone);
   await prefs.remove(AppConstants.keyShopId);
-  await prefs.remove(AppConstants.keyIsDemoMode);
   // Full session-scoped clear — without this, setting up a *different* shop
   // later on this device could reuse this account's backend token or cached
   // subscription status, and worse, its stale pull cursor: the next shop's

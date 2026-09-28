@@ -75,9 +75,6 @@ class SubscriptionRepository {
 
   Future<void> refreshStatus({String? otpToken}) async {
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(AppConstants.keyIsDemoMode) ?? false) {
-      return; // demo shops are a local sandbox, never registered with the backend
-    }
     try {
       await _syncOnce(prefs, otpToken: otpToken);
     } catch (_) {

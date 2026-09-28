@@ -620,11 +620,7 @@
   "signInHint": "Sign in to manage your store",
   "mobileNumber": "Mobile Number",
   "verifyLogin": "Verify & Login",
-  "exploreDemoStore": "Explore with Demo Store",
   "termsPrivacyNotice": "By continuing, you agree to our Terms of Service\nand Privacy Policy.",
-  "settingUpDemoStore": "Setting up demo store...\nThis may take 30–60 seconds.",
-  "demoSetupFailed": "Demo setup failed: {error}",
-  "@demoSetupFailed": { "placeholders": { "error": { "type": "String" } } },
   "loginError": "Login error: {error}",
   "@loginError": { "placeholders": { "error": { "type": "String" } } },
 

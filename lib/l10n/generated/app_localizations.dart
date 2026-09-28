@@ -3404,29 +3404,11 @@ abstract class AppLocalizations {
   /// **'Verify & Login'**
   String get verifyLogin;
 
-  /// No description provided for @exploreDemoStore.
-  ///
-  /// In en, this message translates to:
-  /// **'Explore with Demo Store'**
-  String get exploreDemoStore;
-
   /// No description provided for @termsPrivacyNotice.
   ///
   /// In en, this message translates to:
   /// **'By continuing, you agree to our Terms of Service\nand Privacy Policy.'**
   String get termsPrivacyNotice;
-
-  /// No description provided for @settingUpDemoStore.
-  ///
-  /// In en, this message translates to:
-  /// **'Setting up demo store...\nThis may take 30–60 seconds.'**
-  String get settingUpDemoStore;
-
-  /// No description provided for @demoSetupFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Demo setup failed: {error}'**
-  String demoSetupFailed(String error);
 
   /// No description provided for @loginError.
   ///

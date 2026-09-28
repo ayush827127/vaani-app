@@ -402,6 +402,14 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                                 onPressed: _showAddCustomer,
                                 icon: const Icon(Icons.person_add_rounded),
                                 label: Text(l10n.addCustomer),
+                                // See the matching note in inventory_screen's
+                                // _buildEmptyState — the app theme defaults
+                                // every ElevatedButton to full width, which
+                                // looks wrong for a centered empty-state CTA.
+                                style: ElevatedButton.styleFrom(
+                                  minimumSize: Size.zero,
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                                ),
                               ),
                             ],
                           ],
