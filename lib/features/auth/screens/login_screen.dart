@@ -15,6 +15,7 @@ import '../../demo/demo_data_seeder.dart';
 import '../../subscription/repositories/subscription_repository.dart';
 import '../../sync/repositories/data_sync_repository.dart';
 import '../../members/repositories/member_repository.dart';
+import '../../members/utils/complete_shop_join.dart';
 import '../../../l10n/l10n_extensions.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -293,9 +294,10 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         // Backend confirmed: no legacy shop exists for this phone anywhere.
         // Before assuming "genuinely new, go create a shop", best-effort
-        // check whether this phone has a pending invitation instead — see
+        // check whether this phone has a pending invitation or an existing
+        // active membership instead — see
         // MemberRepository.checkForPendingInvitations's doc comment. Any
-        // failure here (or simply no invitations) falls straight through to
+        // failure here (or simply neither) falls straight through to
         // today's exact existing behavior.
         final check =
             await getIt<MemberRepository>().checkForPendingInvitations(phone, otpToken);
@@ -306,6 +308,39 @@ class _LoginScreenState extends State<LoginScreen> {
           // install/new device) — let them pick which one to load, instead
           // of silently guessing.
           context.go('/select-business', extra: {'phone': phone, 'memberships': check.memberships});
+        } else if (check.memberships.length == 1) {
+          // Already an accepted member of exactly one business — a new
+          // device for an invited (non-owner) member, who has no legacy
+          // Shop.phone row for checkExistingCloudShop above to ever find.
+          // Auto-select it rather than showing a picker of one, or (the
+          // bug this branch fixes) silently treating them as brand new and
+          // sending them to create a duplicate, empty shop shadowing the
+          // real one. Reuses the exact same fetch-profile-then-join
+          // sequence SelectBusinessScreen uses for the 2+ case.
+          final membership = check.memberships.single;
+          await getIt<MemberRepository>().selectShopAndRefresh(membership.shopId);
+          final profile = await getIt<DataSyncRepository>().fetchShopProfile();
+          if (profile == null) {
+            throw Exception("Couldn't load your business's details — please try again.");
+          }
+          final now = DateTime.now();
+          final updatedAt = DateTime.tryParse(profile['updatedAt'] as String? ?? '') ?? now;
+          final shop = Shop(
+            name: profile['name'] as String,
+            ownerName: profile['ownerName'] as String,
+            phone: phone,
+            gstNumber: profile['gstNumber'] as String?,
+            address: profile['address'] as String?,
+            upiId: profile['upiId'] as String?,
+            currency: profile['currency'] as String? ?? 'INR',
+            gstEnabled: profile['gstEnabled'] as bool? ?? true,
+            defaultGstRate: (profile['defaultGstRate'] as num?)?.toDouble() ?? 5.0,
+            logoUrl: profile['logoUrl'] as String?,
+            createdAt: now,
+            updatedAt: updatedAt,
+          );
+          if (!mounted) return;
+          await completeShopJoin(context, shop: shop, phone: phone);
         } else if (check.invitations.isNotEmpty) {
           context.go('/join-business', extra: {'phone': phone, 'otpToken': otpToken});
         } else {
