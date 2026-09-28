@@ -32,15 +32,41 @@ import '../../features/members/screens/manage_members_screen.dart';
 import '../../features/members/screens/join_business_screen.dart';
 import '../../features/members/screens/select_business_screen.dart';
 import '../../features/members/models/membership.dart';
+import '../../features/subscription/repositories/subscription_repository.dart';
 import '../../shared/widgets/main_shell.dart';
+import '../di/injector.dart';
 import '../utils/constants.dart';
 
 final _rootKey = GlobalKey<NavigatorState>();
 final _shellKey = GlobalKey<NavigatorState>();
 
+// Only reports/ai_manager currently differ between Basic and the paid plans
+// (see prisma/seed.js's PLAN_MODULES on the backend) — every other route
+// stays open regardless of plan, so only these two need a gate here.
+const _gatedRoutes = {
+  '/reports': 'reports',
+  '/ai-manager': 'ai_manager',
+};
+
 GoRouter createRouter() => GoRouter(
       navigatorKey: _rootKey,
       initialLocation: '/splash',
+      // The home screen's Quick Actions tiles already grey themselves out
+      // and show an upgrade message for a disabled module — but that's a
+      // per-button courtesy, easily missed at any OTHER way into the same
+      // route (the drawer's nav tiles, a deep link, browser back/forward on
+      // web). This is the actual backstop: it runs for every navigation to
+      // a gated route regardless of how it was reached.
+      redirect: (context, state) async {
+        final moduleKey = _gatedRoutes[state.matchedLocation];
+        if (moduleKey == null) return null;
+        final status = await getIt<SubscriptionRepository>().getCachedStatus();
+        // No cached status yet (brand-new install, never checked in) —
+        // fail open, the same rule SubscriptionNotifier.isModuleEnabled
+        // uses for the exact same reason.
+        if (status == null) return null;
+        return status.isModuleEnabled(moduleKey) ? null : '/home';
+      },
       routes: [
         GoRoute(
           path: '/splash',

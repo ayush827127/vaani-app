@@ -29,6 +29,25 @@ class SubscriptionStatus {
   // shop-voice.service.js is the real backstop regardless of what this says.
   bool get isOnBasicPlan => effectivePlanName == 'Basic';
 
+  // How long a cached status keeps being trusted before a gated module
+  // defaults to blocked rather than open — see isModuleEnabled below.
+  static const _gracePeriod = Duration(days: 3);
+
+  /// Whether [moduleKey] should be accessible right now, given this cached
+  /// status. Stays open for [_gracePeriod] past the last successful
+  /// check-in (so a brief offline spell doesn't lock someone out of a
+  /// module they're actually entitled to), then fails closed once that
+  /// window lapses without a re-check. Callers with no cached status at all
+  /// (never checked in) should fail open instead — see
+  /// SubscriptionNotifier.isModuleEnabled and the router redirect in
+  /// app_router.dart, the two places that decide what to do before a
+  /// status even exists.
+  bool isModuleEnabled(String moduleKey) {
+    final withinGrace = DateTime.now().difference(fetchedAt) <= _gracePeriod;
+    if (!withinGrace) return false;
+    return enabledModules.contains(moduleKey);
+  }
+
   /// Parses the `data` object returned by `GET /api/shop/me/status`.
   factory SubscriptionStatus.fromJson(Map<String, dynamic> json) {
     final subscription = json['subscription'] as Map<String, dynamic>?;

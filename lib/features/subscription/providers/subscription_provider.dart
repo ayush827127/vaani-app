@@ -8,8 +8,6 @@ final subscriptionProvider =
         (ref) => SubscriptionNotifier());
 
 class SubscriptionNotifier extends StateNotifier<SubscriptionStatus?> {
-  static const _gracePeriod = Duration(days: 3);
-
   SubscriptionNotifier() : super(null) {
     _loadCached();
   }
@@ -37,14 +35,14 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionStatus?> {
   }
 
   /// Whether [moduleKey] should be accessible right now. Fails open if no
-  /// successful check has ever completed (brand-new/offline signup), stays
-  /// open for [_gracePeriod] past the last successful check, and only
-  /// restricts gated modules once that window lapses without a re-check.
+  /// successful check has ever completed (brand-new/offline signup) —
+  /// otherwise delegates to SubscriptionStatus.isModuleEnabled, the same
+  /// grace-period logic the router redirect in app_router.dart also uses,
+  /// so a button's enabled/disabled look and the route it points at can
+  /// never disagree with each other.
   bool isModuleEnabled(String moduleKey) {
     final cached = state;
     if (cached == null) return true;
-    final withinGrace = DateTime.now().difference(cached.fetchedAt) <= _gracePeriod;
-    if (!withinGrace) return false;
-    return cached.enabledModules.contains(moduleKey);
+    return cached.isModuleEnabled(moduleKey);
   }
 }
