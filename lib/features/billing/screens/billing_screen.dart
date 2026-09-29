@@ -116,6 +116,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
   List<Item> _allItems = [];
   List<Item> _filteredItems = [];
+  // _allItems.isEmpty used to double as "still loading" for _buildItemArea's
+  // spinner check — which meant a shop with a genuinely empty catalog never
+  // stopped showing the spinner, since _allItems stays empty forever once
+  // loading actually finishes too. This is the real signal for that instead.
+  bool _isLoadingItems = true;
   Customer? _selectedCustomer;
   int _shopId = 1;
 
@@ -196,6 +201,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       setState(() {
         _allItems = items;
         _filteredItems = List.from(items);
+        _isLoadingItems = false;
       });
     }
   }
@@ -1140,9 +1146,37 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
   Widget _buildItemArea(
       Map<int, int> cartQtyMap, Map<int, double> cartOverrideMap) {
-    if (_allItems.isEmpty) {
+    if (_isLoadingItems) {
       return const Center(
         child: CircularProgressIndicator(color: AppColors.primaryLight),
+      );
+    }
+    if (_allItems.isEmpty) {
+      final c = context.colors;
+      final l10n = context.l10n;
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inventory_2_outlined, size: 48, color: c.textSecondary),
+            const SizedBox(height: 12),
+            Text(
+              l10n.noItemsYet,
+              style: TextStyle(color: c.textSecondary, fontSize: 15, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              l10n.addFirstItemHint,
+              style: TextStyle(color: c.textHint, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/inventory/add').then((_) => _loadItems()),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: Text(l10n.addItem),
+            ),
+          ],
+        ),
       );
     }
     if (_filteredItems.isEmpty) {
