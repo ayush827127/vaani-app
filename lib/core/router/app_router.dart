@@ -40,13 +40,40 @@ import '../utils/constants.dart';
 final _rootKey = GlobalKey<NavigatorState>();
 final _shellKey = GlobalKey<NavigatorState>();
 
-// Only reports/ai_manager currently differ between Basic and the paid plans
-// (see prisma/seed.js's PLAN_MODULES on the backend) — every other route
-// stays open regardless of plan, so only these two need a gate here.
-const _gatedRoutes = {
+// Every catalog module that has a real screen behind it (see prisma/seed.js's
+// MODULES on the backend — the two exceptions are 'billing' and 'inventory',
+// which each have a second top-level entry route below). Keyed by the route
+// prefix that module owns; a sub-route inherits its parent's gate (e.g.
+// '/inventory/item/42' is gated by 'inventory' via the '/inventory' entry).
+// Every module here is in every plan today (only reports/ai_manager
+// currently differ — see PLAN_MODULES), so this doesn't restrict anyone
+// right now; it's what makes a future plan change or a per-shop
+// ShopModuleOverride revocation actually take effect everywhere, not just
+// wherever someone remembered to add a check.
+const _gatedRoutePrefixes = <String, String>{
+  '/billing': 'billing',
+  '/bills': 'billing',
+  '/inventory': 'inventory',
+  '/customers': 'customers',
   '/reports': 'reports',
   '/ai-manager': 'ai_manager',
+  '/profile/printer': 'printer',
+  '/notifications': 'notifications',
 };
+
+/// Pure and separately testable from the async redirect below — which
+/// module (if any) gates [location]. A location matches a prefix exactly or
+/// as one of its sub-routes ('/inventory/add' matches '/inventory', but
+/// '/inventory-report' — if that ever existed — deliberately would not).
+@visibleForTesting
+String? moduleForGatedLocation(String location) {
+  for (final entry in _gatedRoutePrefixes.entries) {
+    if (location == entry.key || location.startsWith('${entry.key}/')) {
+      return entry.value;
+    }
+  }
+  return null;
+}
 
 GoRouter createRouter() => GoRouter(
       navigatorKey: _rootKey,
@@ -58,7 +85,7 @@ GoRouter createRouter() => GoRouter(
       // web). This is the actual backstop: it runs for every navigation to
       // a gated route regardless of how it was reached.
       redirect: (context, state) async {
-        final moduleKey = _gatedRoutes[state.matchedLocation];
+        final moduleKey = moduleForGatedLocation(state.matchedLocation);
         if (moduleKey == null) return null;
         final status = await getIt<SubscriptionRepository>().getCachedStatus();
         // No cached status yet (brand-new install, never checked in) —
