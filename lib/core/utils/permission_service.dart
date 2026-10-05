@@ -20,6 +20,20 @@ class PermissionService {
         'Microphone access is needed for voice billing.',
       );
 
+  // The contact *picker* itself (openExternalPick) needs no permission —
+  // the OS Contacts app does the picking. But flutter_contacts then fetches
+  // that one contact's details with a direct ContentResolver query on a
+  // background thread with no permission check of its own, which throws an
+  // uncaught SecurityException (crashing the app, not a catchable Dart
+  // exception) if this isn't granted. Must be requested before calling
+  // openExternalPick, not after.
+  static Future<bool> requestContacts(BuildContext context) => _request(
+        context,
+        Permission.contacts,
+        'Contacts Permission Required',
+        'Contacts access is needed to pick a customer from your saved phone contacts.',
+      );
+
   static Future<bool> _request(
     BuildContext context,
     Permission permission,

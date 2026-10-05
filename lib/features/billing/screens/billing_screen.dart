@@ -3268,16 +3268,27 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
             ),
           ),
           const SizedBox(height: 4),
-          Divider(color: c.divider),
-          ListTile(
-            leading: CircleAvatar(
-              backgroundColor: AppColors.primaryLight.withValues(alpha: 0.15),
-              child: const Icon(Icons.person_add_rounded, color: AppColors.primaryLight),
+          // A compact option, not a full-width button-looking row — this
+          // sits above the list as a quick escape hatch, not a prominent
+          // call to action competing with the customers themselves.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: TextButton.icon(
+                onPressed: () => Navigator.pop(context, kAddNewCustomerSentinel),
+                icon: const Icon(Icons.add_rounded, size: 18, color: AppColors.primaryLight),
+                label: Text(l10n.addNewCustomer,
+                    style: const TextStyle(color: AppColors.primaryLight, fontWeight: FontWeight.w600, fontSize: 13)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
             ),
-            title: Text(l10n.addNewCustomer,
-                style: const TextStyle(color: AppColors.primaryLight, fontWeight: FontWeight.w600)),
-            onTap: () => Navigator.pop(context, kAddNewCustomerSentinel),
           ),
+          const SizedBox(height: 4),
           Divider(color: c.divider, height: 1),
           Flexible(
             child: filtered.isEmpty

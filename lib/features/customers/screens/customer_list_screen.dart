@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/permission_service.dart';
 import '../../../core/di/injector.dart';
 import '../../../shared/models/customer.dart';
 import '../../../shared/widgets/customer_avatar.dart';
@@ -118,13 +119,21 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   }
 
   /// Opens the OS Contacts app's own picker (ACTION_PICK on Android) and
-  /// hands back only the one contact the user chose — unlike reading the
-  /// full contact list, this needs no READ_CONTACTS permission at all,
-  /// since the system Contacts app does the actual picking.
+  /// hands back only the one contact the user chose. The pick step itself
+  /// needs no permission — the system Contacts app does the picking — but
+  /// flutter_contacts then fetches that one contact's full details with a
+  /// direct ContentResolver query that has no permission check or
+  /// try/catch of its own on the native side, so without READ_CONTACTS
+  /// granted first it throws an uncaught SecurityException there — a hard
+  /// crash, not a catchable Dart exception, which is why this must be
+  /// requested *before* calling openExternalPick, never just wrapped in a
+  /// try/catch after the fact.
   Future<void> _pickFromContacts(
     TextEditingController nameCtrl,
     TextEditingController phoneCtrl,
   ) async {
+    final granted = await PermissionService.requestContacts(context);
+    if (!granted || !mounted) return;
     try {
       final contact = await FlutterContacts.openExternalPick();
       if (contact == null) return;
