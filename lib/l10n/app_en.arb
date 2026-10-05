@@ -304,6 +304,8 @@
 
   "walkInCustomerLabel": "Walk-in Customer",
   "addCustomer": "Add Customer",
+  "pickFromContacts": "Pick from Contacts",
+  "addNewCustomer": "Add New Customer",
   "editCustomer": "Edit Customer",
   "email": "Email",
   "addCustomerImage": "Add customer photo",

@@ -525,7 +525,14 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     return m != null ? 'HTTP ${m.group(1)}' : 'error';
   }
 
-  Future<void> _showAddCustomerDialog(String name, String? phone) async {
+  /// Shows the add-customer dialog pre-filled with [name]/[phone] (both
+  /// optional — the customer picker's "Add New Customer" entry calls this
+  /// with neither), persists the result, and returns the saved Customer, or
+  /// null if cancelled or left with no name at all. Deliberately doesn't
+  /// touch _selectedCustomer/_customers itself — the two callers want
+  /// different side effects around the result (see _showAddCustomerDialog
+  /// below and _selectCustomer's handling of the picker's sentinel).
+  Future<Customer?> _addCustomerDialog({String name = '', String? phone}) async {
     final nameCtrl = TextEditingController(text: name);
     final phoneCtrl = TextEditingController(text: phone ?? '');
 
@@ -538,17 +545,20 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         return AlertDialog(
           backgroundColor: c.surface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Customer Not Found',
+          title: Text(name.isEmpty ? 'Add Customer' : 'Customer Not Found',
               style: TextStyle(color: c.textPrimary)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Add as new customer?',
-                  style: TextStyle(color: c.textSecondary, fontSize: 14)),
-              const SizedBox(height: 16),
+              if (name.isNotEmpty) ...[
+                Text('Add as new customer?',
+                    style: TextStyle(color: c.textSecondary, fontSize: 14)),
+                const SizedBox(height: 16),
+              ],
               TextField(
                 controller: nameCtrl,
+                autofocus: name.isEmpty,
                 decoration: InputDecoration(
                   labelText: 'Name',
                   labelStyle: TextStyle(color: c.textSecondary),
@@ -586,19 +596,28 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final enteredPhone = phoneCtrl.text.trim();
     nameCtrl.dispose();
     phoneCtrl.dispose();
-    if (shouldAdd != true || !mounted) return;
+    if (shouldAdd != true || !mounted) return null;
+
+    final finalName = enteredName.isEmpty ? name.trim() : enteredName;
+    if (finalName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Enter a name'),
+        backgroundColor: context.colors.danger,
+      ));
+      return null;
+    }
 
     try {
       final now = DateTime.now();
       final customer = Customer(
         shopId: _shopId,
-        name: enteredName.isEmpty ? name : enteredName,
+        name: finalName,
         phone: enteredPhone.isEmpty ? null : enteredPhone,
         createdAt: now,
         updatedAt: now,
       );
       final id = await getIt<CustomerRepository>().insertCustomer(customer);
-      final saved = Customer(
+      return Customer(
         id: id,
         shopId: customer.shopId,
         name: customer.name,
@@ -606,24 +625,29 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         createdAt: customer.createdAt,
         updatedAt: customer.updatedAt,
       );
-      if (mounted) {
-        setState(() {
-          _selectedCustomer = saved;
-          _customers = [..._customers, saved];
-        });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${saved.name} added as customer'),
-          backgroundColor: context.colors.success,
-        ));
-      }
     } catch (e) {
       debugPrint('[BillingScreen] Failed to add customer: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Failed to add customer'),
+          content: const Text('Failed to add customer'),
           backgroundColor: context.colors.danger,
         ));
       }
+      return null;
+    }
+  }
+
+  Future<void> _showAddCustomerDialog(String name, String? phone) async {
+    final saved = await _addCustomerDialog(name: name, phone: phone);
+    if (saved != null && mounted) {
+      setState(() {
+        _selectedCustomer = saved;
+        _customers = [..._customers, saved];
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${saved.name} added as customer'),
+        backgroundColor: context.colors.success,
+      ));
     }
   }
 
@@ -805,7 +829,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final customers =
         await getIt<CustomerRepository>().getAllCustomers(shopId);
     if (!mounted) return;
-    final selected = await showModalBottomSheet<Customer>(
+    final selected = await showModalBottomSheet<Object>(
       context: context,
       backgroundColor: context.colors.surface,
       isScrollControlled: true,
@@ -813,7 +837,21 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _CustomerPickerSheet(customers: customers),
     );
-    if (selected != null) setState(() => _selectedCustomer = selected);
+    if (!mounted || selected == null) return;
+    if (identical(selected, kAddNewCustomerSentinel)) {
+      // The sheet's own search found nothing matching — straight into the
+      // same add-customer dialog the voice "customer not found" flow uses,
+      // just with no name pre-filled.
+      final saved = await _addCustomerDialog();
+      if (saved != null && mounted) {
+        setState(() {
+          _selectedCustomer = saved;
+          _customers = [..._customers, saved];
+        });
+      }
+    } else if (selected is Customer) {
+      setState(() => _selectedCustomer = selected);
+    }
   }
 
   List<String> get _uniqueCategories {
@@ -3163,47 +3201,112 @@ class _TaxSheetState extends State<_TaxSheet> {
 
 // ── Customer Picker Sheet ─────────────────────────────────────────────────────
 
-class _CustomerPickerSheet extends StatelessWidget {
+/// Popped by the "Add New Customer" row instead of a real Customer —
+/// _selectCustomer tells it apart from a cancelled picker (null) with
+/// `identical()`, then opens the same add-customer dialog the voice
+/// "customer not found" flow uses.
+const Object kAddNewCustomerSentinel = Object();
+
+class _CustomerPickerSheet extends StatefulWidget {
   final List<Customer> customers;
   const _CustomerPickerSheet({required this.customers});
 
   @override
+  State<_CustomerPickerSheet> createState() => _CustomerPickerSheetState();
+}
+
+class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(context.l10n.selectCustomer,
-              style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: c.textPrimary)),
-        ),
-        Divider(color: c.divider),
-        Flexible(
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: customers.length,
-            itemBuilder: (_, i) => ListTile(
-              leading: CircleAvatar(
-                backgroundColor:
-                    AppColors.primary.withValues(alpha: 0.3),
-                child: Text(customers[i].name[0].toUpperCase(),
-                    style: const TextStyle(color: Colors.white)),
+    final l10n = context.l10n;
+    final query = _query.trim().toLowerCase();
+    final filtered = query.isEmpty
+        ? widget.customers
+        : widget.customers
+            .where((cust) =>
+                cust.name.toLowerCase().contains(query) ||
+                (cust.phone?.contains(query) ?? false))
+            .toList();
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(l10n.selectCustomer,
+                style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: c.textPrimary)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              controller: _searchCtrl,
+              autofocus: false,
+              onChanged: (v) => setState(() => _query = v),
+              style: TextStyle(color: c.textPrimary),
+              decoration: InputDecoration(
+                hintText: l10n.searchCustomersHint,
+                hintStyle: TextStyle(color: c.textHint),
+                prefixIcon: Icon(Icons.search_rounded, color: c.textSecondary),
+                isDense: true,
               ),
-              title: Text(customers[i].name,
-                  style: TextStyle(color: c.textPrimary)),
-              subtitle: Text(customers[i].phone ?? '',
-                  style: TextStyle(
-                      color: c.textSecondary)),
-              onTap: () => Navigator.pop(context, customers[i]),
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          Divider(color: c.divider),
+          ListTile(
+            leading: CircleAvatar(
+              backgroundColor: AppColors.primaryLight.withValues(alpha: 0.15),
+              child: const Icon(Icons.person_add_rounded, color: AppColors.primaryLight),
+            ),
+            title: Text(l10n.addNewCustomer,
+                style: const TextStyle(color: AppColors.primaryLight, fontWeight: FontWeight.w600)),
+            onTap: () => Navigator.pop(context, kAddNewCustomerSentinel),
+          ),
+          Divider(color: c.divider, height: 1),
+          Flexible(
+            child: filtered.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Text(l10n.noCustomersFound,
+                        style: TextStyle(color: c.textHint)),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: filtered.length,
+                    itemBuilder: (_, i) => ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor:
+                            AppColors.primary.withValues(alpha: 0.3),
+                        child: Text(filtered[i].name[0].toUpperCase(),
+                            style: const TextStyle(color: Colors.white)),
+                      ),
+                      title: Text(filtered[i].name,
+                          style: TextStyle(color: c.textPrimary)),
+                      subtitle: Text(filtered[i].phone ?? '',
+                          style: TextStyle(
+                              color: c.textSecondary)),
+                      onTap: () => Navigator.pop(context, filtered[i]),
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1754,6 +1754,18 @@ abstract class AppLocalizations {
   /// **'Add Customer'**
   String get addCustomer;
 
+  /// No description provided for @pickFromContacts.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick from Contacts'**
+  String get pickFromContacts;
+
+  /// No description provided for @addNewCustomer.
+  ///
+  /// In en, this message translates to:
+  /// **'Add New Customer'**
+  String get addNewCustomer;
+
   /// No description provided for @editCustomer.
   ///
   /// In en, this message translates to:

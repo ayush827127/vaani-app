@@ -883,6 +883,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get addCustomer => 'ग्राहक जोड़ें';
 
   @override
+  String get pickFromContacts => 'संपर्कों से चुनें';
+
+  @override
+  String get addNewCustomer => 'नया ग्राहक जोड़ें';
+
+  @override
   String get editCustomer => 'ग्राहक संपादित करें';
 
   @override

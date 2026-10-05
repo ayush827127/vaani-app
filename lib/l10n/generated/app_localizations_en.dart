@@ -885,6 +885,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addCustomer => 'Add Customer';
 
   @override
+  String get pickFromContacts => 'Pick from Contacts';
+
+  @override
+  String get addNewCustomer => 'Add New Customer';
+
+  @override
   String get editCustomer => 'Edit Customer';
 
   @override

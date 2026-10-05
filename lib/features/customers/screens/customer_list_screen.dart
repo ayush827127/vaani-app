@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
@@ -10,6 +11,21 @@ import '../../../shared/widgets/customer_avatar.dart';
 import '../customer_ledger.dart';
 import '../repositories/customer_repository.dart';
 import '../../../l10n/l10n_extensions.dart';
+
+/// A phone picked from contacts often arrives as "+91 98765 43210" or
+/// "098765 43210" — neither matches the bare 10-digit numbers the rest of
+/// the app's duplicate-phone checks and OTP-login flow expect. Strips
+/// everything but digits, then unwraps the common Indian prefixes (+91
+/// country code, or a leading trunk 0) down to the 10-digit number. Returns
+/// null only when there are no digits at all to work with.
+@visibleForTesting
+String? cleanContactPhoneNumber(String raw) {
+  final digits = raw.replaceAll(RegExp(r'\D'), '');
+  if (digits.length == 10) return digits;
+  if (digits.length == 12 && digits.startsWith('91')) return digits.substring(2);
+  if (digits.length == 11 && digits.startsWith('0')) return digits.substring(1);
+  return digits.isEmpty ? null : digits;
+}
 
 /// Customers as a ledger: who owes money, who has credit with us, and a fast
 /// way into each account. Search, filter and sort all run over the loaded
@@ -101,6 +117,28 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     ];
   }
 
+  /// Opens the OS Contacts app's own picker (ACTION_PICK on Android) and
+  /// hands back only the one contact the user chose — unlike reading the
+  /// full contact list, this needs no READ_CONTACTS permission at all,
+  /// since the system Contacts app does the actual picking.
+  Future<void> _pickFromContacts(
+    TextEditingController nameCtrl,
+    TextEditingController phoneCtrl,
+  ) async {
+    try {
+      final contact = await FlutterContacts.openExternalPick();
+      if (contact == null) return;
+      nameCtrl.text = contact.displayName;
+      if (contact.phones.isNotEmpty) {
+        final phone = contact.phones.first;
+        final raw = phone.normalizedNumber.isNotEmpty ? phone.normalizedNumber : phone.number;
+        phoneCtrl.text = cleanContactPhoneNumber(raw) ?? raw;
+      }
+    } catch (e) {
+      debugPrint('[CustomerListScreen] contact pick failed: $e');
+    }
+  }
+
   void _showAddCustomer() {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
@@ -117,8 +155,20 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(l10n.addCustomer, style: TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.bold, color: c.textPrimary)),
-            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(l10n.addCustomer,
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.bold, color: c.textPrimary)),
+                ),
+                TextButton.icon(
+                  onPressed: () => _pickFromContacts(nameCtrl, phoneCtrl),
+                  icon: const Icon(Icons.contacts_rounded, size: 18),
+                  label: Text(l10n.pickFromContacts),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: nameCtrl,
               autofocus: true,
