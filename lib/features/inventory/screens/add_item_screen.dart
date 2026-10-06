@@ -46,6 +46,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
   final _barcodeCtrl = TextEditingController();
   final _costCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
+  final _mrpCtrl = TextEditingController();
   final _stockCtrl = TextEditingController(text: '0');
   final _reorderCtrl = TextEditingController(text: '10');
   final _aliasCtrl = TextEditingController();
@@ -110,6 +111,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
         _barcodeCtrl.text = item.barcode ?? '';
         _costCtrl.text = item.costPrice.toString();
         _priceCtrl.text = item.sellingPrice.toString();
+        _mrpCtrl.text = item.mrp?.toString() ?? '';
         _stockCtrl.text = item.stockQuantity.toString();
         _reorderCtrl.text = item.reorderLevel.toString();
         _aliasCtrl.text = item.aliases.join(', ');
@@ -328,6 +330,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
       category: _category,
       costPrice: double.tryParse(_costCtrl.text) ?? 0,
       sellingPrice: double.parse(_priceCtrl.text),
+      mrp: _mrpCtrl.text.trim().isEmpty ? null : double.tryParse(_mrpCtrl.text.trim()),
       gstRate: _gstRate,
       // Stock fields are hidden in the UI (and meaningless) once inventory
       // tracking is off — force them to 0 rather than saving whatever was
@@ -441,6 +444,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
     _barcodeCtrl.dispose();
     _costCtrl.dispose();
     _priceCtrl.dispose();
+    _mrpCtrl.dispose();
     _stockCtrl.dispose();
     _reorderCtrl.dispose();
     _aliasCtrl.dispose();
@@ -675,6 +679,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          _buildField(l10n.mrpCurrency, _mrpCtrl,
+              type: const TextInputType.numberWithOptions(decimal: true)),
           Divider(height: 20, color: c.divider),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

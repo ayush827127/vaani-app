@@ -226,6 +226,7 @@
   "skuPhoneCode": "SKU / Internal Code",
   "costPriceCurrency": "Cost Price (₹)",
   "sellingPriceCurrency": "Selling Price (₹) *",
+  "mrpCurrency": "MRP (₹)",
   "mustBeGreaterThanZero": "Must be > 0",
   "stockQuantity": "Stock Quantity",
   "stockQuantityRequiredError": "Enter a quantity greater than 0.",

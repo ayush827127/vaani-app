@@ -1352,6 +1352,12 @@ abstract class AppLocalizations {
   /// **'Selling Price (₹) *'**
   String get sellingPriceCurrency;
 
+  /// No description provided for @mrpCurrency.
+  ///
+  /// In en, this message translates to:
+  /// **'MRP (₹)'**
+  String get mrpCurrency;
+
   /// No description provided for @mustBeGreaterThanZero.
   ///
   /// In en, this message translates to:

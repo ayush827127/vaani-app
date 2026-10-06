@@ -217,6 +217,7 @@
   "skuPhoneCode": "SKU / आंतरिक कोड",
   "costPriceCurrency": "लागत मूल्य (₹)",
   "sellingPriceCurrency": "बिक्री मूल्य (₹) *",
+  "mrpCurrency": "MRP (₹)",
   "mustBeGreaterThanZero": "0 से अधिक होना चाहिए",
   "stockQuantity": "स्टॉक मात्रा",
   "stockQuantityRequiredError": "0 से अधिक मात्रा दर्ज करें।",

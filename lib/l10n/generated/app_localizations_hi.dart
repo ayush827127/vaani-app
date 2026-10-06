@@ -664,6 +664,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get sellingPriceCurrency => 'बिक्री मूल्य (₹) *';
 
   @override
+  String get mrpCurrency => 'MRP (₹)';
+
+  @override
   String get mustBeGreaterThanZero => '0 से अधिक होना चाहिए';
 
   @override

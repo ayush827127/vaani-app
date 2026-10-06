@@ -330,6 +330,23 @@ class DatabaseHelper {
         }
       }
     }
+    if (oldVersion < 19) {
+      // Printed maximum retail price — independent of selling_price (what
+      // the shop actually charges, which can run below MRP). Existing items
+      // have no MRP on record, so they stay NULL rather than inventing one.
+      // Table-existence guard for the same reason as payment_transactions'
+      // in the v18 block above: a real device always has `items` by this
+      // point, but some of this file's own synthetic legacy test fixtures
+      // (scoped to a narrower schema than a real device) don't.
+      final itemsTable = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='items'");
+      if (itemsTable.isNotEmpty) {
+        final itemCols = await db.rawQuery("PRAGMA table_info(items)");
+        if (!itemCols.any((c) => c['name'] == 'mrp')) {
+          await db.execute('ALTER TABLE items ADD COLUMN mrp REAL');
+        }
+      }
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -362,6 +379,7 @@ class DatabaseHelper {
         category TEXT,
         cost_price REAL NOT NULL DEFAULT 0,
         selling_price REAL NOT NULL,
+        mrp REAL,
         gst_rate REAL NOT NULL DEFAULT 5.0,
         stock_quantity INTEGER NOT NULL DEFAULT 0,
         reorder_level INTEGER NOT NULL DEFAULT 10,

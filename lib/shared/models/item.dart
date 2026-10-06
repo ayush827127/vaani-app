@@ -21,6 +21,10 @@ class Item {
   final String? category;
   final double costPrice;
   final double sellingPrice;
+  // Printed maximum retail price — independent of sellingPrice (what the
+  // shop actually charges, which can run below MRP). Nullable: most items
+  // never record one.
+  final double? mrp;
   final double gstRate;
   final int stockQuantity;
   final int reorderLevel;
@@ -48,6 +52,7 @@ class Item {
     this.category,
     this.costPrice = 0,
     required this.sellingPrice,
+    this.mrp,
     this.gstRate = 5.0,
     this.stockQuantity = 0,
     this.reorderLevel = 10,
@@ -83,6 +88,7 @@ class Item {
         'category': category,
         'cost_price': costPrice,
         'selling_price': sellingPrice,
+        'mrp': mrp,
         'gst_rate': gstRate,
         'stock_quantity': stockQuantity,
         'reorder_level': reorderLevel,
@@ -103,6 +109,7 @@ class Item {
         category: map['category'] as String?,
         costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0,
         sellingPrice: (map['selling_price'] as num).toDouble(),
+        mrp: (map['mrp'] as num?)?.toDouble(),
         gstRate: (map['gst_rate'] as num?)?.toDouble() ?? 5.0,
         stockQuantity: map['stock_quantity'] as int? ?? 0,
         reorderLevel: map['reorder_level'] as int? ?? 10,
@@ -124,6 +131,7 @@ class Item {
     String? category,
     double? costPrice,
     double? sellingPrice,
+    double? mrp,
     double? gstRate,
     int? stockQuantity,
     int? reorderLevel,
@@ -143,6 +151,7 @@ class Item {
         category: category ?? this.category,
         costPrice: costPrice ?? this.costPrice,
         sellingPrice: sellingPrice ?? this.sellingPrice,
+        mrp: mrp ?? this.mrp,
         gstRate: gstRate ?? this.gstRate,
         stockQuantity: stockQuantity ?? this.stockQuantity,
         reorderLevel: reorderLevel ?? this.reorderLevel,
