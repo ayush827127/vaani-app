@@ -41,6 +41,24 @@ class ItemRepository {
     return items;
   }
 
+  /// Case-insensitive exact-name match — used to match a bulk-import sheet
+  /// row or an OCR-scanned purchase-bill line against the existing catalog,
+  /// where there's no SKU/barcode to go on, just whatever name was typed or
+  /// printed.
+  Future<Item?> getItemByName(int shopId, String name) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'items',
+      where: 'shop_id = ? AND is_active = 1 AND LOWER(name) = ?',
+      whereArgs: [shopId, name.trim().toLowerCase()],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final id = rows.first['id'] as int;
+    final aliases = await _getAliases(id);
+    return Item.fromMap(rows.first, aliases: aliases);
+  }
+
   Future<Item?> getItemBySku(int shopId, String sku) async {
     final db = await _db.database;
     final rows = await db.query(

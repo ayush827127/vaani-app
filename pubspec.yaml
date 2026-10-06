@@ -38,12 +38,16 @@ dependencies:
   image_picker: ^1.1.2
   share_plus: ^12.0.2
   # Picking a single contact via the OS Contacts app's own picker UI
-  # (openExternalPick) — needs no READ_CONTACTS permission at all, since
-  # the system Contacts app does the picking and only hands back the one
-  # contact chosen. Deliberately not used for bulk contact reading, which
-  # would need that permission and the Play Store disclosure that comes
-  # with it.
+  # (openExternalPick). The pick step itself needs no permission (the
+  # system Contacts app does the picking), but flutter_contacts then
+  # fetches that one contact's details with a direct ContentResolver query
+  # that still needs READ_CONTACTS granted — see
+  # PermissionService.requestContacts's doc comment for why that's
+  # requested explicitly before calling this, not left implicit.
   flutter_contacts: ^1.1.9+2
+  # Bulk item import template: writes/reads a real .xlsx (not just CSV), to
+  # match what a shopkeeper actually opens in Excel/Google Sheets/WPS.
+  excel: ^4.0.6
 
   # Local Notifications
   flutter_local_notifications: ^17.2.2

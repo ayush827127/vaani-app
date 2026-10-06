@@ -1,6 +1,11 @@
+import 'dart:io';
 import '../../../core/utils/formatters.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/constants.dart';
@@ -8,11 +13,13 @@ import '../../../core/di/injector.dart';
 import '../../../shared/models/item.dart';
 import '../repositories/item_repository.dart';
 import '../repositories/category_repository.dart';
+import '../services/bulk_item_import_service.dart';
 import '../widgets/category_picker_sheet.dart';
 import '../../../shared/widgets/item_avatar.dart';
 import '../../../shared/widgets/barcode_scanner_screen.dart';
 import '../../../core/utils/permission_service.dart';
 import '../../../l10n/l10n_extensions.dart';
+import 'bulk_import_review_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -221,6 +228,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 color: c.textPrimary,
               ),
             ),
+          ),
+          IconButton(
+            icon: Icon(Icons.upload_file_rounded, color: c.textSecondary, size: 24),
+            tooltip: 'Bulk Import',
+            onPressed: _showBulkImportSheet,
           ),
           IconButton(
             icon: Icon(
@@ -440,6 +452,118 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ],
       ),
     );
+  }
+
+  void _showBulkImportSheet() {
+    final c = context.colors;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Bulk Import Items',
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.bold, color: c.textPrimary)),
+              const SizedBox(height: 4),
+              Text('Add many items at once from a spreadsheet.',
+                  style: TextStyle(color: c.textSecondary, fontSize: 13)),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Icon(Icons.description_outlined, color: AppColors.primaryLight),
+                title: const Text('Download Template'),
+                subtitle: const Text('An Excel sheet with the right columns'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _downloadBulkImportTemplate();
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.upload_file_rounded, color: AppColors.primaryLight),
+                title: const Text('Upload Filled Sheet'),
+                subtitle: const Text('Review before anything is added'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _uploadBulkImportSheet();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _downloadBulkImportTemplate() async {
+    try {
+      final bytes = BulkItemImportService().generateTemplateBytes();
+      final tempDir = await getTemporaryDirectory();
+      final filePath = p.join(tempDir.path, 'Vaani_Item_Import_Template.xlsx');
+      await File(filePath).writeAsBytes(bytes);
+      if (!mounted) return;
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(filePath,
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
+        subject: 'Vaani Item Import Template',
+      ));
+    } catch (e) {
+      debugPrint('[InventoryScreen] template generation failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not create the template: $e'), backgroundColor: context.colors.danger),
+        );
+      }
+    }
+  }
+
+  Future<void> _uploadBulkImportSheet() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['xlsx'],
+    );
+    final pickedPath = result?.files.single.path;
+    if (pickedPath == null || !mounted) return;
+
+    try {
+      final bytes = await File(pickedPath).readAsBytes();
+      final parsed = await BulkItemImportService().parseWorkbook(bytes, _shopId);
+      if (!mounted) return;
+      if (parsed.rows.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(parsed.rowErrors.isNotEmpty
+                ? parsed.rowErrors.join('\n')
+                : 'No usable rows found in that file.'),
+            backgroundColor: context.colors.danger,
+          ),
+        );
+        return;
+      }
+      final created = await Navigator.of(context).push<int>(
+        MaterialPageRoute(
+          builder: (_) => BulkImportReviewScreen(rows: parsed.rows, rowErrors: parsed.rowErrors),
+        ),
+      );
+      if (created != null && created > 0) {
+        await _loadItems();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$created item${created == 1 ? '' : 's'} added'), backgroundColor: context.colors.success),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[InventoryScreen] bulk import failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not read that file: $e'), backgroundColor: context.colors.danger),
+        );
+      }
+    }
   }
 
   void _showFilterSheet() {
