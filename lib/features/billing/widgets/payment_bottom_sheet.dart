@@ -342,6 +342,20 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
         }
       }
 
+      // Separate monthly cap on manually-created invoices — see
+      // basicPlanManualInvoiceLimit's doc comment for why this one has no
+      // backend-authoritative mirror.
+      if (!isVoiceOrigin && isOnBasic) {
+        final usedThisMonth = await invoiceRepo.countManualInvoicesThisMonth(widget.shopId);
+        if (usedThisMonth >= AppConstants.basicPlanManualInvoiceLimit) {
+          if (mounted) {
+            setState(() => _isProcessing = false);
+            _showManualInvoiceLimitReachedDialog();
+          }
+          return;
+        }
+      }
+
       invoiceNum = await invoiceRepo.getNextInvoiceNumber(widget.shopId);
 
       // receivedAmount on the invoice = advance applied + cash/UPI/card towards this bill
@@ -448,7 +462,38 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
         content: Text(
           "You've used all ${AppConstants.basicPlanVoiceInvoiceLimit} voice-created invoices on "
           'the Basic plan. Upgrade to Pro for unlimited voice billing — or finish this sale '
-          'manually instead (manual billing has no limit).',
+          'manually instead.',
+          style: TextStyle(color: c.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text('Not now', style: TextStyle(color: c.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              Navigator.pop(context); // close the payment sheet too
+              context.push('/profile/subscription');
+            },
+            child: const Text('Upgrade'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showManualInvoiceLimitReachedDialog() {
+    final c = context.colors;
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Monthly invoice limit reached', style: TextStyle(color: c.textPrimary)),
+        content: Text(
+          "You've used all ${AppConstants.basicPlanManualInvoiceLimit} invoices this month on "
+          'the Basic plan. Upgrade to Pro for unlimited billing.',
           style: TextStyle(color: c.textSecondary),
         ),
         actions: [

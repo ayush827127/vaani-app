@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/di/injector.dart';
 import '../../../l10n/l10n_extensions.dart';
+import '../../subscription/providers/subscription_provider.dart';
 import '../models/member.dart';
 import '../repositories/member_repository.dart';
 
@@ -65,7 +68,50 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
     );
   }
 
+  /// Local, offline-first gate — mirrors payment_bottom_sheet.dart's voice/
+  /// manual-invoice checks. Basic's staff cap is always 0, so there's
+  /// nothing to count locally: any Basic shop is already at the cap. The
+  /// backend's own check in shop-members.service.js's inviteMember is the
+  /// real backstop regardless of what this says.
+  bool _blockedByBasicStaffCap() {
+    final container = ProviderScope.containerOf(context, listen: false);
+    return container.read(subscriptionProvider)?.isOnBasicPlan ?? false;
+  }
+
+  void _showStaffLimitReachedDialog() {
+    final c = context.colors;
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Staff members not included', style: TextStyle(color: c.textPrimary)),
+        content: Text(
+          'The Basic plan does not include additional staff members. Upgrade to Pro to invite your team.',
+          style: TextStyle(color: c.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text('Not now', style: TextStyle(color: c.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              context.push('/profile/subscription');
+            },
+            child: const Text('Upgrade'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _invite() async {
+    if (_blockedByBasicStaffCap()) {
+      _showStaffLimitReachedDialog();
+      return;
+    }
     final l10n = context.l10n;
     final phoneCtrl = TextEditingController();
     String role = 'CASHIER';

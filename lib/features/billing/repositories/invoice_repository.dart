@@ -433,6 +433,27 @@ class InvoiceRepository {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// How many manually-created (non-voice) invoices this shop has made since
+  /// the start of the current calendar month — for the Basic plan's
+  /// separate 50-invoice/month cap on manual billing (distinct from, and on
+  /// top of, the lifetime voice-invoice cap above). Local-only count, same
+  /// "instant, offline-first gate" reasoning as countVoiceInvoices — there's
+  /// no backend backstop for this one (see payment_bottom_sheet.dart's call
+  /// site), since these invoices only ever reach the backend through the
+  /// batch /sync endpoint, which isn't a sensible place to reject a single
+  /// over-quota record out of an otherwise-valid batch.
+  Future<int> countManualInvoicesThisMonth(int shopId) async {
+    final db = await _db.database;
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month, 1).toIso8601String();
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as c FROM invoices '
+      'WHERE shop_id = ? AND is_voice_created = 0 AND deleted_at IS NULL AND created_at >= ?',
+      [shopId, monthStart],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
   Future<void> updateInvoicePayment(
     int invoiceId, {
     required double receivedAmount,

@@ -11,6 +11,21 @@ class AppConstants {
   // the real cap.
   static const int basicPlanVoiceInvoiceLimit = 50;
 
+  // Separate, monthly cap on manually-created (non-voice) invoices for the
+  // Basic plan — resets at the start of each calendar month, unlike the
+  // lifetime voice cap above. Purely a local, offline-first gate (see
+  // InvoiceRepository.countManualInvoicesThisMonth's doc comment for why
+  // there's no backend-authoritative mirror of this one).
+  static const int basicPlanManualInvoiceLimit = 50;
+
+  // Basic plan's cap on additional staff invited beyond the shop owner — 0
+  // means Basic shops can't invite any team members at all. Backend-enforced
+  // (see shop-members.service.js's inviteMember / staffQuota.js), since an
+  // invite always goes straight to the server with no offline path; this is
+  // only a local pre-check for immediate feedback before even opening the
+  // invite dialog.
+  static const int basicPlanStaffLimit = 0;
+
   // SharedPreferences keys
   static const String keyIsLoggedIn = 'isLoggedIn';
   static const String keyIsSetupComplete = 'isSetupComplete';
