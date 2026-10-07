@@ -218,6 +218,8 @@
   "costPriceCurrency": "लागत मूल्य (₹)",
   "sellingPriceCurrency": "बिक्री मूल्य (₹) *",
   "mrpCurrency": "MRP (₹)",
+  "descriptionLabel": "विवरण",
+  "noDescriptionAdded": "कोई विवरण नहीं जोड़ा गया",
   "mustBeGreaterThanZero": "0 से अधिक होना चाहिए",
   "stockQuantity": "स्टॉक मात्रा",
   "stockQuantityRequiredError": "0 से अधिक मात्रा दर्ज करें।",

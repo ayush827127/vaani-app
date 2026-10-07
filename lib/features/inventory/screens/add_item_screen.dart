@@ -47,6 +47,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
   final _costCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
   final _mrpCtrl = TextEditingController();
+  final _descriptionCtrl = TextEditingController();
   final _stockCtrl = TextEditingController(text: '0');
   final _reorderCtrl = TextEditingController(text: '10');
   final _aliasCtrl = TextEditingController();
@@ -112,6 +113,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
         _costCtrl.text = item.costPrice.toString();
         _priceCtrl.text = item.sellingPrice.toString();
         _mrpCtrl.text = item.mrp?.toString() ?? '';
+        _descriptionCtrl.text = item.description ?? '';
         _stockCtrl.text = item.stockQuantity.toString();
         _reorderCtrl.text = item.reorderLevel.toString();
         _aliasCtrl.text = item.aliases.join(', ');
@@ -331,6 +333,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
       costPrice: double.tryParse(_costCtrl.text) ?? 0,
       sellingPrice: double.parse(_priceCtrl.text),
       mrp: _mrpCtrl.text.trim().isEmpty ? null : double.tryParse(_mrpCtrl.text.trim()),
+      description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
       gstRate: _gstRate,
       // Stock fields are hidden in the UI (and meaningless) once inventory
       // tracking is off — force them to 0 rather than saving whatever was
@@ -445,6 +448,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
     _costCtrl.dispose();
     _priceCtrl.dispose();
     _mrpCtrl.dispose();
+    _descriptionCtrl.dispose();
     _stockCtrl.dispose();
     _reorderCtrl.dispose();
     _aliasCtrl.dispose();
@@ -613,7 +617,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
         _buildTypeSelector(c, l10n),
         const SizedBox(height: 16),
         _buildCategoryField(c, l10n),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
+        _buildField(l10n.descriptionLabel, _descriptionCtrl,
+            hint: 'e.g. 1kg pack, imported, 500ml glass bottle', maxLines: 3),
+        const SizedBox(height: 4),
         Text(l10n.priceInformationLabel,
             style: TextStyle(color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
         const SizedBox(height: 10),
@@ -848,6 +855,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
     final sku = _skuCtrl.text.trim();
     final aliases = _aliasCtrl.text.trim();
     final barcode = _barcodeCtrl.text.trim();
+    final description = _descriptionCtrl.text.trim();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -873,16 +881,18 @@ class _AddItemScreenState extends State<AddItemScreen> {
             (l10n.reorderLevel, '$reorder ${l10n.unitsLabel}', null),
           ]),
         ],
-        if (sku.isNotEmpty || aliases.isNotEmpty || barcode.isNotEmpty) ...[
+        if (sku.isNotEmpty || aliases.isNotEmpty || barcode.isNotEmpty || description.isNotEmpty) ...[
           const SizedBox(height: 18),
-          // Barcode lives on Step 1, SKU/Aliases in Step 2's More Options —
-          // Step 1 is the sensible edit target either way, since Continue
-          // from there reaches Step 2 with everything already filled in.
+          // Barcode/Description live on Step 1, SKU/Aliases in Step 2's More
+          // Options — Step 1 is the sensible edit target either way, since
+          // Continue from there reaches Step 2 with everything already
+          // filled in.
           _sectionLabel(c, l10n.additionalInfoLabel, onEdit: () => _goToStep(0)),
           const SizedBox(height: 8),
           _buildSummaryCard(c, [
             if (barcode.isNotEmpty) (l10n.barcode, barcode, null),
             if (sku.isNotEmpty) (l10n.skuPhoneCode, sku, null),
+            if (description.isNotEmpty) (l10n.descriptionLabel, description, null),
             if (aliases.isNotEmpty) (l10n.voiceAliases, aliases, null),
           ]),
         ],
@@ -1405,12 +1415,14 @@ class _AddItemScreenState extends State<AddItemScreen> {
     String? hint,
     String? Function(String?)? validator,
     ValueChanged<String>? onChanged,
+    int maxLines = 1,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: ctrl,
         keyboardType: type,
+        maxLines: maxLines,
         style: TextStyle(color: context.colors.textPrimary),
         decoration: InputDecoration(
           labelText: label,

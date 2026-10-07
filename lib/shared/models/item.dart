@@ -30,6 +30,7 @@ class Item {
   final int reorderLevel;
   final String? imagePath;
   final String? imageUrl;
+  final String? description;
   final ItemType itemType;
   // The actual authority billing checks before touching stock — independent
   // of [itemType] so a shop can, e.g., sell a physical item without tracking
@@ -58,6 +59,7 @@ class Item {
     this.reorderLevel = 10,
     this.imagePath,
     this.imageUrl,
+    this.description,
     this.itemType = ItemType.product,
     this.inventoryEnabled = true,
     this.isActive = true,
@@ -93,6 +95,7 @@ class Item {
         'stock_quantity': stockQuantity,
         'reorder_level': reorderLevel,
         'image_path': imagePath,
+        'description': description,
         'item_type': itemType.dbValue,
         'inventory_enabled': inventoryEnabled ? 1 : 0,
         'is_active': isActive ? 1 : 0,
@@ -115,6 +118,7 @@ class Item {
         reorderLevel: map['reorder_level'] as int? ?? 10,
         imagePath: map['image_path'] as String?,
         imageUrl: map['image_url'] as String?,
+        description: map['description'] as String?,
         itemType: ItemType.fromDbValue(map['item_type'] as String?),
         inventoryEnabled: (map['inventory_enabled'] as int? ?? 1) == 1,
         isActive: (map['is_active'] as int? ?? 1) == 1,
@@ -137,6 +141,7 @@ class Item {
     int? reorderLevel,
     String? imagePath,
     String? imageUrl,
+    String? description,
     ItemType? itemType,
     bool? inventoryEnabled,
     bool? isActive,
@@ -157,6 +162,7 @@ class Item {
         reorderLevel: reorderLevel ?? this.reorderLevel,
         imagePath: imagePath ?? this.imagePath,
         imageUrl: imageUrl ?? this.imageUrl,
+        description: description ?? this.description,
         itemType: itemType ?? this.itemType,
         inventoryEnabled: inventoryEnabled ?? this.inventoryEnabled,
         isActive: isActive ?? this.isActive,

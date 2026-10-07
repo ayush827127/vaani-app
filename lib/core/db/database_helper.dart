@@ -347,6 +347,19 @@ class DatabaseHelper {
         }
       }
     }
+    if (oldVersion < 20) {
+      // Free-text item description — nullable, no existing item has one.
+      // Same table-existence guard as the v19 mrp block above: some of this
+      // file's own synthetic legacy test fixtures don't have `items` at all.
+      final itemsTable = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='items'");
+      if (itemsTable.isNotEmpty) {
+        final itemCols = await db.rawQuery("PRAGMA table_info(items)");
+        if (!itemCols.any((c) => c['name'] == 'description')) {
+          await db.execute('ALTER TABLE items ADD COLUMN description TEXT');
+        }
+      }
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -385,6 +398,7 @@ class DatabaseHelper {
         reorder_level INTEGER NOT NULL DEFAULT 10,
         image_path TEXT,
         image_url TEXT,
+        description TEXT,
         item_type TEXT NOT NULL DEFAULT 'PRODUCT',
         inventory_enabled INTEGER NOT NULL DEFAULT 1,
         is_active INTEGER NOT NULL DEFAULT 1,

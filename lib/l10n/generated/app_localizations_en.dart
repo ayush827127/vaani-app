@@ -669,6 +669,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mrpCurrency => 'MRP (₹)';
 
   @override
+  String get descriptionLabel => 'Description';
+
+  @override
+  String get noDescriptionAdded => 'No description added';
+
+  @override
   String get mustBeGreaterThanZero => 'Must be > 0';
 
   @override

@@ -556,6 +556,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen>
     ];
     final tabViews = [
       _OverviewTab(
+        item: p,
         history: _stockHistory,
         showInventory: showInventory,
         onViewAll: () => _tabController?.animateTo(1),
@@ -1136,6 +1137,7 @@ class _TabScrollView extends StatelessWidget {
 // ── Overview tab ─────────────────────────────────────────────────────────
 
 class _OverviewTab extends StatelessWidget {
+  final Item item;
   final List<Map<String, Object?>> history;
   // Whether this item tracks inventory at all — a Service (or a Product
   // with tracking switched off) never has stock movements to show here,
@@ -1144,16 +1146,22 @@ class _OverviewTab extends StatelessWidget {
   // data-independent authority so stale/old rows could never leak through).
   final bool showInventory;
   final VoidCallback onViewAll;
-  const _OverviewTab({required this.history, required this.showInventory, required this.onViewAll});
+  const _OverviewTab(
+      {required this.item, required this.history, required this.showInventory, required this.onViewAll});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final l10n = context.l10n;
+    final description = item.description?.trim();
 
     if (!showInventory) {
       return _TabScrollView(
         children: [
+          if (description != null && description.isNotEmpty) ...[
+            _DescriptionCard(description: description, c: c, l10n: l10n),
+            const SizedBox(height: 16),
+          ],
           _EmptyState(
             icon: Icons.design_services_rounded,
             title: l10n.trackInventoryOffHint,
@@ -1167,6 +1175,10 @@ class _OverviewTab extends StatelessWidget {
 
     return _TabScrollView(
       children: [
+        if (description != null && description.isNotEmpty) ...[
+          _DescriptionCard(description: description, c: c, l10n: l10n),
+          const SizedBox(height: 16),
+        ],
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -1470,6 +1482,35 @@ class _DetailsTab extends StatelessWidget {
 }
 
 // ── Shared small widgets ─────────────────────────────────────────────────
+
+class _DescriptionCard extends StatelessWidget {
+  final String description;
+  final AppSemanticColors c;
+  final AppLocalizations l10n;
+  const _DescriptionCard({required this.description, required this.c, required this.l10n});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.surfaceBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.descriptionLabel,
+              style: TextStyle(color: c.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Text(description, style: TextStyle(color: c.textSecondary, fontSize: 13, height: 1.4)),
+        ],
+      ),
+    );
+  }
+}
 
 class _EmptyState extends StatelessWidget {
   final IconData icon;

@@ -465,4 +465,85 @@ void main() {
     final itemCols = await db.rawQuery("PRAGMA table_info(items)");
     expect(itemCols.any((c) => c['name'] == 'mrp'), isTrue);
   });
+
+  /// A real device already at v19 — has mrp, but items predates description.
+  Future<void> createLegacyV19DatabaseMissingDescription(String path) async {
+    final db = await openDatabase(
+      path,
+      version: 19,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shop_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            cost_price REAL NOT NULL DEFAULT 0,
+            selling_price REAL NOT NULL,
+            mrp REAL,
+            stock_quantity INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+        ''');
+      },
+    );
+    await db.close();
+  }
+
+  test('a device stuck at v19 without items.description gets it on upgrade to v20, '
+      'and inserting an item with it now succeeds', () async {
+    final path = p.join(tempDir.path, 'legacy_v19.db');
+    await createLegacyV19DatabaseMissingDescription(path);
+
+    final db = await openDatabase(
+      path,
+      version: 20,
+      onUpgrade: (db, oldV, newV) => DatabaseHelper.upgradeForTesting(db, oldV, newV),
+    );
+
+    final itemCols = await db.rawQuery("PRAGMA table_info(items)");
+    expect(itemCols.any((c) => c['name'] == 'description'), isTrue);
+
+    final itemId = await db.insert('items', {
+      'shop_id': 1,
+      'name': 'Dosa',
+      'cost_price': 30,
+      'selling_price': 50,
+      'description': 'Fresh dosa batter, 1kg pack',
+      'created_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+    final row = await db.query('items', where: 'id = ?', whereArgs: [itemId]);
+    expect(row.single['description'], 'Fresh dosa batter, 1kg pack');
+
+    await db.close();
+  });
+
+  test('running the v20 upgrade twice (idempotent) does not throw "duplicate column"', () async {
+    final path = p.join(tempDir.path, 'legacy_v19_twice.db');
+    await createLegacyV19DatabaseMissingDescription(path);
+
+    var db = await openDatabase(
+      path,
+      version: 20,
+      onUpgrade: (db, oldV, newV) => DatabaseHelper.upgradeForTesting(db, oldV, newV),
+    );
+    await db.close();
+
+    db = await openDatabase(path, version: 20);
+    await DatabaseHelper.upgradeForTesting(db, 19, 20);
+
+    final itemCols = await db.rawQuery("PRAGMA table_info(items)");
+    expect(itemCols.where((c) => c['name'] == 'description'), hasLength(1));
+
+    await db.close();
+  });
+
+  test('a fresh install also has items.description natively, no upgrade needed', () async {
+    await DatabaseHelper.openInMemoryForTesting();
+    final db = await DatabaseHelper.instance.database;
+    final itemCols = await db.rawQuery("PRAGMA table_info(items)");
+    expect(itemCols.any((c) => c['name'] == 'description'), isTrue);
+  });
 }

@@ -1358,6 +1358,18 @@ abstract class AppLocalizations {
   /// **'MRP (₹)'**
   String get mrpCurrency;
 
+  /// No description provided for @descriptionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get descriptionLabel;
+
+  /// No description provided for @noDescriptionAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'No description added'**
+  String get noDescriptionAdded;
+
   /// No description provided for @mustBeGreaterThanZero.
   ///
   /// In en, this message translates to:
