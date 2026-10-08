@@ -35,4 +35,52 @@ void main() {
     final status = statusAsOf(DateTime.now().subtract(const Duration(days: 4)), ['reports']);
     expect(status.isModuleEnabled('reports'), isFalse);
   });
+
+  group('resource limits', () {
+    test('fromJson parses real numeric caps straight through', () {
+      final status = SubscriptionStatus.fromJson({
+        'shopStatus': 'ACTIVE',
+        'effectivePlanName': 'Basic',
+        'modules': ['billing'],
+        'voiceInvoiceLimit': 50,
+        'staffLimit': 0,
+        'manualInvoiceMonthlyLimit': 50,
+      });
+
+      expect(status.voiceInvoiceLimit, 50);
+      expect(status.staffLimit, 0);
+      expect(status.manualInvoiceMonthlyLimit, 50);
+    });
+
+    test('fromJson treats a missing/null limit as unlimited (null), not a parse error', () {
+      final status = SubscriptionStatus.fromJson({
+        'shopStatus': 'ACTIVE',
+        'effectivePlanName': 'Pro',
+        'modules': ['billing', 'reports'],
+      });
+
+      expect(status.voiceInvoiceLimit, isNull);
+      expect(status.staffLimit, isNull);
+      expect(status.manualInvoiceMonthlyLimit, isNull);
+    });
+
+    test('round-trips through toCacheJson/fromCacheJson without losing the limits', () {
+      final original = statusAsOf(DateTime.now(), ['billing']);
+      final withLimits = SubscriptionStatus(
+        shopStatus: original.shopStatus,
+        effectivePlanName: original.effectivePlanName,
+        enabledModules: original.enabledModules,
+        fetchedAt: original.fetchedAt,
+        voiceInvoiceLimit: 50,
+        staffLimit: 0,
+        manualInvoiceMonthlyLimit: 50,
+      );
+
+      final restored = SubscriptionStatus.fromCacheJson(withLimits.toCacheJson());
+
+      expect(restored.voiceInvoiceLimit, 50);
+      expect(restored.staffLimit, 0);
+      expect(restored.manualInvoiceMonthlyLimit, 50);
+    });
+  });
 }

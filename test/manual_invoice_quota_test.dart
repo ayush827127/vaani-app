@@ -4,11 +4,11 @@ import 'package:vaani/core/db/database_helper.dart';
 import 'package:vaani/features/billing/repositories/invoice_repository.dart';
 
 /// Exercises InvoiceRepository.countManualInvoicesThisMonth — the local,
-/// offline-first gate behind the Basic plan's separate monthly cap on
-/// manually-created invoices (see AppConstants.basicPlanManualInvoiceLimit
-/// and payment_bottom_sheet.dart's call site). Invoices are inserted
-/// directly rather than through the full checkout flow — this is a unit
-/// test of the count query itself, not of invoice creation.
+/// offline-first gate behind a plan's manualInvoiceMonthlyLimit (see
+/// SubscriptionStatus.manualInvoiceMonthlyLimit and
+/// payment_bottom_sheet.dart's call site). Invoices are inserted directly
+/// rather than through the full checkout flow — this is a unit test of the
+/// count query itself, not of invoice creation.
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;

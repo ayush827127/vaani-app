@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../../subscription/models/usage_stat.dart';
 import '../models/member.dart';
 import '../models/invitation.dart';
 
@@ -88,6 +89,17 @@ class MemberApiClient {
             .timeout(const Duration(seconds: 60)));
     final data = _unwrap(response) as List;
     return data.map((e) => Member.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// Server-computed staff usage against the active shop's plan cap —
+  /// mirrors SubscriptionApiClient.getVoiceUsage. Used both to show real
+  /// numbers on the Subscription screen and as the local pre-check before
+  /// even opening the invite dialog (see manage_members_screen.dart).
+  Future<UsageStat> getStaffQuota(String token) async {
+    final response = await _sendWithRetry(() => _client
+        .get(Uri.parse('$_baseUrl/api/shop/members/quota'), headers: _authHeaders(token))
+        .timeout(const Duration(seconds: 60)));
+    return UsageStat.fromJson(_unwrap(response) as Map<String, dynamic>);
   }
 
   Future<void> inviteMember(String token, String phone, String role) async {

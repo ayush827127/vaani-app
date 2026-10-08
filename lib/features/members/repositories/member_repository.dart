@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/constants.dart';
+import '../../subscription/models/usage_stat.dart';
 import '../models/member.dart';
 import '../models/invitation.dart';
 import '../models/membership.dart';
@@ -89,6 +90,8 @@ class MemberRepository {
   }
 
   Future<List<Member>> listMembers() async => _client.listMembers(await _requireToken());
+
+  Future<UsageStat> getStaffQuota() async => _client.getStaffQuota(await _requireToken());
 
   Future<void> inviteMember(String phone, String role) async =>
       _client.inviteMember(await _requireToken(), phone, role);

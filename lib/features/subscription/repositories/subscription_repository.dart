@@ -5,7 +5,7 @@ import '../../auth/repositories/shop_repository.dart';
 import '../models/subscription_status.dart';
 import '../models/plan.dart';
 import '../models/payment_claim.dart';
-import '../models/voice_usage.dart';
+import '../models/usage_stat.dart';
 import '../services/subscription_api_client.dart';
 
 /// Thrown by the plan/payment-claim methods below when the shop has no
@@ -116,7 +116,10 @@ class SubscriptionRepository {
   Future<List<PaymentClaim>> listMyPaymentClaims() async =>
       _api.listMyPaymentClaims(await _requireToken());
 
-  Future<VoiceUsage> getVoiceUsage() async => _api.getVoiceUsage(await _requireToken());
+  Future<UsageStat> getVoiceUsage() async => _api.getVoiceUsage(await _requireToken());
+
+  Future<UsageStat> getManualInvoiceUsage() async =>
+      _api.getManualInvoiceUsage(await _requireToken());
 
   Future<void> _syncOnce(SharedPreferences prefs,
       {String? otpToken, bool retryOnAuthFailure = true}) async {

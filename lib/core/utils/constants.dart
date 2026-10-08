@@ -3,28 +3,13 @@ class AppConstants {
   static const String dbName = 'vaani.db';
   static const int dbVersion = 20;
 
-  // Must match BASIC_VOICE_INVOICE_LIMIT in the backend's
-  // src/utils/voiceQuota.js — this is only the *local, offline* gate for
-  // instant checkout feedback; the backend independently enforces the same
-  // number from synced data (see shop-voice.service.js), so a mismatch here
-  // would only affect UX smoothness, never actually let a Basic shop past
-  // the real cap.
-  static const int basicPlanVoiceInvoiceLimit = 50;
-
-  // Separate, monthly cap on manually-created (non-voice) invoices for the
-  // Basic plan — resets at the start of each calendar month, unlike the
-  // lifetime voice cap above. Purely a local, offline-first gate (see
-  // InvoiceRepository.countManualInvoicesThisMonth's doc comment for why
-  // there's no backend-authoritative mirror of this one).
-  static const int basicPlanManualInvoiceLimit = 50;
-
-  // Basic plan's cap on additional staff invited beyond the shop owner — 0
-  // means Basic shops can't invite any team members at all. Backend-enforced
-  // (see shop-members.service.js's inviteMember / staffQuota.js), since an
-  // invite always goes straight to the server with no offline path; this is
-  // only a local pre-check for immediate feedback before even opening the
-  // invite dialog.
-  static const int basicPlanStaffLimit = 0;
+  // Resource-cap numbers (voice/manual invoice limits, staff limit) used to
+  // live here as hardcoded constants keyed to "the Basic plan" by name.
+  // They're now real, admin-configurable columns on the backend's Plan row
+  // (see schema.prisma) surfaced per-shop via SubscriptionStatus's
+  // voiceInvoiceLimit/staffLimit/manualInvoiceMonthlyLimit fields — read
+  // those instead of a constant here, so a cap changed in the admin panel
+  // takes effect without an app release.
 
   // SharedPreferences keys
   static const String keyIsLoggedIn = 'isLoggedIn';

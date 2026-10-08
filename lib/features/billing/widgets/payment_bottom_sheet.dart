@@ -320,7 +320,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
 
     final container = ProviderScope.containerOf(context, listen: false);
     final isVoiceOrigin = container.read(cartVoiceOriginProvider);
-    final isOnBasic = container.read(subscriptionProvider)?.isOnBasicPlan ?? false;
+    final status = container.read(subscriptionProvider);
 
     setState(() => _isProcessing = true);
 
@@ -328,29 +328,35 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
     try {
       final invoiceRepo = getIt<InvoiceRepository>();
 
-      // Local, offline-first gate — see basicPlanVoiceInvoiceLimit's doc
-      // comment for why the backend independently enforces the same limit
-      // from its own synced data rather than trusting this check alone.
-      if (isVoiceOrigin && isOnBasic) {
+      // Local, offline-first gate, read straight off the plan's own
+      // voiceInvoiceLimit (null = unlimited) rather than a hardcoded
+      // number — see SubscriptionStatus.voiceInvoiceLimit's doc comment
+      // for why the backend independently enforces the same limit from
+      // its own synced data rather than trusting this check alone. A null
+      // status (never checked in yet) fails open, same as every other
+      // cached-status check in the app.
+      final voiceLimit = status?.voiceInvoiceLimit;
+      if (isVoiceOrigin && voiceLimit != null) {
         final used = await invoiceRepo.countVoiceInvoices(widget.shopId);
-        if (used >= AppConstants.basicPlanVoiceInvoiceLimit) {
+        if (used >= voiceLimit) {
           if (mounted) {
             setState(() => _isProcessing = false);
-            _showVoiceLimitReachedDialog();
+            _showVoiceLimitReachedDialog(voiceLimit);
           }
           return;
         }
       }
 
       // Separate monthly cap on manually-created invoices — see
-      // basicPlanManualInvoiceLimit's doc comment for why this one has no
-      // backend-authoritative mirror.
-      if (!isVoiceOrigin && isOnBasic) {
+      // SubscriptionStatus.manualInvoiceMonthlyLimit's doc comment for why
+      // this one has no backend-authoritative mirror.
+      final manualLimit = status?.manualInvoiceMonthlyLimit;
+      if (!isVoiceOrigin && manualLimit != null) {
         final usedThisMonth = await invoiceRepo.countManualInvoicesThisMonth(widget.shopId);
-        if (usedThisMonth >= AppConstants.basicPlanManualInvoiceLimit) {
+        if (usedThisMonth >= manualLimit) {
           if (mounted) {
             setState(() => _isProcessing = false);
-            _showManualInvoiceLimitReachedDialog();
+            _showManualInvoiceLimitReachedDialog(manualLimit);
           }
           return;
         }
@@ -451,7 +457,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
     }
   }
 
-  void _showVoiceLimitReachedDialog() {
+  void _showVoiceLimitReachedDialog(int limit) {
     final c = context.colors;
     showDialog(
       context: context,
@@ -460,9 +466,8 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Voice invoice limit reached', style: TextStyle(color: c.textPrimary)),
         content: Text(
-          "You've used all ${AppConstants.basicPlanVoiceInvoiceLimit} voice-created invoices on "
-          'the Basic plan. Upgrade to Pro for unlimited voice billing — or finish this sale '
-          'manually instead.',
+          "You've used all $limit voice-created invoices on your current plan. "
+          'Upgrade for unlimited voice billing — or finish this sale manually instead.',
           style: TextStyle(color: c.textSecondary),
         ),
         actions: [
@@ -483,7 +488,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
     );
   }
 
-  void _showManualInvoiceLimitReachedDialog() {
+  void _showManualInvoiceLimitReachedDialog(int limit) {
     final c = context.colors;
     showDialog(
       context: context,
@@ -492,8 +497,8 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Monthly invoice limit reached', style: TextStyle(color: c.textPrimary)),
         content: Text(
-          "You've used all ${AppConstants.basicPlanManualInvoiceLimit} invoices this month on "
-          'the Basic plan. Upgrade to Pro for unlimited billing.',
+          "You've used all $limit invoices this month on your current plan. "
+          'Upgrade for unlimited billing.',
           style: TextStyle(color: c.textSecondary),
         ),
         actions: [

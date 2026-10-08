@@ -11,6 +11,18 @@ class SubscriptionStatus {
   final DateTime? endDate;
   final List<String> enabledModules;
   final DateTime fetchedAt;
+  // Resource caps in force right now, straight from the backend's Plan row
+  // — null means unlimited. Read directly by the local, offline-first
+  // pre-checks in payment_bottom_sheet.dart (voice/manual invoice caps) and
+  // manage_members_screen.dart (staff cap) instead of a hardcoded constant,
+  // so a cap changed via the admin panel takes effect without an app
+  // release. The backend remains the authoritative enforcement point for
+  // voice invoices and staff (see shop-voice.service.js /
+  // shop-members.service.js) — these cached numbers can go briefly stale
+  // between check-ins, same as enabledModules above.
+  final int? voiceInvoiceLimit;
+  final int? staffLimit;
+  final int? manualInvoiceMonthlyLimit;
 
   const SubscriptionStatus({
     required this.shopStatus,
@@ -20,6 +32,9 @@ class SubscriptionStatus {
     this.endDate,
     required this.enabledModules,
     required this.fetchedAt,
+    this.voiceInvoiceLimit,
+    this.staffLimit,
+    this.manualInvoiceMonthlyLimit,
   });
 
   // Strict equality (not a "default to Basic" fallback) deliberately — when
@@ -62,6 +77,9 @@ class SubscriptionStatus {
       enabledModules:
           (json['modules'] as List?)?.map((e) => e.toString()).toList() ?? [],
       fetchedAt: DateTime.now(),
+      voiceInvoiceLimit: json['voiceInvoiceLimit'] as int?,
+      staffLimit: json['staffLimit'] as int?,
+      manualInvoiceMonthlyLimit: json['manualInvoiceMonthlyLimit'] as int?,
     );
   }
 
@@ -73,6 +91,9 @@ class SubscriptionStatus {
         'endDate': endDate?.toIso8601String(),
         'enabledModules': enabledModules,
         'fetchedAt': fetchedAt.toIso8601String(),
+        'voiceInvoiceLimit': voiceInvoiceLimit,
+        'staffLimit': staffLimit,
+        'manualInvoiceMonthlyLimit': manualInvoiceMonthlyLimit,
       };
 
   factory SubscriptionStatus.fromCacheJson(Map<String, dynamic> json) =>
@@ -91,5 +112,8 @@ class SubscriptionStatus {
         fetchedAt:
             DateTime.tryParse(json['fetchedAt'] as String? ?? '') ??
                 DateTime.now(),
+        voiceInvoiceLimit: json['voiceInvoiceLimit'] as int?,
+        staffLimit: json['staffLimit'] as int?,
+        manualInvoiceMonthlyLimit: json['manualInvoiceMonthlyLimit'] as int?,
       );
 }

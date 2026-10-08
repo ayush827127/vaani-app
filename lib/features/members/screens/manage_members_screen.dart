@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/di/injector.dart';
 import '../../../l10n/l10n_extensions.dart';
-import '../../subscription/providers/subscription_provider.dart';
+import '../../subscription/models/usage_stat.dart';
 import '../models/member.dart';
 import '../repositories/member_repository.dart';
 
@@ -22,6 +21,11 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
   String? _loadError;
   List<Member> _members = [];
   bool _hasSession = true;
+  // Server-computed, fetched alongside the member list — see _invite's use
+  // of it. Null just means "unknown" (fetch failed, or hasn't happened
+  // yet), in which case the local pre-check fails open and lets the
+  // backend's own authoritative check in inviteMember be the real gate.
+  UsageStat? _staffQuota;
 
   @override
   void initState() {
@@ -46,9 +50,20 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
     }
     try {
       final members = await repo.listMembers();
+      // Best-effort — a failure here (e.g. a transient network blip) just
+      // means the local pre-check below can't run and falls open, not that
+      // the whole screen should show an error for what's only a secondary
+      // nicety.
+      UsageStat? staffQuota;
+      try {
+        staffQuota = await repo.getStaffQuota();
+      } catch (e) {
+        debugPrint('[ManageMembersScreen] getStaffQuota failed (non-fatal): $e');
+      }
       if (!mounted) return;
       setState(() {
         _members = members;
+        _staffQuota = staffQuota;
         _hasSession = true;
         _loading = false;
       });
@@ -68,14 +83,17 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
     );
   }
 
-  /// Local, offline-first gate — mirrors payment_bottom_sheet.dart's voice/
-  /// manual-invoice checks. Basic's staff cap is always 0, so there's
-  /// nothing to count locally: any Basic shop is already at the cap. The
-  /// backend's own check in shop-members.service.js's inviteMember is the
-  /// real backstop regardless of what this says.
-  bool _blockedByBasicStaffCap() {
-    final container = ProviderScope.containerOf(context, listen: false);
-    return container.read(subscriptionProvider)?.isOnBasicPlan ?? false;
+  /// Local pre-check using the real, server-computed usage fetched in
+  /// _load() — not a hardcoded plan name, so this stays correct for
+  /// whatever staffLimit the shop's actual plan carries (including a
+  /// future plan with a positive, non-zero cap). The backend's own check in
+  /// shop-members.service.js's inviteMember is the real backstop
+  /// regardless of what this says; a null/unknown quota fails open and
+  /// just lets that backend check be the only gate.
+  bool _blockedByStaffCap() {
+    final quota = _staffQuota;
+    if (quota == null || quota.unlimited || quota.limit == null) return false;
+    return quota.used >= quota.limit!;
   }
 
   void _showStaffLimitReachedDialog() {
@@ -85,9 +103,9 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: c.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Staff members not included', style: TextStyle(color: c.textPrimary)),
+        title: Text('Staff limit reached', style: TextStyle(color: c.textPrimary)),
         content: Text(
-          'The Basic plan does not include additional staff members. Upgrade to Pro to invite your team.',
+          'Your current plan does not allow any more staff members. Upgrade to invite your team.',
           style: TextStyle(color: c.textSecondary),
         ),
         actions: [
@@ -108,7 +126,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
   }
 
   Future<void> _invite() async {
-    if (_blockedByBasicStaffCap()) {
+    if (_blockedByStaffCap()) {
       _showStaffLimitReachedDialog();
       return;
     }
@@ -170,6 +188,9 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.invitationSent), backgroundColor: AppColors.success),
       );
+      // Refreshes _staffQuota too, so a second invite attempt's local
+      // pre-check reflects this one without needing a manual pull-to-refresh.
+      await _load();
     } catch (e) {
       _showError(e);
     }

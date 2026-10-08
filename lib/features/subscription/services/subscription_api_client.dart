@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import '../models/subscription_status.dart';
 import '../models/plan.dart';
 import '../models/payment_claim.dart';
-import '../models/voice_usage.dart';
+import '../models/usage_stat.dart';
 
 class ShopAuthResult {
   final String token;
@@ -250,9 +250,18 @@ class SubscriptionApiClient {
   /// getVoiceUsage on the backend for why this is trusted over any local
   /// count for *display*, even though checkout itself still gates on the
   /// local count for instant, offline-friendly feedback.
-  Future<VoiceUsage> getVoiceUsage(String token) async {
+  Future<UsageStat> getVoiceUsage(String token) async {
     final response = await _getWithRetry('/api/shop/subscription/voice-usage', token);
-    return VoiceUsage.fromJson(_unwrap(response) as Map<String, dynamic>);
+    return UsageStat.fromJson(_unwrap(response) as Map<String, dynamic>);
+  }
+
+  /// Server-computed manual-invoice usage for the current calendar month —
+  /// mirrors getVoiceUsage above, but note this one has no matching
+  /// backend-side *enforcement*, only display (see
+  /// manualInvoiceQuota.js's doc comment on the backend).
+  Future<UsageStat> getManualInvoiceUsage(String token) async {
+    final response = await _getWithRetry('/api/shop/subscription/manual-invoice-usage', token);
+    return UsageStat.fromJson(_unwrap(response) as Map<String, dynamic>);
   }
 
   /// Unwraps `{success, data}`/`{success, error}` envelopes, throwing

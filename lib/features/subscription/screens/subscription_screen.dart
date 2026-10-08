@@ -7,9 +7,10 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/di/injector.dart';
+import '../../members/repositories/member_repository.dart';
 import '../models/plan.dart';
 import '../models/payment_claim.dart';
-import '../models/voice_usage.dart';
+import '../models/usage_stat.dart';
 import '../models/subscription_status.dart';
 import '../providers/subscription_provider.dart';
 import '../repositories/subscription_repository.dart';
@@ -38,7 +39,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   String? _loadErrorDetail;
   List<Plan> _plans = [];
   List<PaymentClaim> _claims = [];
-  VoiceUsage? _voiceUsage;
+  UsageStat? _voiceUsage;
+  UsageStat? _staffUsage;
+  UsageStat? _manualInvoiceUsage;
 
   // Which plan a Pay/Switch action is currently in flight for — disables
   // just that button rather than the whole screen, and doubles as a guard
@@ -69,11 +72,26 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       final plans = await repo.listPlans();
       final claims = await repo.listMyPaymentClaims();
       final voiceUsage = await repo.getVoiceUsage();
+      final manualInvoiceUsage = await repo.getManualInvoiceUsage();
+      // Staff usage comes from a different repository (the User-token/
+      // membership system, not the legacy Shop-token this screen's other
+      // calls use) — a shop that's never been through that system (never
+      // invited/accepted anyone) has no user session at all, so this is
+      // best-effort and simply shows no staff usage rather than failing
+      // the whole screen's load.
+      UsageStat? staffUsage;
+      try {
+        staffUsage = await getIt<MemberRepository>().getStaffQuota();
+      } catch (e) {
+        debugPrint('[SubscriptionScreen] getStaffQuota failed (non-fatal): $e');
+      }
       if (!mounted) return;
       setState(() {
         _plans = plans;
         _claims = claims;
         _voiceUsage = voiceUsage;
+        _manualInvoiceUsage = manualInvoiceUsage;
+        _staffUsage = staffUsage;
         _loading = false;
       });
     } catch (e) {
@@ -268,7 +286,12 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      _CurrentStatusCard(status: status, voiceUsage: _voiceUsage),
+                      _CurrentStatusCard(
+                        status: status,
+                        voiceUsage: _voiceUsage,
+                        staffUsage: _staffUsage,
+                        manualInvoiceUsage: _manualInvoiceUsage,
+                      ),
                       if (pendingClaim != null) ...[
                         const SizedBox(height: 12),
                         _PendingClaimBanner(claim: pendingClaim),
@@ -306,8 +329,15 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
 
 class _CurrentStatusCard extends StatelessWidget {
   final SubscriptionStatus? status;
-  final VoiceUsage? voiceUsage;
-  const _CurrentStatusCard({required this.status, required this.voiceUsage});
+  final UsageStat? voiceUsage;
+  final UsageStat? staffUsage;
+  final UsageStat? manualInvoiceUsage;
+  const _CurrentStatusCard({
+    required this.status,
+    required this.voiceUsage,
+    required this.staffUsage,
+    required this.manualInvoiceUsage,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -352,7 +382,27 @@ class _CurrentStatusCard extends StatelessWidget {
           ],
           if (voiceUsage != null && !voiceUsage!.unlimited) ...[
             const SizedBox(height: 14),
-            _VoiceUsageBar(usage: voiceUsage!),
+            _UsageBar(
+              label: 'Voice invoices used',
+              usage: voiceUsage!,
+              limitReachedMessage: 'Limit reached — upgrade for unlimited voice billing.',
+            ),
+          ],
+          if (manualInvoiceUsage != null && !manualInvoiceUsage!.unlimited) ...[
+            const SizedBox(height: 14),
+            _UsageBar(
+              label: 'Manual invoices used this month',
+              usage: manualInvoiceUsage!,
+              limitReachedMessage: 'Limit reached — upgrade for unlimited billing.',
+            ),
+          ],
+          if (staffUsage != null && !staffUsage!.unlimited) ...[
+            const SizedBox(height: 14),
+            _UsageBar(
+              label: 'Staff members used',
+              usage: staffUsage!,
+              limitReachedMessage: 'Limit reached — upgrade to invite more staff.',
+            ),
           ],
         ],
       ),
@@ -363,22 +413,32 @@ class _CurrentStatusCard extends StatelessWidget {
       '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
 }
 
-class _VoiceUsageBar extends StatelessWidget {
-  final VoiceUsage usage;
-  const _VoiceUsageBar({required this.usage});
+/// Generic usage-against-cap bar, reused for voice invoices, manual
+/// invoices, and staff — the three usage stats this screen shows all share
+/// the same {used, limit, unlimited} shape (see UsageStat), so this is
+/// parametrized by label/message rather than duplicated three times.
+class _UsageBar extends StatelessWidget {
+  final String label;
+  final UsageStat usage;
+  final String limitReachedMessage;
+  const _UsageBar({required this.label, required this.usage, required this.limitReachedMessage});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    // A real limit of 0 (e.g. Basic's staff cap) must still show a full,
+    // "at limit" bar rather than dividing by zero — clamping the divisor to
+    // at least 1 only affects the bar's fill fraction, never the separate
+    // nearLimit check below, which compares against the real limit.
     final limit = usage.limit ?? 1;
-    final fraction = (usage.used / limit).clamp(0.0, 1.0);
-    final nearLimit = usage.used >= limit;
+    final fraction = (usage.used / (limit == 0 ? 1 : limit)).clamp(0.0, 1.0);
+    final nearLimit = usage.used >= (usage.limit ?? 1);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Text('Voice invoices used', style: TextStyle(color: c.textSecondary, fontSize: 12)),
+            Text(label, style: TextStyle(color: c.textSecondary, fontSize: 12)),
             const Spacer(),
             Text(
               '${usage.used} / ${usage.limit}',
@@ -401,10 +461,7 @@ class _VoiceUsageBar extends StatelessWidget {
         ),
         if (nearLimit) ...[
           const SizedBox(height: 6),
-          Text(
-            'Limit reached — upgrade to Pro for unlimited voice billing.',
-            style: TextStyle(color: c.danger, fontSize: 11),
-          ),
+          Text(limitReachedMessage, style: TextStyle(color: c.danger, fontSize: 11)),
         ],
       ],
     );
@@ -508,6 +565,13 @@ class _PlanCard extends StatelessWidget {
                   ],
                 ),
               )),
+          const SizedBox(height: 4),
+          Text(_limitLine('Voice invoices', plan.voiceInvoiceLimit, 'lifetime'),
+              style: TextStyle(color: c.textHint, fontSize: 11.5)),
+          Text(_limitLine('Staff members', plan.staffLimit, 'additional'),
+              style: TextStyle(color: c.textHint, fontSize: 11.5)),
+          Text(_limitLine('Manual invoices', plan.manualInvoiceMonthlyLimit, 'per month'),
+              style: TextStyle(color: c.textHint, fontSize: 11.5)),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
@@ -540,6 +604,9 @@ class _PlanCard extends StatelessWidget {
       ),
     );
   }
+
+  String _limitLine(String label, int? limit, String unit) =>
+      limit == null ? '$label: Unlimited' : '$label: $limit $unit';
 }
 
 class _ErrorState extends StatelessWidget {

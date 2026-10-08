@@ -5,6 +5,7 @@ import 'package:vaani/features/members/models/member.dart';
 import 'package:vaani/features/members/models/invitation.dart';
 import 'package:vaani/features/members/repositories/member_repository.dart';
 import 'package:vaani/features/members/services/member_api_client.dart';
+import 'package:vaani/features/subscription/models/usage_stat.dart';
 
 /// A hand-rolled fake rather than a mocking package (none is used elsewhere
 /// in this codebase's tests) — implements every method MemberRepository
@@ -16,6 +17,7 @@ class _FakeMemberApiClient implements MemberApiClient {
   List<Invitation> invitations = const [];
   AcceptedMembership? acceptResult;
   String selectShopTokenReturned = 'refreshed-token';
+  UsageStat staffQuota = const UsageStat(used: 0, limit: null, unlimited: true);
 
   @override
   Future<UserAuthResult> loginAsUser(String phone, String otpToken) async {
@@ -25,6 +27,9 @@ class _FakeMemberApiClient implements MemberApiClient {
 
   @override
   Future<List<Member>> listMembers(String token) async => members;
+
+  @override
+  Future<UsageStat> getStaffQuota(String token) async => staffQuota;
 
   @override
   Future<void> inviteMember(String token, String phone, String role) async {}
@@ -96,6 +101,17 @@ void main() {
     final members = await repo.listMembers();
     expect(members, hasLength(1));
     expect(members.single.name, 'Ravi');
+  });
+
+  test('getStaffQuota uses the cached session against the client', () async {
+    fakeClient.loginResult =
+        const UserAuthResult(token: 'user-token-1', activeShopId: 'shop-1', memberships: []);
+    fakeClient.staffQuota = const UsageStat(used: 0, limit: 0, unlimited: false);
+    await repo.ensureUserSession('9876543210', 'otp-token');
+
+    final quota = await repo.getStaffQuota();
+    expect(quota.limit, 0);
+    expect(quota.unlimited, isFalse);
   });
 
   test('checkForPendingInvitations caches the session and returns the invitation list', () async {
