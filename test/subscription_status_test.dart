@@ -42,14 +42,12 @@ void main() {
         'shopStatus': 'ACTIVE',
         'effectivePlanName': 'Basic',
         'modules': ['billing'],
-        'voiceInvoiceLimit': 50,
+        'invoiceMonthlyLimit': 50,
         'staffLimit': 0,
-        'manualInvoiceMonthlyLimit': 50,
       });
 
-      expect(status.voiceInvoiceLimit, 50);
+      expect(status.invoiceMonthlyLimit, 50);
       expect(status.staffLimit, 0);
-      expect(status.manualInvoiceMonthlyLimit, 50);
     });
 
     test('fromJson treats a missing/null limit as unlimited (null), not a parse error', () {
@@ -59,9 +57,8 @@ void main() {
         'modules': ['billing', 'reports'],
       });
 
-      expect(status.voiceInvoiceLimit, isNull);
+      expect(status.invoiceMonthlyLimit, isNull);
       expect(status.staffLimit, isNull);
-      expect(status.manualInvoiceMonthlyLimit, isNull);
     });
 
     test('round-trips through toCacheJson/fromCacheJson without losing the limits', () {
@@ -71,16 +68,63 @@ void main() {
         effectivePlanName: original.effectivePlanName,
         enabledModules: original.enabledModules,
         fetchedAt: original.fetchedAt,
-        voiceInvoiceLimit: 50,
+        invoiceMonthlyLimit: 50,
         staffLimit: 0,
-        manualInvoiceMonthlyLimit: 50,
       );
 
       final restored = SubscriptionStatus.fromCacheJson(withLimits.toCacheJson());
 
-      expect(restored.voiceInvoiceLimit, 50);
+      expect(restored.invoiceMonthlyLimit, 50);
       expect(restored.staffLimit, 0);
-      expect(restored.manualInvoiceMonthlyLimit, 50);
+    });
+  });
+
+  group('trial fields', () {
+    test('fromJson parses real trial state straight through', () {
+      final status = SubscriptionStatus.fromJson({
+        'shopStatus': 'ACTIVE',
+        'effectivePlanName': 'Pro',
+        'modules': ['billing', 'reports'],
+        'trialUsed': true,
+        'trialAvailable': false,
+        'trialEndsAt': '2026-10-22T00:00:00.000Z',
+      });
+
+      expect(status.trialUsed, isTrue);
+      expect(status.trialAvailable, isFalse);
+      expect(status.trialEndsAt, DateTime.parse('2026-10-22T00:00:00.000Z'));
+    });
+
+    test('fromJson defaults trialUsed/trialAvailable to false and trialEndsAt to null when absent', () {
+      final status = SubscriptionStatus.fromJson({
+        'shopStatus': 'ACTIVE',
+        'effectivePlanName': 'Basic',
+        'modules': ['billing'],
+      });
+
+      expect(status.trialUsed, isFalse);
+      expect(status.trialAvailable, isFalse);
+      expect(status.trialEndsAt, isNull);
+    });
+
+    test('round-trips through toCacheJson/fromCacheJson without losing trial state', () {
+      final original = statusAsOf(DateTime.now(), ['billing']);
+      final endsAt = DateTime.now().add(const Duration(days: 5));
+      final withTrial = SubscriptionStatus(
+        shopStatus: original.shopStatus,
+        effectivePlanName: 'Pro',
+        enabledModules: original.enabledModules,
+        fetchedAt: original.fetchedAt,
+        trialUsed: true,
+        trialAvailable: false,
+        trialEndsAt: endsAt,
+      );
+
+      final restored = SubscriptionStatus.fromCacheJson(withTrial.toCacheJson());
+
+      expect(restored.trialUsed, isTrue);
+      expect(restored.trialAvailable, isFalse);
+      expect(restored.trialEndsAt, endsAt);
     });
   });
 }

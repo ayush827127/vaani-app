@@ -3,12 +3,13 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:vaani/core/db/database_helper.dart';
 import 'package:vaani/features/billing/repositories/invoice_repository.dart';
 
-/// Exercises InvoiceRepository.countManualInvoicesThisMonth — the local,
-/// offline-first gate behind a plan's manualInvoiceMonthlyLimit (see
-/// SubscriptionStatus.manualInvoiceMonthlyLimit and
-/// payment_bottom_sheet.dart's call site). Invoices are inserted directly
-/// rather than through the full checkout flow — this is a unit test of the
-/// count query itself, not of invoice creation.
+/// Exercises InvoiceRepository.countInvoicesThisMonth — the local,
+/// offline-first gate behind a plan's combined invoiceMonthlyLimit (see
+/// SubscriptionStatus.invoiceMonthlyLimit and payment_bottom_sheet.dart's
+/// call site). Voice- and manually-created invoices count TOGETHER against
+/// this one cap. Invoices are inserted directly rather than through the
+/// full checkout flow — this is a unit test of the count query itself, not
+/// of invoice creation.
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
@@ -45,14 +46,15 @@ void main() {
     });
   });
 
-  test('counts only manually-created invoices from this calendar month', () async {
+  test('counts voice- and manually-created invoices TOGETHER, from this calendar month only', () async {
     final now = DateTime.now();
     final thisMonth = DateTime(now.year, now.month, 15);
     final lastMonth = DateTime(now.year, now.month - 1, 15);
 
     await seedInvoice(number: 'INV-1', isVoiceCreated: false, createdAt: thisMonth);
     await seedInvoice(number: 'INV-2', isVoiceCreated: false, createdAt: thisMonth);
-    // Voice-created — belongs to the separate lifetime voice cap, not this one.
+    // Voice-created — counts toward the same combined cap as the two
+    // manual ones above, not a separate quota.
     await seedInvoice(number: 'INV-3', isVoiceCreated: true, createdAt: thisMonth);
     // Manual, but from last month — shouldn't count toward this month's cap.
     await seedInvoice(number: 'INV-4', isVoiceCreated: false, createdAt: lastMonth);
@@ -60,12 +62,12 @@ void main() {
     // still count against the cap.
     await seedInvoice(number: 'INV-5', isVoiceCreated: false, createdAt: thisMonth, deleted: true);
 
-    final count = await repo.countManualInvoicesThisMonth(shopId);
-    expect(count, 2);
+    final count = await repo.countInvoicesThisMonth(shopId);
+    expect(count, 3);
   });
 
   test('a shop with no invoices at all counts as zero, not an error', () async {
-    final count = await repo.countManualInvoicesThisMonth(shopId);
+    final count = await repo.countInvoicesThisMonth(shopId);
     expect(count, 0);
   });
 
@@ -86,7 +88,7 @@ void main() {
       'created_at': DateTime.now().toIso8601String(),
     });
 
-    final count = await repo.countManualInvoicesThisMonth(shopId);
+    final count = await repo.countInvoicesThisMonth(shopId);
     expect(count, 0);
   });
 }

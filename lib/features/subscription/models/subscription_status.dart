@@ -13,16 +13,35 @@ class SubscriptionStatus {
   final DateTime fetchedAt;
   // Resource caps in force right now, straight from the backend's Plan row
   // — null means unlimited. Read directly by the local, offline-first
-  // pre-checks in payment_bottom_sheet.dart (voice/manual invoice caps) and
-  // manage_members_screen.dart (staff cap) instead of a hardcoded constant,
-  // so a cap changed via the admin panel takes effect without an app
-  // release. The backend remains the authoritative enforcement point for
-  // voice invoices and staff (see shop-voice.service.js /
+  // pre-check in payment_bottom_sheet.dart (invoiceMonthlyLimit) and
+  // manage_members_screen.dart (staffLimit) instead of a hardcoded
+  // constant, so a cap changed via the admin panel takes effect without an
+  // app release. The backend remains the authoritative enforcement point
+  // for the voice-billing path and staff invites (see invoiceQuota.js /
   // shop-members.service.js) — these cached numbers can go briefly stale
   // between check-ins, same as enabledModules above.
-  final int? voiceInvoiceLimit;
+  //
+  // invoiceMonthlyLimit counts voice- and manually-created invoices
+  // TOGETHER against one combined monthly quota (previously two separate
+  // fields here — a lifetime voice cap and a monthly manual cap).
+  final int? invoiceMonthlyLimit;
   final int? staffLimit;
-  final int? manualInvoiceMonthlyLimit;
+  // Whether this shop has ever started its one-time 14-day Pro trial —
+  // permanent once true, drives the "Start Trial" CTA's visibility
+  // alongside trialAvailable.
+  final bool trialUsed;
+  // Whether tapping "Start Trial" right now would actually succeed —
+  // mirrors the backend's trial.service.js canStartTrial exactly (not
+  // simply !trialUsed: an in-force paid Pro subscription or an in-force
+  // trial also block it). A null/stale cached value fails closed here
+  // (defaults to false via the JSON parse below) rather than open, since
+  // showing the CTA when it would just fail server-side is worse UX than
+  // briefly hiding it.
+  final bool trialAvailable;
+  // Only set while the shop's current in-force subscription is itself a
+  // TRIAL — null the rest of the time (including once it's expired; see
+  // shop-status.service.js's lazy TRIAL->EXPIRED flip).
+  final DateTime? trialEndsAt;
 
   const SubscriptionStatus({
     required this.shopStatus,
@@ -32,9 +51,11 @@ class SubscriptionStatus {
     this.endDate,
     required this.enabledModules,
     required this.fetchedAt,
-    this.voiceInvoiceLimit,
+    this.invoiceMonthlyLimit,
     this.staffLimit,
-    this.manualInvoiceMonthlyLimit,
+    this.trialUsed = false,
+    this.trialAvailable = false,
+    this.trialEndsAt,
   });
 
   // Strict equality (not a "default to Basic" fallback) deliberately — when
@@ -77,9 +98,13 @@ class SubscriptionStatus {
       enabledModules:
           (json['modules'] as List?)?.map((e) => e.toString()).toList() ?? [],
       fetchedAt: DateTime.now(),
-      voiceInvoiceLimit: json['voiceInvoiceLimit'] as int?,
+      invoiceMonthlyLimit: json['invoiceMonthlyLimit'] as int?,
       staffLimit: json['staffLimit'] as int?,
-      manualInvoiceMonthlyLimit: json['manualInvoiceMonthlyLimit'] as int?,
+      trialUsed: json['trialUsed'] as bool? ?? false,
+      trialAvailable: json['trialAvailable'] as bool? ?? false,
+      trialEndsAt: json['trialEndsAt'] != null
+          ? DateTime.tryParse(json['trialEndsAt'] as String)
+          : null,
     );
   }
 
@@ -91,9 +116,11 @@ class SubscriptionStatus {
         'endDate': endDate?.toIso8601String(),
         'enabledModules': enabledModules,
         'fetchedAt': fetchedAt.toIso8601String(),
-        'voiceInvoiceLimit': voiceInvoiceLimit,
+        'invoiceMonthlyLimit': invoiceMonthlyLimit,
         'staffLimit': staffLimit,
-        'manualInvoiceMonthlyLimit': manualInvoiceMonthlyLimit,
+        'trialUsed': trialUsed,
+        'trialAvailable': trialAvailable,
+        'trialEndsAt': trialEndsAt?.toIso8601String(),
       };
 
   factory SubscriptionStatus.fromCacheJson(Map<String, dynamic> json) =>
@@ -112,8 +139,12 @@ class SubscriptionStatus {
         fetchedAt:
             DateTime.tryParse(json['fetchedAt'] as String? ?? '') ??
                 DateTime.now(),
-        voiceInvoiceLimit: json['voiceInvoiceLimit'] as int?,
+        invoiceMonthlyLimit: json['invoiceMonthlyLimit'] as int?,
         staffLimit: json['staffLimit'] as int?,
-        manualInvoiceMonthlyLimit: json['manualInvoiceMonthlyLimit'] as int?,
+        trialUsed: json['trialUsed'] as bool? ?? false,
+        trialAvailable: json['trialAvailable'] as bool? ?? false,
+        trialEndsAt: json['trialEndsAt'] != null
+            ? DateTime.tryParse(json['trialEndsAt'] as String)
+            : null,
       );
 }

@@ -12,10 +12,10 @@ class Plan {
   final List<String> modules;
   // Resource caps this plan grants — null means unlimited. Shown on the
   // plan-picker so a shop can see what upgrading actually changes, beyond
-  // just the module list.
-  final int? voiceInvoiceLimit;
+  // just the module list. invoiceMonthlyLimit counts voice- and
+  // manually-created invoices TOGETHER against one combined monthly quota.
+  final int? invoiceMonthlyLimit;
   final int? staffLimit;
-  final int? manualInvoiceMonthlyLimit;
 
   const Plan({
     required this.id,
@@ -23,9 +23,8 @@ class Plan {
     required this.price,
     required this.billingCycle,
     required this.modules,
-    this.voiceInvoiceLimit,
+    this.invoiceMonthlyLimit,
     this.staffLimit,
-    this.manualInvoiceMonthlyLimit,
   });
 
   bool get isFree => price == 0;
@@ -39,8 +38,7 @@ class Plan {
         price: num.parse(json['price'].toString()).toDouble(),
         billingCycle: json['billingCycle'] as String? ?? 'MONTHLY',
         modules: (json['modules'] as List?)?.map((e) => e.toString()).toList() ?? [],
-        voiceInvoiceLimit: json['voiceInvoiceLimit'] as int?,
+        invoiceMonthlyLimit: json['invoiceMonthlyLimit'] as int?,
         staffLimit: json['staffLimit'] as int?,
-        manualInvoiceMonthlyLimit: json['manualInvoiceMonthlyLimit'] as int?,
       );
 }

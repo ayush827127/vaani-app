@@ -26,14 +26,12 @@ void main() {
         'price': '0.00',
         'billingCycle': 'MONTHLY',
         'modules': ['billing'],
-        'voiceInvoiceLimit': 50,
+        'invoiceMonthlyLimit': 50,
         'staffLimit': 0,
-        'manualInvoiceMonthlyLimit': 50,
       });
 
-      expect(plan.voiceInvoiceLimit, 50);
+      expect(plan.invoiceMonthlyLimit, 50);
       expect(plan.staffLimit, 0);
-      expect(plan.manualInvoiceMonthlyLimit, 50);
     });
 
     test('a plan with no limit fields at all (unlimited) parses to null, not an error', () {
@@ -45,9 +43,8 @@ void main() {
         'modules': ['billing', 'reports'],
       });
 
-      expect(plan.voiceInvoiceLimit, isNull);
+      expect(plan.invoiceMonthlyLimit, isNull);
       expect(plan.staffLimit, isNull);
-      expect(plan.manualInvoiceMonthlyLimit, isNull);
     });
   });
 }

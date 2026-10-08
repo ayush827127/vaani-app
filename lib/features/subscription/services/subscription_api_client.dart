@@ -36,7 +36,13 @@ class PhoneAlreadyRegisteredException implements Exception {
 class SubscriptionApiException implements Exception {
   final String message;
   final int statusCode;
-  const SubscriptionApiException(this.message, this.statusCode);
+  // The backend's machine-readable error code (e.g. PRO_TRIAL_ALREADY_USED,
+  // MONTHLY_INVOICE_LIMIT_REACHED), from error.details.code — null for
+  // errors that don't carry one. message alone is already human-readable
+  // and is what every call site shows today; this exists for a caller that
+  // wants to branch on the specific reason rather than just display it.
+  final String? code;
+  const SubscriptionApiException(this.message, this.statusCode, {this.code});
   @override
   String toString() => message;
 }
@@ -246,22 +252,33 @@ class SubscriptionApiClient {
     return data.map((e) => PaymentClaim.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  /// Server-computed voice-invoice usage for the current plan — see
-  /// getVoiceUsage on the backend for why this is trusted over any local
-  /// count for *display*, even though checkout itself still gates on the
-  /// local count for instant, offline-friendly feedback.
-  Future<UsageStat> getVoiceUsage(String token) async {
-    final response = await _getWithRetry('/api/shop/subscription/voice-usage', token);
+  /// Server-computed combined (voice + manual) invoice usage for the
+  /// current calendar month — see getInvoiceUsage on the backend for why
+  /// this is trusted over any local count for *display*, even though
+  /// checkout itself still gates on the local count for instant,
+  /// offline-friendly feedback.
+  Future<UsageStat> getInvoiceUsage(String token) async {
+    final response = await _getWithRetry('/api/shop/subscription/invoice-usage', token);
     return UsageStat.fromJson(_unwrap(response) as Map<String, dynamic>);
   }
 
-  /// Server-computed manual-invoice usage for the current calendar month —
-  /// mirrors getVoiceUsage above, but note this one has no matching
-  /// backend-side *enforcement*, only display (see
-  /// manualInvoiceQuota.js's doc comment on the backend).
-  Future<UsageStat> getManualInvoiceUsage(String token) async {
-    final response = await _getWithRetry('/api/shop/subscription/manual-invoice-usage', token);
-    return UsageStat.fromJson(_unwrap(response) as Map<String, dynamic>);
+  /// Starts this shop's one-time 14-day Pro trial — see trial.service.js's
+  /// startTrial for the eligibility checks (throws a structured
+  /// SubscriptionApiException, e.g. code PRO_TRIAL_ALREADY_USED, if
+  /// ineligible; the caller is expected to have already checked
+  /// SubscriptionStatus.trialAvailable before even showing this action,
+  /// so a rejection here should be rare, not the primary gate).
+  Future<void> startTrial(String token) async {
+    final response = await _client
+        .post(
+          Uri.parse('$_baseUrl/api/shop/subscription/start-trial'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        )
+        .timeout(const Duration(seconds: 60));
+    _unwrap(response);
   }
 
   /// Unwraps `{success, data}`/`{success, error}` envelopes, throwing
@@ -282,10 +299,13 @@ class SubscriptionApiClient {
       throw const UnauthorizedException('Shop token rejected by backend');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final message = (envelope?['error'] as Map<String, dynamic>?)?['message'] as String?;
+      final error = envelope?['error'] as Map<String, dynamic>?;
+      final message = error?['message'] as String?;
+      final code = (error?['details'] as Map<String, dynamic>?)?['code'] as String?;
       throw SubscriptionApiException(
         message ?? 'Request failed: HTTP ${response.statusCode}',
         response.statusCode,
+        code: code,
       );
     }
     return envelope?['data'];

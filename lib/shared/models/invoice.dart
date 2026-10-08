@@ -101,11 +101,12 @@ class Invoice {
   final String paymentMode;
   final String status;
   final String? notes;
-  // Whether this invoice was created via voice billing — see
-  // InvoiceRepository.countVoiceInvoices() and the Basic plan's
-  // 50-voice-invoice cap. Never set by any path other than checkout
-  // actually originating from a voice-populated cart, so a manually built
-  // invoice never accidentally counts against it.
+  // Whether this invoice was created via voice billing — purely
+  // informational/analytics now. Voice and manually-created invoices both
+  // count equally against the plan's combined invoiceMonthlyLimit (see
+  // InvoiceRepository.countInvoicesThisMonth), so this field no longer
+  // drives quota logic by itself. Never set by any path other than
+  // checkout actually originating from a voice-populated cart.
   final bool isVoiceCreated;
   final DateTime? deletedAt;
   final DateTime createdAt;

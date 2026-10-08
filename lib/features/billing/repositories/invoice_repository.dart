@@ -419,36 +419,25 @@ class InvoiceRepository {
     return rows.map((r) => Invoice.fromMap(r)).toList();
   }
 
-  /// How many voice-created invoices this shop has, for the Basic plan's
-  /// 50-invoice cap — see the isVoiceCreated field doc comment on Invoice.
-  /// This is the *local* count (instant, works offline); the backend
-  /// independently re-derives the same number from synced data as the
-  /// authoritative backstop — see shop-voice.service.js.
-  Future<int> countVoiceInvoices(int shopId) async {
-    final db = await _db.database;
-    final result = await db.rawQuery(
-      'SELECT COUNT(*) as c FROM invoices WHERE shop_id = ? AND is_voice_created = 1 AND deleted_at IS NULL',
-      [shopId],
-    );
-    return Sqflite.firstIntValue(result) ?? 0;
-  }
-
-  /// How many manually-created (non-voice) invoices this shop has made since
-  /// the start of the current calendar month — for the Basic plan's
-  /// separate 50-invoice/month cap on manual billing (distinct from, and on
-  /// top of, the lifetime voice-invoice cap above). Local-only count, same
-  /// "instant, offline-first gate" reasoning as countVoiceInvoices — there's
-  /// no backend backstop for this one (see payment_bottom_sheet.dart's call
-  /// site), since these invoices only ever reach the backend through the
-  /// batch /sync endpoint, which isn't a sensible place to reject a single
-  /// over-quota record out of an otherwise-valid batch.
-  Future<int> countManualInvoicesThisMonth(int shopId) async {
+  /// How many invoices (voice- and manually-created TOGETHER) this shop has
+  /// made since the start of the current calendar month, for the plan's
+  /// combined invoiceMonthlyLimit — see SubscriptionStatus.invoiceMonthlyLimit
+  /// and the isVoiceCreated field doc comment on Invoice (no longer
+  /// counted separately by origin; both count against the same cap). This
+  /// is the *local* count (instant, works offline) used for checkout's
+  /// pre-check; the backend independently re-derives the same number from
+  /// synced data as the authoritative backstop for the voice-parse path —
+  /// see invoiceQuota.js. There's no backend-authoritative mirror for a
+  /// manually-created invoice specifically, since those only ever reach
+  /// the backend through the batch /sync endpoint (see
+  /// payment_bottom_sheet.dart's call site for the full reasoning).
+  Future<int> countInvoicesThisMonth(int shopId) async {
     final db = await _db.database;
     final now = DateTime.now();
     final monthStart = DateTime(now.year, now.month, 1).toIso8601String();
     final result = await db.rawQuery(
       'SELECT COUNT(*) as c FROM invoices '
-      'WHERE shop_id = ? AND is_voice_created = 0 AND deleted_at IS NULL AND created_at >= ?',
+      'WHERE shop_id = ? AND deleted_at IS NULL AND created_at >= ?',
       [shopId, monthStart],
     );
     return Sqflite.firstIntValue(result) ?? 0;

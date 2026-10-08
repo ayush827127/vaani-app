@@ -116,10 +116,12 @@ class SubscriptionRepository {
   Future<List<PaymentClaim>> listMyPaymentClaims() async =>
       _api.listMyPaymentClaims(await _requireToken());
 
-  Future<UsageStat> getVoiceUsage() async => _api.getVoiceUsage(await _requireToken());
+  Future<UsageStat> getInvoiceUsage() async => _api.getInvoiceUsage(await _requireToken());
 
-  Future<UsageStat> getManualInvoiceUsage() async =>
-      _api.getManualInvoiceUsage(await _requireToken());
+  Future<void> startTrial() async {
+    await _api.startTrial(await _requireToken());
+    await refreshStatus(); // re-check-in so trialUsed/effectivePlanName reflect it immediately
+  }
 
   Future<void> _syncOnce(SharedPreferences prefs,
       {String? otpToken, bool retryOnAuthFailure = true}) async {

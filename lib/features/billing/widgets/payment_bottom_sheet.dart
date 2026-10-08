@@ -329,34 +329,22 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
       final invoiceRepo = getIt<InvoiceRepository>();
 
       // Local, offline-first gate, read straight off the plan's own
-      // voiceInvoiceLimit (null = unlimited) rather than a hardcoded
-      // number — see SubscriptionStatus.voiceInvoiceLimit's doc comment
-      // for why the backend independently enforces the same limit from
-      // its own synced data rather than trusting this check alone. A null
+      // invoiceMonthlyLimit (null = unlimited) rather than a hardcoded
+      // number — counts voice- and manually-created invoices TOGETHER
+      // against one combined monthly cap, regardless of which this one
+      // is. See SubscriptionStatus.invoiceMonthlyLimit's doc comment for
+      // why the backend independently enforces the same limit from its
+      // own synced data (for the voice-parse path specifically — see
+      // invoiceQuota.js) rather than trusting this check alone. A null
       // status (never checked in yet) fails open, same as every other
       // cached-status check in the app.
-      final voiceLimit = status?.voiceInvoiceLimit;
-      if (isVoiceOrigin && voiceLimit != null) {
-        final used = await invoiceRepo.countVoiceInvoices(widget.shopId);
-        if (used >= voiceLimit) {
+      final invoiceLimit = status?.invoiceMonthlyLimit;
+      if (invoiceLimit != null) {
+        final usedThisMonth = await invoiceRepo.countInvoicesThisMonth(widget.shopId);
+        if (usedThisMonth >= invoiceLimit) {
           if (mounted) {
             setState(() => _isProcessing = false);
-            _showVoiceLimitReachedDialog(voiceLimit);
-          }
-          return;
-        }
-      }
-
-      // Separate monthly cap on manually-created invoices — see
-      // SubscriptionStatus.manualInvoiceMonthlyLimit's doc comment for why
-      // this one has no backend-authoritative mirror.
-      final manualLimit = status?.manualInvoiceMonthlyLimit;
-      if (!isVoiceOrigin && manualLimit != null) {
-        final usedThisMonth = await invoiceRepo.countManualInvoicesThisMonth(widget.shopId);
-        if (usedThisMonth >= manualLimit) {
-          if (mounted) {
-            setState(() => _isProcessing = false);
-            _showManualInvoiceLimitReachedDialog(manualLimit);
+            _showInvoiceLimitReachedDialog(invoiceLimit);
           }
           return;
         }
@@ -457,38 +445,11 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
     }
   }
 
-  void _showVoiceLimitReachedDialog(int limit) {
-    final c = context.colors;
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: c.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Voice invoice limit reached', style: TextStyle(color: c.textPrimary)),
-        content: Text(
-          "You've used all $limit voice-created invoices on your current plan. "
-          'Upgrade for unlimited voice billing — or finish this sale manually instead.',
-          style: TextStyle(color: c.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: Text('Not now', style: TextStyle(color: c.textSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(dialogCtx);
-              Navigator.pop(context); // close the payment sheet too
-              context.push('/profile/subscription');
-            },
-            child: const Text('Upgrade'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showManualInvoiceLimitReachedDialog(int limit) {
+  /// One combined dialog for the one combined cap — previously there were
+  /// two (voice-only, manual-only), back when each had its own separate
+  /// limit. The message is identical regardless of which kind of invoice
+  /// triggered it, since both now count against the same monthly total.
+  void _showInvoiceLimitReachedDialog(int limit) {
     final c = context.colors;
     showDialog(
       context: context,
@@ -497,8 +458,8 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Monthly invoice limit reached', style: TextStyle(color: c.textPrimary)),
         content: Text(
-          "You've used all $limit invoices this month on your current plan. "
-          'Upgrade for unlimited billing.',
+          "You've used all $limit invoices available on the Basic plan this month.\n\n"
+          'Upgrade to Pro for unlimited invoices.',
           style: TextStyle(color: c.textSecondary),
         ),
         actions: [
@@ -512,7 +473,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet>
               Navigator.pop(context); // close the payment sheet too
               context.push('/profile/subscription');
             },
-            child: const Text('Upgrade'),
+            child: const Text('Upgrade to Pro'),
           ),
         ],
       ),

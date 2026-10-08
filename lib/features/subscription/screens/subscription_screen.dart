@@ -39,14 +39,14 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   String? _loadErrorDetail;
   List<Plan> _plans = [];
   List<PaymentClaim> _claims = [];
-  UsageStat? _voiceUsage;
+  UsageStat? _invoiceUsage;
   UsageStat? _staffUsage;
-  UsageStat? _manualInvoiceUsage;
 
   // Which plan a Pay/Switch action is currently in flight for — disables
   // just that button rather than the whole screen, and doubles as a guard
   // against a double-tap starting two payment claims for the same plan.
   String? _actingOnPlanId;
+  bool _startingTrial = false;
 
   @override
   void initState() {
@@ -71,8 +71,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       // actually handle reliably.
       final plans = await repo.listPlans();
       final claims = await repo.listMyPaymentClaims();
-      final voiceUsage = await repo.getVoiceUsage();
-      final manualInvoiceUsage = await repo.getManualInvoiceUsage();
+      final invoiceUsage = await repo.getInvoiceUsage();
       // Staff usage comes from a different repository (the User-token/
       // membership system, not the legacy Shop-token this screen's other
       // calls use) — a shop that's never been through that system (never
@@ -89,8 +88,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       setState(() {
         _plans = plans;
         _claims = claims;
-        _voiceUsage = voiceUsage;
-        _manualInvoiceUsage = manualInvoiceUsage;
+        _invoiceUsage = invoiceUsage;
         _staffUsage = staffUsage;
         _loading = false;
       });
@@ -127,6 +125,27 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       ));
     } finally {
       if (mounted) setState(() => _actingOnPlanId = null);
+    }
+  }
+
+  Future<void> _startTrial() async {
+    setState(() => _startingTrial = true);
+    try {
+      await getIt<SubscriptionRepository>().startTrial();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Your 14-day Pro trial has started'),
+        backgroundColor: AppColors.success,
+      ));
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(friendlyNetworkError(e)),
+        backgroundColor: AppColors.error,
+      ));
+    } finally {
+      if (mounted) setState(() => _startingTrial = false);
     }
   }
 
@@ -288,9 +307,10 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     children: [
                       _CurrentStatusCard(
                         status: status,
-                        voiceUsage: _voiceUsage,
+                        invoiceUsage: _invoiceUsage,
                         staffUsage: _staffUsage,
-                        manualInvoiceUsage: _manualInvoiceUsage,
+                        startingTrial: _startingTrial,
+                        onStartTrial: _startTrial,
                       ),
                       if (pendingClaim != null) ...[
                         const SizedBox(height: 12),
@@ -329,14 +349,16 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
 
 class _CurrentStatusCard extends StatelessWidget {
   final SubscriptionStatus? status;
-  final UsageStat? voiceUsage;
+  final UsageStat? invoiceUsage;
   final UsageStat? staffUsage;
-  final UsageStat? manualInvoiceUsage;
+  final bool startingTrial;
+  final VoidCallback onStartTrial;
   const _CurrentStatusCard({
     required this.status,
-    required this.voiceUsage,
+    required this.invoiceUsage,
     required this.staffUsage,
-    required this.manualInvoiceUsage,
+    required this.startingTrial,
+    required this.onStartTrial,
   });
 
   @override
@@ -380,20 +402,12 @@ class _CurrentStatusCard extends StatelessWidget {
               style: TextStyle(color: c.textSecondary, fontSize: 12),
             ),
           ],
-          if (voiceUsage != null && !voiceUsage!.unlimited) ...[
+          if (invoiceUsage != null && !invoiceUsage!.unlimited) ...[
             const SizedBox(height: 14),
             _UsageBar(
-              label: 'Voice invoices used',
-              usage: voiceUsage!,
-              limitReachedMessage: 'Limit reached — upgrade for unlimited voice billing.',
-            ),
-          ],
-          if (manualInvoiceUsage != null && !manualInvoiceUsage!.unlimited) ...[
-            const SizedBox(height: 14),
-            _UsageBar(
-              label: 'Manual invoices used this month',
-              usage: manualInvoiceUsage!,
-              limitReachedMessage: 'Limit reached — upgrade for unlimited billing.',
+              label: 'Invoices used this month',
+              usage: invoiceUsage!,
+              limitReachedMessage: 'Limit reached — upgrade for unlimited invoices.',
             ),
           ],
           if (staffUsage != null && !staffUsage!.unlimited) ...[
@@ -404,9 +418,126 @@ class _CurrentStatusCard extends StatelessWidget {
               limitReachedMessage: 'Limit reached — upgrade to invite more staff.',
             ),
           ],
+          ..._trialSection(c),
         ],
       ),
     );
+  }
+
+  /// Exactly one of: an eligible shop's "try it free" offer, an in-force
+  /// trial's countdown, or a just-expired trial's upsell — never more than
+  /// one at once, and nothing at all for a shop that's already a paying
+  /// Pro customer (trialUsed but no longer relevant to show).
+  List<Widget> _trialSection(AppSemanticColors c) {
+    final s = status;
+    if (s == null) return const [];
+
+    if (s.trialAvailable) {
+      return [
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Try Pro Free for 14 Days',
+                  style: TextStyle(color: c.textPrimary, fontSize: 15, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(
+                'Get unlimited invoices, Reports, AI Manager and all Pro features for 14 days.',
+                style: TextStyle(color: c.textSecondary, fontSize: 12.5),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'This free Pro trial is available once per shop.',
+                style: TextStyle(color: c.textHint, fontSize: 11),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: startingTrial ? null : onStartTrial,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryLight,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: startingTrial
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('Start 14-Day Free Trial'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    if (s.trialEndsAt != null) {
+      final daysRemaining = s.trialEndsAt!.difference(DateTime.now()).inDays.clamp(0, 14);
+      return [
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.hourglass_top_rounded, color: AppColors.primaryLight, size: 18),
+              const SizedBox(width: 8),
+              Text('Pro Trial', style: TextStyle(color: c.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+              const Spacer(),
+              Text('$daysRemaining day${daysRemaining == 1 ? '' : 's'} remaining',
+                  style: TextStyle(color: c.textSecondary, fontSize: 12.5)),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    // trialUsed but neither available nor in force, and not currently a
+    // paying Pro customer — the trial ran out and the shop is back on
+    // Basic. A shop that trialed and then paid never reaches here (it's
+    // simply the Pro plan card below, no reminder needed).
+    if (s.trialUsed && s.effectivePlanName == 'Basic') {
+      return [
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: c.surfaceBorder.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Your Pro trial has ended.',
+                  style: TextStyle(color: c.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(
+                "You're now on the Basic plan with a limited number of invoices per month. "
+                'Upgrade to Pro for unlimited invoices and premium features.',
+                style: TextStyle(color: c.textSecondary, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    return const [];
   }
 
   String _formatDate(DateTime dt) =>
@@ -566,11 +697,9 @@ class _PlanCard extends StatelessWidget {
                 ),
               )),
           const SizedBox(height: 4),
-          Text(_limitLine('Voice invoices', plan.voiceInvoiceLimit, 'lifetime'),
+          Text(_limitLine('Invoices', plan.invoiceMonthlyLimit, 'per month'),
               style: TextStyle(color: c.textHint, fontSize: 11.5)),
           Text(_limitLine('Staff members', plan.staffLimit, 'additional'),
-              style: TextStyle(color: c.textHint, fontSize: 11.5)),
-          Text(_limitLine('Manual invoices', plan.manualInvoiceMonthlyLimit, 'per month'),
               style: TextStyle(color: c.textHint, fontSize: 11.5)),
           const SizedBox(height: 8),
           SizedBox(
