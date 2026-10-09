@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -16,6 +17,7 @@ import '../../../shared/models/item.dart';
 import '../../../shared/models/customer.dart';
 import '../../inventory/repositories/item_repository.dart';
 import '../../customers/repositories/customer_repository.dart';
+import '../../customers/screens/customer_list_screen.dart' show cleanContactPhoneNumber;
 import '../../subscription/providers/subscription_provider.dart';
 import '../providers/billing_providers.dart';
 import '../../../shared/widgets/hamburger_icon.dart';
@@ -525,6 +527,33 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     return m != null ? 'HTTP ${m.group(1)}' : 'error';
   }
 
+  /// Opens the OS Contacts app's own picker and fills [nameCtrl]/[phoneCtrl]
+  /// from whichever contact was chosen — exact mirror of
+  /// CustomerListScreen._pickFromContacts (including why READ_CONTACTS must
+  /// be requested *before* calling openExternalPick: the plugin's native
+  /// "select" call does a direct ContentResolver query with no permission
+  /// check of its own, which throws an uncaught SecurityException — a hard
+  /// crash, not a catchable Dart exception — without it).
+  Future<void> _pickFromContacts(
+    TextEditingController nameCtrl,
+    TextEditingController phoneCtrl,
+  ) async {
+    final granted = await PermissionService.requestContacts(context);
+    if (!granted || !mounted) return;
+    try {
+      final contact = await FlutterContacts.openExternalPick();
+      if (contact == null) return;
+      nameCtrl.text = contact.displayName;
+      if (contact.phones.isNotEmpty) {
+        final phone = contact.phones.first;
+        final raw = phone.normalizedNumber.isNotEmpty ? phone.normalizedNumber : phone.number;
+        phoneCtrl.text = cleanContactPhoneNumber(raw) ?? raw;
+      }
+    } catch (e) {
+      debugPrint('[BillingScreen] contact pick failed: $e');
+    }
+  }
+
   /// Shows the add-customer dialog pre-filled with [name]/[phone] (both
   /// optional — the customer picker's "Add New Customer" entry calls this
   /// with neither), persists the result, and returns the saved Customer, or
@@ -545,8 +574,20 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         return AlertDialog(
           backgroundColor: c.surface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(name.isEmpty ? 'Add Customer' : 'Customer Not Found',
-              style: TextStyle(color: c.textPrimary)),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(name.isEmpty ? 'Add Customer' : 'Customer Not Found',
+                    style: TextStyle(color: c.textPrimary)),
+              ),
+              IconButton(
+                onPressed: () => _pickFromContacts(nameCtrl, phoneCtrl),
+                icon: const Icon(Icons.contacts_rounded),
+                tooltip: context.l10n.pickFromContacts,
+                color: AppColors.primaryLight,
+              ),
+            ],
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

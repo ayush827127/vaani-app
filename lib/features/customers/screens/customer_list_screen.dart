@@ -19,7 +19,9 @@ import '../../../l10n/l10n_extensions.dart';
 /// everything but digits, then unwraps the common Indian prefixes (+91
 /// country code, or a leading trunk 0) down to the 10-digit number. Returns
 /// null only when there are no digits at all to work with.
-@visibleForTesting
+///
+/// Public (not private) because billing_screen.dart's quick add-customer
+/// dialog reuses it for the same contacts-picker normalization.
 String? cleanContactPhoneNumber(String raw) {
   final digits = raw.replaceAll(RegExp(r'\D'), '');
   if (digits.length == 10) return digits;
