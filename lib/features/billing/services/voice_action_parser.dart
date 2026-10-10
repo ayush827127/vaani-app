@@ -74,6 +74,12 @@ final class DiscountAction extends VoiceAction {
   const DiscountAction({required this.discountType, required this.value});
 }
 
+final class TaxAction extends VoiceAction {
+  final String taxType; // 'percent' | 'flat'
+  final double value;
+  const TaxAction({required this.taxType, required this.value});
+}
+
 final class PaymentModeAction extends VoiceAction {
   final String mode; // 'cash' | 'upi' | 'card' | 'credit'
   const PaymentModeAction({required this.mode});
@@ -113,6 +119,8 @@ class BillingContext {
   final String paymentMode;
   final String discountType;
   final double discountValue;
+  final String taxType;
+  final double taxValue;
   final String? customerName;
 
   const BillingContext({
@@ -122,6 +130,8 @@ class BillingContext {
     required this.paymentMode,
     required this.discountType,
     required this.discountValue,
+    this.taxType = 'none',
+    this.taxValue = 0,
     this.customerName,
   });
 }
@@ -408,6 +418,14 @@ class VoiceActionParser {
           value: value,
         );
 
+      case 'tax':
+        final taxType = item['tax_type']?.toString() ?? 'percent';
+        final taxValue = _parseDouble(item['value']);
+        return TaxAction(
+          taxType: taxType == 'flat' ? 'flat' : 'percent',
+          value: taxValue,
+        );
+
       case 'payment_mode':
         final mode = _normalizePaymentMode(item['mode']?.toString() ?? '');
         return PaymentModeAction(mode: mode);
@@ -479,6 +497,7 @@ $cartStr
 
 PAYMENT MODE: ${ctx.paymentMode}
 DISCOUNT: ${ctx.discountType == 'none' ? 'none' : '${ctx.discountValue} ${ctx.discountType}'}
+TAX OVERRIDE: ${ctx.taxType == 'none' ? 'none (uses each item\'s own GST rate)' : '${ctx.taxValue} ${ctx.taxType}'}
 CUSTOMER: ${ctx.customerName ?? '(none)'}
 
 PRODUCT CATALOG:
@@ -506,9 +525,14 @@ CRITICAL RULES:
    Example: "do Pepsi 40 rupay mein" → set_quantity(Pepsi,2) + update_price(Pepsi,40)
    Example: "Pepsi 40rs se do pcs" → set_quantity(Pepsi,2) + update_price(Pepsi,40)
    Example: "teen Coke 30 ka"       → set_quantity(Coke,3)  + update_price(Coke,30)
-8. Discount: "10 percent off" or "50 rupay discount" → discount action
-9. Customer selection: name/phone mentioned → select_customer (find from customer list) or customer_not_found
-10. Only include actions with high confidence (>0.6)
+8. Discount: "10 percent off", "10% discount", "50 rupay discount", "50 rupaye kam karo" → discount action
+   discount_type is "percent" when a "%"/"percent"/"pratishat" figure is given, otherwise "flat" (a rupee amount).
+9. Tax: "5 percent tax lagao", "18% GST add karo", "20 rupay tax" → tax action (this OVERRIDES the bill's tax,
+   replacing each item's own GST — only use when the speaker explicitly says "tax"/"GST"/"VAT"/"कर", never for
+   a plain discount). tax_type is "percent" when a "%"/"percent"/"GST"/"pratishat" figure is given, otherwise "flat".
+   Do NOT confuse with discount — "tax" and "GST" always mean tax action, "discount"/"off"/"kam karo" always mean discount action.
+10. Customer selection: name/phone mentioned → select_customer (find from customer list) or customer_not_found
+11. Only include actions with high confidence (>0.6)
 
 AVAILABLE ACTION TYPES:
 set_quantity: {"action":"set_quantity","item":"<EXACT name from catalog>","quantity":<int>}
@@ -518,6 +542,7 @@ remove_item: {"action":"remove_item","item":"<EXACT name from catalog>"}
 clear_cart: {"action":"clear_cart"}
 update_price: {"action":"update_price","item":"<EXACT name from catalog>","price":<float>}
 discount: {"action":"discount","discount_type":"percent"|"flat","value":<float>}
+tax: {"action":"tax","tax_type":"percent"|"flat","value":<float>}
 payment_mode: {"action":"payment_mode","mode":"cash"|"upi"|"card"|"credit"}
 select_customer: {"action":"select_customer","name":"<spoken name>","phone":"<spoken phone or empty string>"}
 customer_not_found: {"action":"customer_not_found","name":"<name>","phone":"<phone or empty string>"}
@@ -529,6 +554,13 @@ COMBINED COMMAND EXAMPLES (quantity + price in one utterance — always two acti
 "Pepsi 40rs se do pcs"    → [{"action":"set_quantity","item":"Pepsi","quantity":2},{"action":"update_price","item":"Pepsi","price":40}]
 "teen Coke 30 ka"         → [{"action":"set_quantity","item":"Coke","quantity":3},{"action":"update_price","item":"Coke","price":30}]
 "ek namak 18 rupay"       → [{"action":"set_quantity","item":"Namak","quantity":1},{"action":"update_price","item":"Namak","price":18}]
+
+DISCOUNT / TAX EXAMPLES:
+"10 percent off"          → [{"action":"discount","discount_type":"percent","value":10}]
+"50 rupay discount karo"  → [{"action":"discount","discount_type":"flat","value":50}]
+"5 percent tax lagao"     → [{"action":"tax","tax_type":"percent","value":5}]
+"18% GST add karo"        → [{"action":"tax","tax_type":"percent","value":18}]
+"20 rupay tax"            → [{"action":"tax","tax_type":"flat","value":20}]
 
 IMPORTANT: Item field must contain the EXACT name from the catalog above (copy verbatim). Do NOT invent item names.
 

@@ -362,10 +362,14 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         parser: _voiceParser,
         discountType: _discountType,
         discountValue: _discountValue,
+        taxType: _taxOverrideType,
+        taxValue: _taxOverrideValue,
         paymentMode: _paymentMode,
         selectedCustomer: _selectedCustomer,
         onDiscountChanged: (t, v) =>
             setState(() { _discountType = t; _discountValue = v; }),
+        onTaxChanged: (t, v) =>
+            setState(() { _taxOverrideType = t; _taxOverrideValue = v; }),
         onPaymentModeChanged: (m) => setState(() => _paymentMode = m),
         onCustomerChanged: (c) => setState(() => _selectedCustomer = c),
         onCustomerNotFound: (name, phone) =>
@@ -398,6 +402,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       paymentMode: _paymentMode,
       discountType: _discountType,
       discountValue: _discountValue,
+      taxType: _taxOverrideType,
+      taxValue: _taxOverrideValue,
       customerName: _selectedCustomer?.name,
     );
 
@@ -445,6 +451,12 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         _discountValue = execResult.newDiscountValue!;
       });
     }
+    if (execResult.taxChanged) {
+      setState(() {
+        _taxOverrideType = execResult.newTaxType!;
+        _taxOverrideValue = execResult.newTaxValue!;
+      });
+    }
     if (execResult.paymentModeChanged) {
       setState(() => _paymentMode = execResult.newPaymentMode!);
     }
@@ -480,10 +492,34 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       ));
     }
 
-    // TTS confirmation
-    if (execResult.messages.isNotEmpty) {
+    // TTS confirmation — built as a natural sentence from the actions that
+    // were actually applied (result.actions), not from execResult.messages:
+    // those are short display-oriented fragments ("Pepsi × 2", "price →
+    // ₹20.00") meant for the snackbar, and the ×/→/₹ glyphs they contain
+    // either aren't spoken at all or are read out in a way that doesn't
+    // make sense. Errors are spoken too (previously silent) so a failed
+    // command — e.g. one the AI couldn't parse — doesn't read as "nothing
+    // happened" with no explanation.
+    final spoken = _composeSpokenConfirmation(result.actions);
+    if (spoken.isNotEmpty || execResult.errors.isNotEmpty) {
       await Future.delayed(const Duration(milliseconds: 300));
-      if (mounted) _tts.speak(execResult.messages.join('. '));
+      if (mounted) {
+        final buffer = StringBuffer(spoken);
+        if (execResult.errors.isNotEmpty) {
+          if (buffer.isNotEmpty) buffer.write(' ');
+          buffer.write('${execResult.errors.join('. ')}.');
+        }
+        final cart = ref.read(cartProvider);
+        if (cart.isNotEmpty) {
+          final n = ref.read(cartProvider.notifier);
+          final subtotal = n.subtotal;
+          final discount = _calcDiscount(subtotal);
+          final gst = _effectiveGst(cart, subtotal, discount);
+          final grandTotal = subtotal - discount + gst;
+          buffer.write(' Total is ${_speakableCurrency(grandTotal)}.');
+        }
+        _tts.speak(buffer.toString());
+      }
     }
 
     // Customer not found dialog — show after a brief delay so snackbar clears
@@ -525,6 +561,76 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   String _extractHttpCode(String reason) {
     final m = RegExp(r'\[http-(\d+)\]').firstMatch(reason);
     return m != null ? 'HTTP ${m.group(1)}' : 'error';
+  }
+
+  /// Builds the sentence spoken back to the shopkeeper after a voice
+  /// command, phrased as plain words instead of the ×/→/₹ glyph-laden
+  /// strings action_executor.dart builds for the on-screen snackbar (those
+  /// read fine, they just don't speak well). Walks the parsed actions
+  /// directly rather than execResult.messages so the wording is controlled
+  /// here, not inferred from display text.
+  String _composeSpokenConfirmation(List<VoiceAction> actions) {
+    final parts = <String>[];
+    for (final action in actions) {
+      switch (action) {
+        case SetQuantityAction():
+          parts.add('${action.itemName} set to ${action.quantity}');
+        case IncreaseQuantityAction():
+          parts.add('${action.delta} more ${action.itemName} added');
+        case DecreaseQuantityAction():
+          parts.add('${action.delta} ${action.itemName} removed');
+        case RemoveItemAction():
+          parts.add('${action.itemName} removed');
+        case ClearCartAction():
+          parts.add('Cart cleared');
+        case UpdatePriceAction():
+          parts.add(
+              '${action.itemName} price set to ${_speakableCurrency(action.price)}');
+        case DiscountAction():
+          parts.add(action.discountType == 'percent'
+              ? '${action.value.toStringAsFixed(0)} percent discount applied'
+              : '${_speakableCurrency(action.value)} discount applied');
+        case TaxAction():
+          parts.add(action.taxType == 'percent'
+              ? '${action.value.toStringAsFixed(0)} percent tax applied'
+              : '${_speakableCurrency(action.value)} tax applied');
+        case PaymentModeAction():
+          parts.add(
+              'Payment mode set to ${_speakablePaymentMode(action.mode)}');
+        case SelectCustomerAction():
+          parts.add('Customer set to ${action.customerName}');
+        case CustomerNotFoundAction():
+        case UnknownItemAction():
+        case UnknownAction():
+          break; // surfaced via execResult.errors / the add-customer dialog instead
+      }
+    }
+    if (parts.isEmpty) return '';
+    return '${parts.join('. ')}.';
+  }
+
+  /// "₹20.00" read aloud as a glyph and two meaningless decimal zeros isn't
+  /// understandable speech — say the rupees (and paise, only if non-zero)
+  /// as plain numbers and words instead.
+  String _speakableCurrency(double amount) {
+    final rupees = amount.floor();
+    final paise = ((amount - rupees) * 100).round();
+    return paise == 0 ? '$rupees rupees' : '$rupees rupees $paise paise';
+  }
+
+  String _speakablePaymentMode(String mode) {
+    switch (mode) {
+      case 'cash':
+        return 'Cash';
+      case 'upi':
+        return 'UPI';
+      case 'card':
+        return 'Card';
+      case 'credit':
+        return 'Credit';
+      default:
+        return mode;
+    }
   }
 
   /// Opens the OS Contacts app's own picker and fills [nameCtrl]/[phoneCtrl]
@@ -2403,9 +2509,12 @@ class _VoiceSheet extends ConsumerStatefulWidget {
   final VoiceActionParser? parser;
   final String discountType;
   final double discountValue;
+  final String taxType;
+  final double taxValue;
   final String paymentMode;
   final Customer? selectedCustomer;
   final void Function(String type, double value) onDiscountChanged;
+  final void Function(String type, double value) onTaxChanged;
   final void Function(String mode) onPaymentModeChanged;
   final void Function(Customer customer) onCustomerChanged;
   final void Function(String name, String? phone) onCustomerNotFound;
@@ -2416,9 +2525,12 @@ class _VoiceSheet extends ConsumerStatefulWidget {
     this.parser,
     required this.discountType,
     required this.discountValue,
+    required this.taxType,
+    required this.taxValue,
     required this.paymentMode,
     this.selectedCustomer,
     required this.onDiscountChanged,
+    required this.onTaxChanged,
     required this.onPaymentModeChanged,
     required this.onCustomerChanged,
     required this.onCustomerNotFound,
@@ -2521,6 +2633,8 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
       paymentMode: widget.paymentMode,
       discountType: widget.discountType,
       discountValue: widget.discountValue,
+      taxType: widget.taxType,
+      taxValue: widget.taxValue,
       customerName: widget.selectedCustomer?.name,
     );
 
@@ -2566,6 +2680,9 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
     if (execResult.discountChanged) {
       widget.onDiscountChanged(
           execResult.newDiscountType!, execResult.newDiscountValue!);
+    }
+    if (execResult.taxChanged) {
+      widget.onTaxChanged(execResult.newTaxType!, execResult.newTaxValue!);
     }
     if (execResult.paymentModeChanged) {
       widget.onPaymentModeChanged(execResult.newPaymentMode!);
@@ -2629,6 +2746,7 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
       ClearCartAction() => Icons.delete_sweep_rounded,
       UpdatePriceAction() => Icons.currency_rupee_rounded,
       DiscountAction() => Icons.local_offer_rounded,
+      TaxAction() => Icons.receipt_long_rounded,
       PaymentModeAction() => Icons.payment_rounded,
       SelectCustomerAction() => Icons.person_rounded,
       CustomerNotFoundAction() => Icons.person_add_rounded,
@@ -2651,6 +2769,8 @@ class _VoiceSheetState extends ConsumerState<_VoiceSheet>
         '${action.itemName} → ${AppFormatters.formatCurrency(action.price)}',
       DiscountAction() =>
         'Discount: ${action.discountType == "percent" ? "${action.value.toStringAsFixed(0)}%" : AppFormatters.formatCurrency(action.value)}',
+      TaxAction() =>
+        'Tax: ${action.taxType == "percent" ? "${action.value.toStringAsFixed(0)}%" : AppFormatters.formatCurrency(action.value)}',
       PaymentModeAction() => 'Payment: ${action.mode.toUpperCase()}',
       SelectCustomerAction() => 'Customer: ${action.customerName}',
       CustomerNotFoundAction() => 'Add customer: ${action.name}',

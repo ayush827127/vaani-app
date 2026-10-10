@@ -336,6 +336,8 @@ class _VoiceBillingScreenState extends ConsumerState<VoiceBillingScreen>
                           '${action.itemName} → ${AppFormatters.formatCurrency(action.price)}',
                         DiscountAction() =>
                           'Discount: ${action.discountType == "percent" ? "${action.value}%" : "₹${action.value}"}',
+                        TaxAction() =>
+                          'Tax: ${action.taxType == "percent" ? "${action.value}%" : "₹${action.value}"}',
                         PaymentModeAction() =>
                           'Payment: ${action.mode.toUpperCase()}',
                         SelectCustomerAction() =>

@@ -14,6 +14,9 @@ class ActionExecutionResult {
   final bool discountChanged;
   final String? newDiscountType;
   final double? newDiscountValue;
+  final bool taxChanged;
+  final String? newTaxType;
+  final double? newTaxValue;
   final bool paymentModeChanged;
   final String? newPaymentMode;
   final bool customerChanged;
@@ -29,6 +32,9 @@ class ActionExecutionResult {
     this.discountChanged = false,
     this.newDiscountType,
     this.newDiscountValue,
+    this.taxChanged = false,
+    this.newTaxType,
+    this.newTaxValue,
     this.paymentModeChanged = false,
     this.newPaymentMode,
     this.customerChanged = false,
@@ -52,6 +58,9 @@ class ActionExecutor {
     bool discountChanged = false;
     String? newDiscountType;
     double? newDiscountValue;
+    bool taxChanged = false;
+    String? newTaxType;
+    double? newTaxValue;
     bool paymentModeChanged = false;
     String? newPaymentMode;
     bool customerChanged = false;
@@ -196,6 +205,15 @@ class ActionExecutor {
               : AppFormatters.formatCurrency(action.value);
           messages.add('Discount: $label');
 
+        case TaxAction():
+          taxChanged = true;
+          newTaxType = action.taxType;
+          newTaxValue = action.value;
+          final label = action.taxType == 'percent'
+              ? '${action.value.toStringAsFixed(0)}%'
+              : AppFormatters.formatCurrency(action.value);
+          messages.add('Tax: $label');
+
         case PaymentModeAction():
           paymentModeChanged = true;
           newPaymentMode = action.mode;
@@ -228,6 +246,9 @@ class ActionExecutor {
       discountChanged: discountChanged,
       newDiscountType: newDiscountType,
       newDiscountValue: newDiscountValue,
+      taxChanged: taxChanged,
+      newTaxType: newTaxType,
+      newTaxValue: newTaxValue,
       paymentModeChanged: paymentModeChanged,
       newPaymentMode: newPaymentMode,
       customerChanged: customerChanged,

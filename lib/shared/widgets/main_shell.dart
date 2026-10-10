@@ -299,9 +299,18 @@ class _VoiceFABState extends ConsumerState<_VoiceFAB>
       },
       onStatus: (status) {
         debugPrint('[PTT] STT status: $status (pressed=$_isPressed)');
-        // Do NOT call _finishAndProcess() here — Android fires 'notListening'
-        // immediately after listen() on some devices, which would set _isPressed=false
-        // before the user has spoken, making the physical button release a no-op.
+        // Android's native recognizer (and the pauseFor timer below) can end
+        // a listening session on its own well before the user releases the
+        // button — e.g. on a brief pause while recalling a number. Rather
+        // than treat that as "the user is done" (which would silently drop
+        // everything spoken after that point), re-arm listening immediately
+        // as long as the button is still held, so the mic effectively never
+        // stops until release. _partial/_gotFinalResult are deliberately not
+        // reset here — a fresh listen() session starts empty, so anything
+        // already captured stays intact and new words are appended.
+        if ((status == 'done' || status == 'notListening') && _isPressed) {
+          _startListenSession();
+        }
       },
     );
     if (!ready || !mounted || !_isPressed) return;
@@ -321,12 +330,24 @@ class _VoiceFABState extends ConsumerState<_VoiceFAB>
     SystemSound.play(SystemSoundType.click).ignore();
     debugPrint('[PTT] Speech listening started (hi_IN, pauseFor=15s)');
 
+    await _startListenSession();
+  }
+
+  /// Starts (or restarts, after an early native/pauseFor stop — see
+  /// onStatus above) one speech_to_text listening session. A restart drops
+  /// whatever the engine was mid-recognizing, so recognized words are
+  /// appended onto the running `_partial` transcript across sessions rather
+  /// than each session overwriting it, which otherwise would have erased
+  /// everything said before the restart.
+  Future<void> _startListenSession() async {
+    if (!_isPressed || !mounted) return;
+    final before = _partial;
     await _voice.speech.listen(
       onResult: (r) {
-        // Only update if the new result is non-empty — prevents a new session
-        // from blanking a partial already captured.
         if (r.recognizedWords.isNotEmpty) {
-          _partial = r.recognizedWords;
+          _partial = before.isEmpty
+              ? r.recognizedWords
+              : '$before ${r.recognizedWords}';
           if (mounted) {
             ref.read(pttPartialTranscriptProvider.notifier).state = _partial;
           }
